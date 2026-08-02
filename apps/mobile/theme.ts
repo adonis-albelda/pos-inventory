@@ -1,7 +1,22 @@
 import { StyleSheet } from "react-native";
-import { MIN_TAP_TARGET, color, fontSize, radius, space } from "@double-a/ui";
+import {
+  MIN_TAP_TARGET,
+  color,
+  fontSize,
+  space,
+} from "@double-a/ui";
 
-export { MIN_TAP_TARGET, color, fontSize, radius, space };
+export { MIN_TAP_TARGET, color, fontSize, space };
+
+/**
+ * POS wants hard corners — shop-floor chrome reads cleaner squared than pill.
+ * Admin keeps the shared token radii; mobile overrides here.
+ */
+export const radius = {
+  sm: 0,
+  md: 0,
+  lg: 0,
+} as const;
 
 /**
  * Shop-floor rules from design-system.md: big tap targets, high contrast, flat
@@ -11,7 +26,9 @@ export { MIN_TAP_TARGET, color, fontSize, radius, space };
 export const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: color.paper,
+    // Paper + PaperBackdrop live on the root shell; screens stay clear so the
+    // soft pattern shows between cards and around empty space.
+    backgroundColor: "transparent",
   },
   card: {
     backgroundColor: color.surface,

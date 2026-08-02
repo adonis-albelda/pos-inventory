@@ -7,10 +7,14 @@ import {
   useEffect,
   useId,
   useRef,
+  useState,
   type ReactNode,
 } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui";
+
+/** Match route page-enter: short enough to read as arrival, not decoration. */
+const OVERLAY_MS = 180;
 
 function cx(...parts: (string | false | null | undefined)[]): string {
   return parts.filter(Boolean).join(" ");
@@ -67,6 +71,52 @@ function useEscapeToClose(open: boolean, onClose: () => void) {
   }, [open, onClose]);
 }
 
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduced(mq.matches);
+    const onChange = () => setReduced(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return reduced;
+}
+
+/** Keep overlay mounted through exit so close can animate, then unmount. */
+function usePresence(open: boolean) {
+  const reduced = usePrefersReducedMotion();
+  const [mounted, setMounted] = useState(open);
+  const [entered, setEntered] = useState(open);
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      if (reduced) {
+        setEntered(true);
+        return;
+      }
+      const id = requestAnimationFrame(() => {
+        requestAnimationFrame(() => setEntered(true));
+      });
+      return () => cancelAnimationFrame(id);
+    }
+
+    setEntered(false);
+    if (reduced) {
+      setMounted(false);
+      return;
+    }
+    const t = window.setTimeout(() => setMounted(false), OVERLAY_MS);
+    return () => window.clearTimeout(t);
+  }, [open, reduced]);
+
+  return { mounted, entered };
+}
+
+const backdropClass =
+  "absolute inset-0 bg-ink/40 transition-opacity duration-[180ms] ease-out motion-reduce:transition-none";
+
 export function Dialog({
   open,
   onClose,
@@ -85,16 +135,17 @@ export function Dialog({
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const stableClose = useCallback(() => onClose(), [onClose]);
+  const { mounted, entered } = usePresence(open);
 
-  useBodyScrollLock(open);
+  useBodyScrollLock(mounted);
   useEscapeToClose(open, stableClose);
 
   useEffect(() => {
-    if (!open) return;
+    if (!entered) return;
     panelRef.current?.focus();
-  }, [open]);
+  }, [entered]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   return (
     <OverlayContext.Provider value={{ onClose: stableClose }}>
@@ -102,7 +153,7 @@ export function Dialog({
         <button
           type="button"
           aria-label="Dismiss"
-          className="absolute inset-0 bg-ink/40"
+          className={cx(backdropClass, entered ? "opacity-100" : "opacity-0")}
           onClick={stableClose}
         />
         <div
@@ -111,9 +162,14 @@ export function Dialog({
           aria-modal="true"
           aria-labelledby={titleId}
           tabIndex={-1}
+          data-state={entered ? "open" : "closed"}
           className={cx(
             "relative z-10 flex max-h-[min(90vh,720px)] w-full max-w-lg flex-col",
             "rounded-lg border border-border bg-surface shadow-lg outline-none",
+            "transition-[opacity,transform] duration-[180ms] ease-out motion-reduce:transition-none",
+            entered
+              ? "translate-y-0 scale-100 opacity-100"
+              : "translate-y-1.5 scale-[0.98] opacity-0",
             className,
           )}
         >
@@ -154,16 +210,17 @@ export function Sheet({
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const stableClose = useCallback(() => onClose(), [onClose]);
+  const { mounted, entered } = usePresence(open);
 
-  useBodyScrollLock(open);
+  useBodyScrollLock(mounted);
   useEscapeToClose(open, stableClose);
 
   useEffect(() => {
-    if (!open) return;
+    if (!entered) return;
     panelRef.current?.focus();
-  }, [open]);
+  }, [entered]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   return (
     <OverlayContext.Provider value={{ onClose: stableClose }}>
@@ -171,7 +228,7 @@ export function Sheet({
         <button
           type="button"
           aria-label="Dismiss"
-          className="absolute inset-0 bg-ink/40"
+          className={cx(backdropClass, entered ? "opacity-100" : "opacity-0")}
           onClick={stableClose}
         />
         <div
@@ -180,8 +237,11 @@ export function Sheet({
           aria-modal="true"
           aria-labelledby={titleId}
           tabIndex={-1}
+          data-state={entered ? "open" : "closed"}
           className={cx(
             "relative z-10 flex h-full w-full flex-col border-l border-border bg-surface shadow-lg outline-none",
+            "transition-transform duration-[180ms] ease-out motion-reduce:transition-none",
+            entered ? "translate-x-0" : "translate-x-full",
             wide ? "max-w-2xl" : "max-w-md",
           )}
         >

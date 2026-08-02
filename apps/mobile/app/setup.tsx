@@ -18,6 +18,11 @@ import {
   Smartphone,
   Users,
 } from "lucide-react-native";
+import {
+  authChrome,
+  BrandAuthShell,
+  PoweredByLabel,
+} from "@/components/brand-auth-shell";
 import { Button, Card, ErrorNote, SectionTitle } from "@/components/ui";
 import { color, fontSize, radius, space, styles } from "@/theme";
 
@@ -199,6 +204,7 @@ export default function SetupScreen() {
   }
 
   return (
+    <BrandAuthShell>
     <ScrollView
       style={styles.screen}
       contentContainerStyle={{
@@ -208,11 +214,12 @@ export default function SetupScreen() {
         width: "100%",
         maxWidth: 560,
         alignSelf: "center",
+        flexGrow: 1,
       }}
     >
       <View>
-        <Text style={styles.heading}>Set up this terminal</Text>
-        <Text style={[styles.muted, { marginTop: space.xs }]}>
+        <Text style={authChrome.heading}>Set up this terminal</Text>
+        <Text style={[authChrome.muted, { marginTop: space.xs }]}>
           An admin signs in first, then connects this device to a terminal
           account. Both checks hit live Supabase — never the local copy.
         </Text>
@@ -362,12 +369,20 @@ export default function SetupScreen() {
       ) : null}
 
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
-        <Smartphone size={13} color={color.inkMuted} strokeWidth={2} />
-        <Text style={[styles.numeric, { fontSize: fontSize.caption, color: color.inkMuted }]}>
+        <Smartphone size={13} color="rgba(255,255,255,0.7)" strokeWidth={2} />
+        <Text
+          style={[
+            styles.numeric,
+            { fontSize: fontSize.caption, color: "rgba(255,255,255,0.7)" },
+          ]}
+        >
           Terminal id {deviceId.slice(0, 8)}
         </Text>
       </View>
+
+      <PoweredByLabel />
     </ScrollView>
+    </BrandAuthShell>
   );
 }
 

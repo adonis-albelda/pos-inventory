@@ -35,8 +35,8 @@ export function ProductTile({
         styles.card,
         {
           flex: 1,
-          minHeight: minHeight ?? (compact ? 112 : 132),
-          padding: compact ? space.sm : space.md,
+          minHeight: minHeight ?? (compact ? 96 : 112),
+          padding: compact ? space.xs : space.sm,
           justifyContent: "space-between",
           // A tile already in the cart is filled, not just outlined — the state
           // has to survive a glance across a counter.

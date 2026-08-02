@@ -57,7 +57,7 @@ export function StoreHeader() {
           flexDirection: "row",
           alignItems: "center",
           gap: compact ? space.xs : space.sm,
-          paddingHorizontal: compact ? space.sm : expanded ? space.xl : space.lg,
+          paddingHorizontal: compact ? space.sm : space.md,
           paddingVertical: compact ? space.xs : space.sm,
           backgroundColor: color.surface,
           borderBottomWidth: 1,

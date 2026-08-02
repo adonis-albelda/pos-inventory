@@ -23,6 +23,11 @@ import {
   UserRound,
   Users,
 } from "lucide-react-native";
+import {
+  authChrome,
+  BrandAuthShell,
+  PoweredByLabel,
+} from "@/components/brand-auth-shell";
 import { Button, Card, EmptyState, ErrorNote } from "@/components/ui";
 import { color, fontSize, radius, space, styles } from "@/theme";
 
@@ -110,6 +115,7 @@ export default function UnlockScreen() {
   }
 
   return (
+    <BrandAuthShell>
     <ScrollView
       style={styles.screen}
       contentContainerStyle={{
@@ -121,6 +127,7 @@ export default function UnlockScreen() {
         width: "100%",
         maxWidth: 520,
         alignSelf: "center",
+        flexGrow: 1,
       }}
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
@@ -154,21 +161,24 @@ export default function UnlockScreen() {
             </Text>
           )}
         </View>
-        <Text numberOfLines={1} style={[styles.subheading, { flex: 1 }]}>
+        <Text numberOfLines={1} style={[authChrome.subheading, { flex: 1 }]}>
           {store.name}
         </Text>
       </View>
 
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.md }}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.heading}>Who is on shift?</Text>
-          <Text style={[styles.muted, { marginTop: space.xs }]}>
+          <Text style={authChrome.heading}>Who is on shift?</Text>
+          <Text style={[authChrome.muted, { marginTop: space.xs }]}>
             Pick your name, then enter your PIN. Needs a connection.
           </Text>
           <Text
             style={{
               fontSize: fontSize.caption,
-              color: loadError || syncError ? color.danger : color.inkMuted,
+              color:
+                loadError || syncError
+                  ? color.danger
+                  : "rgba(255,255,255,0.7)",
               marginTop: space.xs,
             }}
           >
@@ -391,6 +401,9 @@ export default function UnlockScreen() {
           />
         </Card>
       ) : null}
+
+      <PoweredByLabel />
     </ScrollView>
+    </BrandAuthShell>
   );
 }

@@ -14,6 +14,8 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import * as Crypto from "expo-crypto";
 import {
+  Bookmark,
+  BookmarkCheck,
   Banknote,
   CheckCircle2,
   ChevronRight,
@@ -50,6 +52,7 @@ import {
   normaliseCustomerDetails,
   priceForQuantity,
   roundMoney,
+  timeAgo,
   type CartLine,
   type CustomerDetails,
   type Fulfillment,
@@ -60,6 +63,12 @@ import { listLocalCategories, type LocalCategory } from "@/db/categories";
 import { searchLocalCustomers, upsertLocalCustomer } from "@/db/customers";
 import { findLocalProductByBarcode, listLocalProducts } from "@/db/products";
 import { completeSale } from "@/db/sales";
+import {
+  addCartDraft,
+  listCartDrafts,
+  removeCartDraft,
+  type CartDraft,
+} from "@/lib/cart-draft";
 import { getDeviceId } from "@/lib/device";
 import { useLayout } from "@/lib/layout";
 import { useSession } from "@/lib/session";
@@ -114,8 +123,17 @@ export default function SellScreen() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
+  const [drafts, setDrafts] = useState<CartDraft[]>([]);
+  const [draftPickerOpen, setDraftPickerOpen] = useState(false);
   const [categories, setCategories] = useState<LocalCategory[]>([]);
   const [category, setCategory] = useState<CategoryFilter>(null);
+
+  const refreshDrafts = useCallback(async () => {
+    const next = await listCartDrafts();
+    setDrafts(next);
+    setHasDraft(next.length > 0);
+  }, []);
 
   const load = useCallback(async () => {
     const [nextProducts, nextCategories] = await Promise.all([
@@ -137,7 +155,8 @@ export default function SellScreen() {
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load]),
+      void refreshDrafts();
+    }, [load, refreshDrafts]),
   );
 
   /**
@@ -311,6 +330,65 @@ export default function SellScreen() {
           setCustomer(NO_CUSTOMER);
           setFulfillment("pickup");
         },
+      },
+    ]);
+  }
+
+  /** Park this cart so the cashier can help someone else, then come back. */
+  async function saveDraft() {
+    if (lines.length === 0) return;
+
+    await addCartDraft({
+      lines,
+      overridden,
+      payment,
+      customer,
+      fulfillment,
+    });
+    setLines([]);
+    setOverridden([]);
+    setCustomer(NO_CUSTOMER);
+    setFulfillment("pickup");
+    setPayment("cash");
+    await refreshDrafts();
+  }
+
+  function openDraftPicker() {
+    void refreshDrafts().then(() => setDraftPickerOpen(true));
+  }
+
+  function applyDraft(draft: CartDraft) {
+    setLines(draft.lines);
+    setOverridden(draft.overridden);
+    setPayment(draft.payment);
+    setCustomer(draft.customer);
+    setFulfillment(draft.fulfillment);
+    void removeCartDraft(draft.id).then(() => refreshDrafts());
+    setDraftPickerOpen(false);
+  }
+
+  function resumeDraft(draft: CartDraft) {
+    if (lines.length > 0) {
+      Alert.alert(
+        "Replace the open cart?",
+        "Loading this draft clears what is in the cart now.",
+        [
+          { text: "Keep cart", style: "cancel" },
+          { text: "Load draft", onPress: () => applyDraft(draft) },
+        ],
+      );
+      return;
+    }
+    applyDraft(draft);
+  }
+
+  function discardDraft(draft: CartDraft) {
+    Alert.alert("Delete this draft?", "The parked cart is removed from this terminal.", [
+      { text: "Keep it", style: "cancel" },
+      {
+        text: "Delete draft",
+        style: "destructive",
+        onPress: () => void removeCartDraft(draft.id).then(() => refreshDrafts()),
       },
     ]);
   }
@@ -547,6 +625,24 @@ export default function SellScreen() {
             >
               {lines.length > 0 ? (
                 <IconButton
+                  icon={Bookmark}
+                  label="Save as draft"
+                  onPress={() => void saveDraft()}
+                />
+              ) : null}
+              {hasDraft ? (
+                <IconButton
+                  icon={BookmarkCheck}
+                  label={
+                    drafts.length === 1
+                      ? "Open drafts"
+                      : `Open drafts, ${drafts.length} saved`
+                  }
+                  onPress={openDraftPicker}
+                />
+              ) : null}
+              {lines.length > 0 ? (
+                <IconButton
                   icon={Trash2}
                   label="Empty the cart"
                   tone="danger"
@@ -559,13 +655,17 @@ export default function SellScreen() {
             </View>
           </View>
 
-          <View style={{ flex: 1, minHeight: 0, marginTop: space.md }}>
+          <View style={{ flex: 1, minHeight: 0, marginTop: space.sm }}>
             {lines.length === 0 ? (
               <View style={{ flex: 1, justifyContent: "center" }}>
                 <EmptyState
                   icon={ShoppingCart}
                   title="Nothing in the cart"
-                  instruction="Tap a product to start a sale."
+                  instruction={
+                    hasDraft
+                      ? `${drafts.length} draft${drafts.length === 1 ? "" : "s"} saved — tap the bookmark to open one, or tap a product.`
+                      : "Tap a product to start a sale."
+                  }
                 />
               </View>
             ) : (
@@ -813,6 +913,14 @@ export default function SellScreen() {
           busy={saving}
           onClose={() => setConfirmOpen(false)}
           onConfirm={() => void finishSale()}
+        />
+
+        <DraftPickerSheet
+          open={draftPickerOpen}
+          drafts={drafts}
+          onClose={() => setDraftPickerOpen(false)}
+          onPick={resumeDraft}
+          onDiscard={discardDraft}
         />
       </CartShell>
 
@@ -1551,6 +1659,119 @@ function StepperButton({
 }
 
 /**
+ * Pick which parked cart to bring back. Many drafts can sit on one terminal.
+ */
+function DraftPickerSheet({
+  open,
+  drafts,
+  onClose,
+  onPick,
+  onDiscard,
+}: {
+  open: boolean;
+  drafts: CartDraft[];
+  onClose: () => void;
+  onPick: (draft: CartDraft) => void;
+  onDiscard: (draft: CartDraft) => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: `${color.ink}99` }}>
+        <View
+          style={{
+            backgroundColor: color.surface,
+            borderTopLeftRadius: radius.lg,
+            borderTopRightRadius: radius.lg,
+            padding: space.lg,
+            gap: space.md,
+            width: "100%",
+            maxWidth: 560,
+            alignSelf: "center",
+            maxHeight: "80%",
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+            <View style={[styles.iconWell, { width: 34, height: 34 }]}>
+              <BookmarkCheck size={18} color={color.primary} strokeWidth={2} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.subheading}>Saved drafts</Text>
+              <Text style={{ fontSize: fontSize.caption, color: color.inkMuted }}>
+                {drafts.length} parked cart{drafts.length === 1 ? "" : "s"} on this terminal
+              </Text>
+            </View>
+            <IconButton icon={X} label="Close" onPress={onClose} />
+          </View>
+
+          {drafts.length === 0 ? (
+            <EmptyState
+              icon={Bookmark}
+              title="No drafts left"
+              instruction="Save a cart with the bookmark while it still has items."
+            />
+          ) : (
+            <FlatList
+              data={drafts}
+              keyExtractor={(draft) => draft.id}
+              style={{ maxHeight: 420 }}
+              ItemSeparatorComponent={() => (
+                <View style={{ height: 1, backgroundColor: color.border }} />
+              )}
+              renderItem={({ item: draft }) => {
+                const items = draft.lines.reduce((sum, line) => sum + line.quantity, 0);
+                const amount = cartTotal(draft.lines);
+                const who = draft.customer.name?.trim() || null;
+
+                return (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: space.sm,
+                      paddingVertical: space.md,
+                    }}
+                  >
+                    <Pressable
+                      onPress={() => onPick(draft)}
+                      style={({ pressed }) => ({
+                        flex: 1,
+                        minHeight: 56,
+                        justifyContent: "center",
+                        gap: space.xs,
+                        opacity: pressed ? 0.7 : 1,
+                      })}
+                    >
+                      <Text style={{ fontSize: fontSize.bodyLg, fontWeight: "700", color: color.ink }}>
+                        {who ?? `${items} item${items === 1 ? "" : "s"}`}
+                      </Text>
+                      <Text style={{ fontSize: fontSize.caption, color: color.inkMuted }}>
+                        {who
+                          ? `${items} item${items === 1 ? "" : "s"} · ${formatMoney(amount)}`
+                          : formatMoney(amount)}
+                        {" · "}
+                        {timeAgo(draft.savedAt)}
+                      </Text>
+                    </Pressable>
+                    <IconButton
+                      icon={Trash2}
+                      label="Delete draft"
+                      tone="danger"
+                      onPress={() => onDiscard(draft)}
+                    />
+                  </View>
+                );
+              }}
+            />
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+/**
  * Last look before the sale is written. Cash needs the notes in hand so change
  * is clear; GCash/card only need the amount due confirmed.
  */
@@ -1839,7 +2060,7 @@ function CartShell({
         backgroundColor: color.surface,
         borderLeftWidth: compact ? 0 : 1,
         borderLeftColor: color.border,
-        padding: compact ? space.lg : padding,
+        padding: compact ? space.md : padding,
         minHeight: 0,
       }}
     >

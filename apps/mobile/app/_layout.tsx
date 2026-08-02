@@ -3,6 +3,7 @@ import { ActivityIndicator, Text, View } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { PaperBackdrop } from "@/components/paper-backdrop";
 import { migrate } from "@/db";
 import { SessionProvider } from "@/lib/session";
 import { SyncProvider } from "@/sync/sync-provider";
@@ -24,6 +25,7 @@ export default function RootLayout() {
   if (error) {
     return (
       <View style={[styles.screen, { justifyContent: "center", padding: space.xl }]}>
+        <PaperBackdrop />
         <Text style={styles.subheading}>This terminal could not start</Text>
         <Text style={[styles.muted, { marginTop: space.sm }]}>{error}</Text>
       </View>
@@ -33,6 +35,7 @@ export default function RootLayout() {
   if (!ready) {
     return (
       <View style={[styles.screen, { justifyContent: "center", alignItems: "center" }]}>
+        <PaperBackdrop />
         <ActivityIndicator color={color.primary} />
       </View>
     );
@@ -43,12 +46,15 @@ export default function RootLayout() {
       <SessionProvider>
         <SyncProvider>
           <StatusBar style="dark" />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { flex: 1, backgroundColor: color.paper },
-            }}
-          />
+          <View style={{ flex: 1, backgroundColor: color.paper }}>
+            <PaperBackdrop />
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { flex: 1, backgroundColor: "transparent" },
+              }}
+            />
+          </View>
         </SyncProvider>
       </SessionProvider>
     </SafeAreaProvider>

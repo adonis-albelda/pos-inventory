@@ -8,15 +8,25 @@ export default async function LoginPage({
   const { next } = await searchParams;
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-12">
+      {/* Full-bleed shop banner behind the sign-in card. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: "url(/banner.png)" }}
+      />
+      <div aria-hidden className="absolute inset-0 bg-ink/55" />
+
+      <div className="relative z-10 w-full max-w-sm">
         <div className="flex items-center gap-3">
           <span className="flex size-11 items-center justify-center rounded-md bg-primary font-display text-heading-sm font-bold text-white">
             A
           </span>
           <div>
-            <h1 className="text-heading-md font-semibold tracking-tight">DOUBLE A</h1>
-            <p className="text-caption text-ink-muted">Admin dashboard</p>
+            <h1 className="text-heading-md font-semibold tracking-tight text-white">
+              DOUBLE A
+            </h1>
+            <p className="text-caption text-white/75">Admin dashboard</p>
           </div>
         </div>
 
@@ -30,8 +40,20 @@ export default async function LoginPage({
           </div>
         </div>
 
-        <p className="mt-4 text-center text-caption text-ink-muted">
+        <p className="mt-4 text-center text-caption text-white/70">
           Cashiers sign in on a terminal with a PIN, not here.
+        </p>
+
+        <p className="mt-8 text-center text-caption text-white/55">
+          Powered by{" "}
+          <a
+            href="https://doubleadigitalsolutions.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline decoration-white/30 underline-offset-2 transition-colors hover:text-white hover:decoration-white/60"
+          >
+            doubleadigitalsolutions.com
+          </a>
         </p>
       </div>
     </main>

@@ -3,7 +3,7 @@ import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSession } from "@/lib/session";
 import { StoreHeader } from "@/components/store-header";
-import { color, styles } from "@/theme";
+import { styles } from "@/theme";
 
 export default function PosLayout() {
   const { cashier } = useSession();
@@ -14,7 +14,12 @@ export default function PosLayout() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <StoreHeader />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.paper } }} />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: "transparent" },
+        }}
+      />
     </View>
   );
 }

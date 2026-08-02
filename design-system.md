@@ -34,7 +34,7 @@ they would on a printed receipt.
 | `color-warning` | `#D9A441` | Low stock, pending sync, unsaved changes |
 | `color-ink` | `#1B1F1D` (warm near-black) | Primary text |
 | `color-ink-muted` | `#5B655F` | Secondary text, timestamps, helper text |
-| `color-paper` | `#FAF8F4` (warm off-white) | App background — evokes receipt paper without tipping into cliché cream+serif territory |
+| `color-paper` | `#F5F5F3` (near-white) | App background — soft off-white, not pure white |
 | `color-surface` | `#FFFFFF` | Cards, panels, modals |
 | `color-border` | `#E4E0D8` | Dividers, input borders |
 
@@ -73,9 +73,8 @@ these quickly, under variable lighting; err large.
 ## Spacing & shape
 
 - Spacing scale: `4, 8, 12, 16, 24, 32, 48, 64` (px) — no arbitrary one-off values.
-- Border radius: `radius-sm: 6px` (inputs, small buttons), `radius-md: 12px` (cards),
-  `radius-lg: 20px` (modals, sheets). Avoid fully squared (0px) corners — that reads as the
-  generic "broadsheet" AI-design default, not a deliberate choice for this brand.
+- Border radius: mobile POS uses **0** (hard corners). Admin keeps `radius-sm: 6px`
+  (inputs, small buttons), `radius-md: 12px` (cards), `radius-lg: 20px` (modals, sheets).
 - Shadows: keep flat/minimal on mobile (performance + battery), slightly more elevation on
   admin cards to establish hierarchy in a denser dashboard layout.
 

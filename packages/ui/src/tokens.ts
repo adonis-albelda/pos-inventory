@@ -28,7 +28,8 @@ export const color = {
   warningInk: "#8A6516",
   ink: "#1B1F1D",
   inkMuted: "#5B655F",
-  paper: "#FAF8F4",
+  /** Near-white field — not pure white, not cream. */
+  paper: "#F5F5F3",
   surface: "#FFFFFF",
   /** Pressed state for a paper/surface tap target — dim, never animate. */
   surfacePressed: "#F1EFEA",

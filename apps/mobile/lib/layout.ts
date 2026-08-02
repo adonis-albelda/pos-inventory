@@ -29,9 +29,9 @@ export function useLayout() {
     /** 2 under 480dp, 3 under 900dp, 4 above. */
     columns: width < 480 ? 2 : width < 900 ? 3 : 4,
 
-    /** Screen padding. Tight on a phone, generous once there is room. */
-    gutter: compact ? space.md : expanded ? space.xl : space.lg,
-    gap: compact ? space.sm : space.md,
+    /** Screen padding. Tight — shop floor wants product tiles, not margin. */
+    gutter: compact ? space.sm : expanded ? space.lg : space.md,
+    gap: compact ? space.xs : space.sm,
 
     /**
      * On a wide tablet an unbounded grid grows tiles to billboard size, so the
@@ -39,12 +39,12 @@ export function useLayout() {
      * than a flex ratio, so it stays a readable column at any width.
      */
     gridMaxWidth: 1120,
-    cartWidth: Math.round(Math.min(Math.max(width * 0.34, 320), 460)),
+    cartWidth: Math.round(Math.min(Math.max(width * 0.34, 300), 420)),
 
     /** Forms and receipts read badly full-bleed on a tablet. */
     readableMaxWidth: 760,
 
-    tileMinHeight: compact ? 112 : expanded ? 148 : 132,
+    tileMinHeight: compact ? 96 : expanded ? 128 : 112,
   };
 }
 
