@@ -1,0 +1,5 @@
+{
+  "$comment": "Root placeholder. Each app/package extends @double-a/config-typescript directly.",
+  "files": [],
+  "include": []
+}

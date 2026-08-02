@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+/*
+ * Tokens from design-system.md, exposed as Tailwind theme values so utilities
+ * read `bg-primary` / `text-ink-muted` rather than a generic slate/zinc scale.
+ * Keep in step with packages/ui/src/tokens.ts.
+ */
+@theme {
+  --color-primary: #0f5c52;
+  --color-primary-dark: #0a3e38;
+  --color-primary-soft: #e7efed;
+  --color-primary-tint: #f1f6f4;
+  --color-on-primary: #ffffff;
+  --color-accent: #e8a33d;
+  --color-accent-soft: #fbf1dc;
+  --color-accent-ink: #8a6516;
+  --color-success: #3fa34d;
+  --color-success-soft: #e7f3e9;
+  --color-success-ink: #256b31;
+  --color-danger: #c1443c;
+  --color-danger-soft: #f7e3e1;
+  --color-danger-ink: #9c332c;
+  --color-warning: #d9a441;
+  --color-warning-soft: #fbf1dc;
+  --color-warning-ink: #8a6516;
+  --color-ink: #1b1f1d;
+  --color-ink-muted: #5b655f;
+  --color-paper: #faf8f4;
+  --color-surface: #ffffff;
+  --color-surface-pressed: #f1efea;
+  --color-border: #e4e0d8;
+  --color-border-soft: #efebe4;
+
+  --font-display: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-numeric: var(--font-plex-mono), ui-monospace, monospace;
+
+  --text-caption: 0.75rem;
+  --text-body: 0.875rem;
+  --text-body-lg: 1rem;
+  --text-heading-sm: 1.25rem;
+  --text-heading-md: 1.5rem;
+  --text-heading-lg: 2rem;
+  --text-display: 2.5rem;
+
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+
+  /*
+   * Route change: the new page fades and lifts into place. Short enough to read
+   * as the page arriving, not as an effect. Applied with `motion-safe:` so a
+   * reduced-motion preference gets the page with no movement at all.
+   */
+  --animate-page-enter: page-enter 180ms ease-out;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@layer base {
+  html {
+    overflow-x: clip;
+  }
+
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+  }
+}
+
+@utility num {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The ledger line: a dashed divider used only at real boundaries in the data,
+ * never as decoration.
+ */
+@utility ledger-line {
+  border-top: 1px dashed var(--color-border);
+}

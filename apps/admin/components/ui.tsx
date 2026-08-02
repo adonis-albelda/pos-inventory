@@ -1,0 +1,517 @@
+import type { ComponentProps, ReactNode } from "react";
+import {
+  AlertTriangle,
+  Check,
+  CircleAlert,
+  Dot,
+  Loader2,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import { formatMoney } from "@double-a/shared-types";
+
+function cx(...parts: (string | false | null | undefined)[]): string {
+  return parts.filter(Boolean).join(" ");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Button — one primary, one secondary, one accent reserved for sync-like acts */
+/* -------------------------------------------------------------------------- */
+
+type ButtonVariant = "primary" | "secondary" | "accent" | "danger" | "ghost";
+type ButtonSize = "sm" | "md";
+
+const BUTTON_STYLES: Record<ButtonVariant, string> = {
+  primary: "bg-primary text-white hover:bg-primary-dark",
+  secondary: "border border-border bg-surface text-ink hover:border-ink/30 hover:bg-paper",
+  accent: "bg-accent text-ink hover:brightness-95",
+  danger: "bg-danger text-white hover:brightness-95",
+  ghost: "text-ink-muted hover:bg-border/50 hover:text-ink",
+};
+
+const BUTTON_SIZES: Record<ButtonSize, string> = {
+  sm: "h-10 px-3 text-caption sm:h-8",
+  md: "h-11 px-4 text-body sm:h-10",
+};
+
+export function buttonClass(
+  variant: ButtonVariant = "primary",
+  size: ButtonSize = "md",
+  className?: string,
+): string {
+  return cx(
+    "inline-flex cursor-pointer items-center justify-center gap-2 rounded-sm font-medium transition-all",
+    "focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none",
+    "active:translate-y-px disabled:pointer-events-none disabled:opacity-50",
+    BUTTON_SIZES[size],
+    BUTTON_STYLES[variant],
+    className,
+  );
+}
+
+export function Button({
+  variant = "primary",
+  size = "md",
+  icon: Icon,
+  loading,
+  disabled,
+  className,
+  children,
+  ...props
+}: ComponentProps<"button"> & {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  icon?: LucideIcon;
+  loading?: boolean;
+}) {
+  const iconSize = size === "sm" ? 14 : 16;
+
+  return (
+    <button
+      {...props}
+      disabled={disabled ?? loading}
+      className={buttonClass(variant, size, className)}
+    >
+      {loading ? (
+        <Loader2 size={iconSize} strokeWidth={2} className="animate-spin" />
+      ) : Icon ? (
+        <Icon size={iconSize} strokeWidth={2} />
+      ) : null}
+      {children}
+    </button>
+  );
+}
+
+/**
+ * A download is a plain link, not a button: the browser fetches the file
+ * itself, so there is nothing for React to navigate.
+ */
+export function ButtonLink({
+  variant = "secondary",
+  size = "md",
+  icon: Icon,
+  className,
+  children,
+  ...props
+}: ComponentProps<"a"> & {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  icon?: LucideIcon;
+}) {
+  return (
+    <a {...props} className={buttonClass(variant, size, className)}>
+      {Icon ? <Icon size={size === "sm" ? 14 : 16} strokeWidth={2} /> : null}
+      {children}
+    </a>
+  );
+}
+
+/** Square, icon-only action for table rows, where a labelled button would crowd. */
+export function IconButton({
+  icon: Icon,
+  label,
+  tone = "neutral",
+  type = "button",
+  className,
+  ...props
+}: Omit<ComponentProps<"button">, "children"> & {
+  icon: LucideIcon;
+  label: string;
+  tone?: "neutral" | "danger";
+}) {
+  return (
+    <button
+      {...props}
+      type={type}
+      title={label}
+      aria-label={label}
+      className={cx(
+        "inline-flex size-10 cursor-pointer items-center justify-center rounded-sm transition-colors sm:size-8",
+        "focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none",
+        "disabled:pointer-events-none disabled:opacity-50",
+        tone === "danger"
+          ? "text-ink-muted hover:bg-danger/10 hover:text-danger"
+          : "text-ink-muted hover:bg-border/60 hover:text-ink",
+        className,
+      )}
+    >
+      <Icon size={16} strokeWidth={2} />
+    </button>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Page header — one shape for every screen, so titles never drift            */
+/* -------------------------------------------------------------------------- */
+
+export function PageHeader({
+  icon: Icon,
+  title,
+  description,
+  action,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <Icon size={20} strokeWidth={2} />
+        </span>
+        <div className="min-w-0">
+          <h1 className="text-heading-md font-semibold sm:text-heading-lg">{title}</h1>
+          {description ? (
+            <p className="mt-1 max-w-2xl text-body text-ink-muted">{description}</p>
+          ) : null}
+        </div>
+      </div>
+      {action ? (
+        <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end [&_a]:justify-center sm:[&_a]:w-auto [&_button]:w-full sm:[&_button]:w-auto [&_a]:w-full">
+          {action}
+        </div>
+      ) : null}
+    </header>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Card — border and spacing do the separating, not stacked drop shadows      */
+/* -------------------------------------------------------------------------- */
+
+export function Card({ className, ...props }: ComponentProps<"div">) {
+  return (
+    <div
+      {...props}
+      className={cx(
+        "rounded-md border border-border bg-surface shadow-xs",
+        className,
+      )}
+    />
+  );
+}
+
+export function CardHeader({
+  icon: Icon,
+  title,
+  description,
+  action,
+}: {
+  icon?: LucideIcon;
+  title: string;
+  description?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-3 border-b border-border px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:px-6">
+      <div className="flex min-w-0 items-start gap-2.5">
+        {Icon ? (
+          <Icon size={18} strokeWidth={2} className="mt-0.5 shrink-0 text-ink-muted" />
+        ) : null}
+        <div className="min-w-0">
+          <h2 className="text-heading-sm font-semibold">{title}</h2>
+          {description ? (
+            <p className="mt-1 text-caption text-ink-muted">{description}</p>
+          ) : null}
+        </div>
+      </div>
+      {action ? <div className="shrink-0 sm:self-start">{action}</div> : null}
+    </div>
+  );
+}
+
+export function CardBody({ className, ...props }: ComponentProps<"div">) {
+  return <div {...props} className={cx("px-4 py-5 sm:px-6", className)} />;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Stat — the top row of any dashboard screen                                 */
+/* -------------------------------------------------------------------------- */
+
+type StatTone = "neutral" | "primary" | "success" | "warning" | "danger";
+
+const STAT_ICON_STYLES: Record<StatTone, string> = {
+  neutral: "bg-border/60 text-ink-muted",
+  primary: "bg-primary/10 text-primary",
+  success: "bg-success/12 text-success",
+  warning: "bg-warning/16 text-[#8a6516]",
+  danger: "bg-danger/12 text-danger",
+};
+
+export function StatCard({
+  icon: Icon,
+  label,
+  value,
+  hint,
+  tone = "neutral",
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: StatTone;
+}) {
+  return (
+    <Card className="flex items-start gap-3 px-4 py-4 sm:gap-4 sm:px-5 sm:py-5">
+      <span
+        className={cx(
+          "flex size-10 shrink-0 items-center justify-center rounded-md",
+          STAT_ICON_STYLES[tone],
+        )}
+      >
+        <Icon size={20} strokeWidth={2} />
+      </span>
+      <div className="min-w-0">
+        <p className="text-caption font-medium tracking-wide text-ink-muted uppercase">
+          {label}
+        </p>
+        <p
+          className={cx(
+            "num mt-1 text-heading-md font-semibold",
+            tone === "danger" && "text-danger",
+          )}
+        >
+          {value}
+        </p>
+        {hint ? <p className="mt-0.5 text-caption text-ink-muted">{hint}</p> : null}
+      </div>
+    </Card>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Status badge — paired icon and label, never colour alone                    */
+/* -------------------------------------------------------------------------- */
+
+type BadgeTone = "success" | "warning" | "danger" | "neutral";
+
+const BADGE_STYLES: Record<BadgeTone, string> = {
+  success: "bg-success/12 text-success",
+  warning: "bg-warning/16 text-[#8a6516]",
+  danger: "bg-danger/12 text-danger",
+  neutral: "bg-border/60 text-ink-muted",
+};
+
+const BADGE_ICONS: Record<BadgeTone, LucideIcon> = {
+  success: Check,
+  warning: AlertTriangle,
+  danger: X,
+  neutral: Dot,
+};
+
+export function Badge({
+  tone = "neutral",
+  icon,
+  children,
+}: {
+  tone?: BadgeTone;
+  icon?: LucideIcon;
+  children: ReactNode;
+}) {
+  const Icon = icon ?? BADGE_ICONS[tone];
+
+  return (
+    <span
+      className={cx(
+        "inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-caption font-medium whitespace-nowrap",
+        BADGE_STYLES[tone],
+      )}
+    >
+      <Icon size={13} strokeWidth={2.5} aria-hidden />
+      {children}
+    </span>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Numbers are first-class content: tabular figures everywhere                 */
+/* -------------------------------------------------------------------------- */
+
+export function Money({ value, className }: { value: number; className?: string }) {
+  return <span className={cx("num", className)}>{formatMoney(value)}</span>;
+}
+
+export function Num({ value, className }: { value: number; className?: string }) {
+  return <span className={cx("num", className)}>{value}</span>;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Table primitives                                                           */
+/* -------------------------------------------------------------------------- */
+
+export function Table({ className, ...props }: ComponentProps<"table">) {
+  return (
+    <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+      <table
+        {...props}
+        className={cx(
+          "w-full text-body",
+          // Rows highlight on hover so the eye can hold a line across a wide table.
+          "[&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-paper",
+          "[&_tbody_tr:last-child_td]:border-b-0",
+          className,
+        )}
+      />
+    </div>
+  );
+}
+
+export function Th({ className, numeric, ...props }: ComponentProps<"th"> & { numeric?: boolean }) {
+  return (
+    <th
+      {...props}
+      className={cx(
+        "border-b border-border bg-paper/60 px-3 py-2.5 text-caption font-semibold tracking-wide text-ink-muted uppercase sm:px-6 sm:py-3",
+        numeric ? "text-right" : "text-left",
+        className,
+      )}
+    />
+  );
+}
+
+export function Td({ className, numeric, ...props }: ComponentProps<"td"> & { numeric?: boolean }) {
+  return (
+    <td
+      {...props}
+      className={cx(
+        "border-b border-border px-3 py-2.5 align-middle sm:px-6 sm:py-3",
+        numeric && "num text-right",
+        className,
+      )}
+    />
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Inputs                                                                     */
+/* -------------------------------------------------------------------------- */
+
+export function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-caption font-medium text-ink-muted">{label}</span>
+      {children}
+      {hint ? <span className="mt-1 block text-caption text-ink-muted">{hint}</span> : null}
+    </label>
+  );
+}
+
+const CONTROL_STYLES =
+  "w-full rounded-sm border border-border bg-surface px-3 text-body outline-none transition-colors placeholder:text-ink-muted/70 hover:border-ink/20 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60";
+
+export function Input({
+  className,
+  icon: Icon,
+  ...props
+}: ComponentProps<"input"> & { icon?: LucideIcon }) {
+  const input = (
+    <input
+      {...props}
+      className={cx(CONTROL_STYLES, "h-11 sm:h-10", Icon && "pl-9", className)}
+    />
+  );
+
+  if (!Icon) return input;
+
+  return (
+    <span className="relative block">
+      <Icon
+        size={16}
+        strokeWidth={2}
+        className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-ink-muted"
+      />
+      {input}
+    </span>
+  );
+}
+
+export function Select({ className, ...props }: ComponentProps<"select">) {
+  return (
+    <select
+      {...props}
+      className={cx(CONTROL_STYLES, "h-11 cursor-pointer sm:h-10", className)}
+    />
+  );
+}
+
+export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
+  return (
+    <textarea
+      {...props}
+      className={cx(CONTROL_STYLES, "num min-h-28 resize-y py-2 leading-6", className)}
+    />
+  );
+}
+
+export function FileInput({ className, ...props }: ComponentProps<"input">) {
+  return (
+    <input
+      {...props}
+      type="file"
+      className={cx(
+        CONTROL_STYLES,
+        "cursor-pointer py-2",
+        "file:mr-3 file:cursor-pointer file:rounded-sm file:border-0 file:bg-primary/10",
+        "file:px-3 file:py-1 file:text-body file:font-medium file:text-primary",
+        className,
+      )}
+    />
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Empty state — always says what to do next                                  */
+/* -------------------------------------------------------------------------- */
+
+export function EmptyState({
+  icon: Icon,
+  title,
+  instruction,
+  action,
+}: {
+  icon?: LucideIcon;
+  title: string;
+  instruction: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="px-4 py-12 text-center sm:px-6 sm:py-14">
+      {Icon ? (
+        <span className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full border border-dashed border-border text-ink-muted">
+          <Icon size={22} strokeWidth={1.75} />
+        </span>
+      ) : null}
+      <p className="text-body-lg font-medium">{title}</p>
+      <p className="mx-auto mt-2 max-w-md text-body text-ink-muted">{instruction}</p>
+      {action ? <div className="mt-6 flex justify-center">{action}</div> : null}
+    </div>
+  );
+}
+
+export function ErrorNote({ children }: { children: ReactNode }) {
+  return (
+    <p className="flex items-start gap-2 rounded-sm border border-danger/40 bg-danger/8 px-3 py-2 text-body text-danger">
+      <CircleAlert size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
+      <span>{children}</span>
+    </p>
+  );
+}
+
+export function SuccessNote({ children }: { children: ReactNode }) {
+  return (
+    <p className="flex items-start gap-2 rounded-sm border border-success/40 bg-success/8 px-3 py-2 text-body text-success">
+      <Check size={16} strokeWidth={2.5} className="mt-0.5 shrink-0" />
+      <span>{children}</span>
+    </p>
+  );
+}

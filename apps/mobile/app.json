@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "DOUBLE A POS",
+    "slug": "double-a-pos",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "doubleapos",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "backgroundColor": "#FAF8F4",
+    "splash": {
+      "backgroundColor": "#0F5C52",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.doublea.pos"
+    },
+    "android": {
+      "package": "com.doublea.pos",
+      "adaptiveIcon": {
+        "backgroundColor": "#0F5C52"
+      }
+    },
+    "plugins": ["expo-router", "expo-sqlite", "expo-secure-store"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "@double-a/config-eslint",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./base": "./base.js",
+    "./next": "./next.js",
+    "./react-native": "./react-native.js"
+  },
+  "dependencies": {}
+}
