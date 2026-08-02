@@ -23,8 +23,8 @@ export type CategoryFilter = string | null;
  *
  * Only top-level categories get a tab — a hardware catalogue nests three deep
  * and a strip of "PVC / Copper / Galvanised" tells a cashier nothing about
- * where they are. Tapping a tab shows everything underneath it, and the last
- * chip opens the full tree in a dialog for picking a specific shelf.
+ * where they are. Tapping a tab shows everything underneath it. "View all
+ * categories" stays pinned on the right; only the dynamic chips scroll.
  */
 export function CategoryTabs({
   categories,
@@ -50,53 +50,59 @@ export function CategoryTabs({
   // which is not a choice. Hide it rather than take a row from the grid.
   if (roots.length === 0) return null;
 
-  // A flat catalogue needs no dialog: every category already has a chip, and a
-  // second way to the same list beside them reads as a duplicate.
-  const nested = categories.length > roots.length;
-
   /** A deep shelf picked in the dialog still lights up the tab it lives under. */
   const selected = categories.find((category) => category.id === value) ?? null;
   const deepSelection = selected !== null && selected.depth > 1;
 
   return (
-    <View style={style}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ gap: space.sm }}
+    <View style={[{ flexGrow: 0 }, style]}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: space.sm,
+          paddingVertical: space.xs,
+        }}
       >
+        <ScrollView
+          horizontal
+          nestedScrollEnabled
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          style={{ flex: 1, minWidth: 0 }}
+          contentContainerStyle={{
+            gap: space.sm,
+            alignItems: "center",
+            paddingRight: space.xs,
+          }}
+        >
+          <Chip
+            label="All"
+            icon={LayoutGrid}
+            selected={value === null}
+            onPress={() => onChange(null)}
+          />
+
+          {roots.map((root) => (
+            <Chip
+              key={root.id}
+              label={root.name}
+              count={compact ? undefined : root.productCount}
+              selected={selected?.rootId === root.id}
+              // A tab is the whole branch. Tapping the tab of a deep selection
+              // widens back out to everything under that root.
+              onPress={() => onChange(root.id)}
+            />
+          ))}
+        </ScrollView>
+
         <Chip
-          label="All"
-          icon={LayoutGrid}
-          selected={value === null}
-          onPress={() => onChange(null)}
+          label={compact ? "View all" : "View all categories"}
+          icon={FolderTree}
+          tone="accent"
+          onPress={() => setBrowsing(true)}
         />
-
-        {roots.map((root) => (
-          <Chip
-            key={root.id}
-            label={root.name}
-            count={compact ? undefined : root.productCount}
-            selected={selected?.rootId === root.id}
-            // A tab is the whole branch. Tapping the tab of a deep selection
-            // widens back out to everything under that root.
-            onPress={() => onChange(root.id)}
-          />
-        ))}
-
-        {/* Last when it is there at all: the way into the full tree. Labelled
-            "Browse", never "All categories" — beside the "All" chip, two chips
-            opening with the same word are read as one thing twice. */}
-        {nested ? (
-          <Chip
-            label={compact ? "Browse" : "Browse all categories"}
-            icon={FolderTree}
-            tone="accent"
-            onPress={() => setBrowsing(true)}
-          />
-        ) : null}
-      </ScrollView>
+      </View>
 
       {deepSelection ? (
         <Text
@@ -112,7 +118,7 @@ export function CategoryTabs({
       ) : null}
 
       <CategoryDialog
-        open={browsing && nested}
+        open={browsing}
         categories={categories}
         value={value}
         onClose={() => setBrowsing(false)}
@@ -149,6 +155,8 @@ function Chip({
       accessibilityRole="button"
       accessibilityState={{ selected }}
       style={({ pressed }) => ({
+        // Without this, RN shrinks chips to fit the row and the strip never scrolls.
+        flexShrink: 0,
         minHeight: 44,
         flexDirection: "row",
         alignItems: "center",

@@ -3,9 +3,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Alert,
   FlatList,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   Text,
   TextInput,
@@ -74,6 +72,7 @@ import { useLayout } from "@/lib/layout";
 import { useSession } from "@/lib/session";
 import { printReceipt } from "@/printing/receipt";
 import { useSync } from "@/sync/sync-provider";
+import { BottomSheet } from "@/components/bottom-sheet";
 import { CategoryTabs, type CategoryFilter } from "@/components/category-tabs";
 import { ProductTile } from "@/components/product-tile";
 import {
@@ -230,12 +229,16 @@ export default function SellScreen() {
 
   /** No confirmation here on purpose — adding to a cart is speed critical. */
   function addToCart(product: ProductWithEstimatedStock) {
+    const stockCap = Math.max(0, Math.floor(product.estimatedStock));
+    if (stockCap <= 0) return;
+
     setLines((current) => {
       const existing = current.find((line) => line.productId === product.id);
       if (existing) {
+        if (existing.quantity >= stockCap) return current;
         return current.map((line) =>
           line.productId === product.id
-            ? repricedFor(line, line.quantity + 1)
+            ? repricedFor(line, Math.min(line.quantity + 1, stockCap))
             : line,
         );
       }
@@ -252,7 +255,7 @@ export default function SellScreen() {
           unitCost: product.costPrice,
           unit: product.unit,
           quantity: 1,
-          availableStock: product.estimatedStock,
+          availableStock: stockCap,
         },
       ];
     });
@@ -261,11 +264,13 @@ export default function SellScreen() {
   function changeQuantity(productId: string, delta: number) {
     setLines((current) =>
       current
-        .map((line) =>
-          line.productId === productId
-            ? repricedFor(line, line.quantity + delta)
-            : line,
-        )
+        .map((line) => {
+          if (line.productId !== productId) return line;
+          const stockCap = Math.max(0, Math.floor(line.availableStock));
+          const next = line.quantity + delta;
+          if (delta > 0 && next > stockCap) return line;
+          return repricedFor(line, next);
+        })
         .filter((line) => line.quantity > 0),
     );
 
@@ -464,10 +469,11 @@ export default function SellScreen() {
         style={{
           flex: 1,
           padding: layout.gutter,
-          gap: layout.gap,
+          gap: space.md,
           width: "100%",
           maxWidth: compact ? undefined : layout.gridMaxWidth,
           alignSelf: "center",
+          minHeight: 0,
         }}
       >
         <View
@@ -524,60 +530,67 @@ export default function SellScreen() {
           />
         )}
 
-        {products.length === 0 ? (
-          <EmptyState
-            icon={PackageSearch}
-            title="No products on this terminal"
-            instruction="Press Refresh to bring the product list down from the office."
-          />
-        ) : (
-          <FlatList
-            data={visible}
-            keyExtractor={(item) => item.id}
-            // numColumns cannot change on a mounted list, so the column count is
-            // part of the key and a rotation remounts the grid.
-            key={`grid-${columns}`}
-            numColumns={columns}
-            columnWrapperStyle={{ gap: layout.gap }}
-            contentContainerStyle={{ gap: layout.gap, paddingBottom: layout.gutter }}
-            keyboardShouldPersistTaps="handled"
-            ListEmptyComponent={
-              <EmptyState
-                icon={PackageSearch}
-                title="Nothing matches that"
-                instruction="Check the spelling, or scan the barcode on the item itself."
-              />
-            }
-            renderItem={({ item }) => (
-              <ProductTile
-                product={item}
-                inCart={inCart.get(item.id) ?? 0}
-                compact={compact}
-                minHeight={layout.tileMinHeight}
-                padding={layout.gutter}
-                onPress={() => addToCart(item)}
-                onRemove={() => changeQuantity(item.id, -1)}
-              />
-            )}
-          />
-        )}
+        <View style={{ flex: 1, minHeight: 0, gap: space.sm }}>
+          {products.length === 0 ? (
+            <EmptyState
+              icon={PackageSearch}
+              title="No products on this terminal"
+              instruction="Press Refresh to bring the product list down from the office."
+            />
+          ) : (
+            <FlatList
+              data={visible}
+              style={{ flex: 1 }}
+              keyExtractor={(item) => item.id}
+              // numColumns cannot change on a mounted list, so the column count is
+              // part of the key and a rotation remounts the grid.
+              key={`grid-${columns}`}
+              numColumns={columns}
+              columnWrapperStyle={{ gap: layout.gap }}
+              contentContainerStyle={{
+                gap: layout.gap,
+                paddingBottom: space.sm,
+                flexGrow: 1,
+              }}
+              keyboardShouldPersistTaps="handled"
+              ListEmptyComponent={
+                <EmptyState
+                  icon={PackageSearch}
+                  title="Nothing matches that"
+                  instruction="Check the spelling, or scan the barcode on the item itself."
+                />
+              }
+              renderItem={({ item }) => (
+                <ProductTile
+                  product={item}
+                  inCart={inCart.get(item.id) ?? 0}
+                  compact={compact}
+                  minHeight={layout.tileMinHeight}
+                  padding={space.md}
+                  onPress={() => addToCart(item)}
+                  onRemove={() => changeQuantity(item.id, -1)}
+                />
+              )}
+            />
+          )}
 
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            alignSelf: "flex-start",
-            gap: space.xs,
-            paddingHorizontal: space.sm,
-            paddingVertical: space.xs,
-            borderRadius: radius.sm,
-            backgroundColor: color.primarySoft,
-          }}
-        >
-          <Info size={13} color={color.primary} strokeWidth={2.5} />
-          <Text style={{ fontSize: fontSize.caption, color: color.primary }}>
-            Stock counts are an estimate until you sync.
-          </Text>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              alignSelf: "flex-start",
+              gap: space.xs,
+              paddingHorizontal: space.sm,
+              paddingVertical: space.xs,
+              borderRadius: radius.sm,
+              backgroundColor: color.primarySoft,
+            }}
+          >
+            <Info size={13} color={color.primary} strokeWidth={2.5} />
+            <Text style={{ fontSize: fontSize.caption, color: color.primary }}>
+              Stock counts are an estimate until you sync.
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -949,45 +962,98 @@ function CartRow({
   onChange: (delta: number) => void;
   onEditPrice: () => void;
 }) {
-  const oversell = line.quantity > line.availableStock;
+  const stockCap = Math.max(0, Math.floor(line.availableStock));
+  const remaining = Math.max(0, stockCap - line.quantity);
+  const atMax = line.quantity >= stockCap;
+  const oversell = line.quantity > stockCap;
   const discounted = line.unitPrice < line.listPrice;
   const belowCost = line.unitPrice < line.unitCost;
   const bulkMin = product?.bulkMinQuantity ?? null;
   const bulkApplied = !overridden && bulkMin !== null && line.quantity >= bulkMin;
   // At one, decrementing drops the line entirely, so the control says so.
   const RemoveIcon = line.quantity === 1 ? Trash2 : Minus;
+  const showFlags = bulkApplied || belowCost || oversell;
+  const priceTone = belowCost
+    ? color.dangerInk
+    : overridden
+      ? color.accentInk
+      : color.inkMuted;
 
   return (
     <View
       style={{
         flexDirection: "row",
         alignItems: "center",
-        gap: space.md,
-        paddingVertical: space.md,
+        gap: space.sm,
+        paddingVertical: space.sm,
       }}
     >
-      <View style={{ flex: 1, gap: space.xs }}>
-        <Text
-          numberOfLines={2}
-          style={{ fontSize: fontSize.bodyLg, fontWeight: "600" }}
-        >
-          {line.productName}
-        </Text>
-
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <View
           style={{
             flexDirection: "row",
-            alignItems: "baseline",
-            flexWrap: "wrap",
-            gap: space.xs,
+            alignItems: "center",
+            gap: space.sm,
+            minWidth: 0,
           }}
         >
           <Text
-            style={[styles.numeric, { fontSize: fontSize.body, color: color.inkMuted }]}
+            numberOfLines={1}
+            style={{
+              flexShrink: 1,
+              minWidth: 0,
+              fontSize: fontSize.body,
+              fontWeight: "700",
+              color: color.ink,
+            }}
           >
-            {line.quantity} {line.unit} x {formatMoney(line.unitPrice)}
+            {line.productName}
           </Text>
-          {discounted ? (
+          <Text
+            numberOfLines={1}
+            style={{
+              flexShrink: 0,
+              fontSize: fontSize.caption,
+              fontWeight: "600",
+              color: oversell || remaining === 0 ? color.warningInk : color.inkMuted,
+            }}
+          >
+            {oversell
+              ? `${stockCap} in stock`
+              : remaining === 0
+                ? "At limit"
+                : `${remaining} left`}
+          </Text>
+        </View>
+
+        <Pressable
+          onPress={onEditPrice}
+          accessibilityRole="button"
+          accessibilityLabel={`Change the price of ${line.productName}`}
+          style={({ pressed }) => ({
+            alignSelf: "flex-start",
+            flexDirection: "row",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: space.xs,
+            paddingVertical: 2,
+            paddingHorizontal: overridden ? space.xs : 0,
+            borderRadius: radius.sm,
+            backgroundColor: pressed
+              ? color.primarySoft
+              : overridden
+                ? belowCost
+                  ? color.dangerSoft
+                  : color.accentSoft
+                : "transparent",
+          })}
+        >
+          <Text
+            style={[styles.numeric, { fontSize: fontSize.caption, color: color.inkMuted }]}
+          >
+            {line.quantity} {line.unit} ×
+          </Text>
+          {overridden && discounted ? (
             <Text
               style={[
                 styles.numeric,
@@ -1001,9 +1067,26 @@ function CartRow({
               {formatMoney(line.listPrice)}
             </Text>
           ) : null}
-        </View>
+          <Text
+            style={[
+              styles.numeric,
+              {
+                fontSize: fontSize.caption,
+                fontWeight: overridden ? "700" : "600",
+                color: priceTone,
+              },
+            ]}
+          >
+            {formatMoney(line.unitPrice)}
+          </Text>
+          {overridden ? (
+            <Pencil size={11} color={priceTone} strokeWidth={2.5} />
+          ) : (
+            <Pencil size={11} color={color.inkMuted} strokeWidth={2} />
+          )}
+        </Pressable>
 
-        {discounted || bulkApplied || belowCost || oversell ? (
+        {showFlags ? (
           <View
             style={{
               flexDirection: "row",
@@ -1013,65 +1096,25 @@ function CartRow({
             }}
           >
             {bulkApplied ? (
-              <Badge
-                tone="success"
-                icon={Tag}
-                label={`Bulk price from ${bulkMin} ${line.unit}`}
-              />
-            ) : null}
-            {overridden ? <Badge tone="neutral" icon={Pencil} label="Price changed" /> : null}
-            {discounted ? (
-              <Badge
-                tone="neutral"
-                icon={Tag}
-                label={`${formatMoney((line.listPrice - line.unitPrice) * line.quantity)} off`}
-              />
+              <Badge tone="success" icon={Tag} label={`Bulk from ${bulkMin}`} />
             ) : null}
             {belowCost ? (
               <Badge tone="danger" icon={TriangleAlert} label="Below cost" />
             ) : null}
-            {oversell ? <Badge tone="warning" label="Over counted stock" /> : null}
+            {oversell ? <Badge tone="warning" label="Over stock" /> : null}
           </View>
         ) : null}
       </View>
 
-      <View style={{ alignItems: "flex-end", gap: space.sm }}>
-        {/* The line total is the price control: tap it to type what this
-            actually sold for. */}
-        <Pressable
-          onPress={onEditPrice}
-          accessibilityRole="button"
-          accessibilityLabel={`Change the price of ${line.productName}`}
-          style={({ pressed }) => ({
-            flexDirection: "row",
-            alignItems: "center",
-            gap: space.xs,
-            minHeight: 48,
-            paddingHorizontal: space.sm,
-            borderRadius: radius.sm,
-            borderWidth: 1,
-            borderColor: discounted ? color.accent : color.primarySoft,
-            backgroundColor: pressed
-              ? color.primarySoft
-              : discounted
-                ? color.accentSoft
-                : color.paper,
-          })}
-        >
-          <Pencil
-            size={14}
-            color={discounted ? color.accentInk : color.primary}
-            strokeWidth={2.5}
-          />
-          <Money
-            value={lineSubtotal(line.unitPrice, line.quantity)}
-            style={{
-              fontSize: fontSize.bodyLg,
-              fontWeight: "700",
-              color: discounted ? color.accentInk : color.ink,
-            }}
-          />
-        </Pressable>
+      <View style={{ alignItems: "flex-end", gap: space.xs, flexShrink: 0 }}>
+        <Money
+          value={lineSubtotal(line.unitPrice, line.quantity)}
+          style={{
+            fontSize: fontSize.body,
+            fontWeight: "700",
+            color: color.ink,
+          }}
+        />
 
         <View
           style={{
@@ -1098,9 +1141,9 @@ function CartRow({
             style={[
               styles.numeric,
               {
-                minWidth: 40,
+                minWidth: 28,
                 textAlign: "center",
-                fontSize: fontSize.bodyLg,
+                fontSize: fontSize.body,
                 fontWeight: "700",
               },
             ]}
@@ -1109,8 +1152,13 @@ function CartRow({
           </Text>
           <StepperButton
             icon={Plus}
-            label={`One more ${line.productName}`}
-            tint={color.primary}
+            label={
+              atMax
+                ? `${line.productName} is at stock limit`
+                : `One more ${line.productName}`
+            }
+            tint={atMax ? color.inkMuted : color.primary}
+            disabled={atMax}
             onPress={() => onChange(1)}
           />
         </View>
@@ -1152,27 +1200,7 @@ function PriceSheet({
   const off = check.ok ? Math.max(line.listPrice - typed, 0) * line.quantity : 0;
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        // color-ink at 60%, the only scrim in the app — there is no token for a
-        // translucent overlay.
-        style={{ flex: 1, justifyContent: "flex-end", backgroundColor: `${color.ink}99` }}
-      >
-        <View
-          style={{
-            backgroundColor: color.surface,
-            borderTopLeftRadius: radius.lg,
-            borderTopRightRadius: radius.lg,
-            padding: space.lg,
-            gap: space.md,
-            // A full-width sheet on a tablet puts the keypad and the price at
-            // opposite ends of the screen.
-            width: "100%",
-            maxWidth: 560,
-            alignSelf: "center",
-          }}
-        >
+    <BottomSheet open={line !== null} onClose={onClose}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
             <View style={[styles.iconWell, { width: 34, height: 34 }]}>
               <Tag size={18} color={color.primary} strokeWidth={2} />
@@ -1302,9 +1330,7 @@ function PriceSheet({
             variant="secondary"
             onPress={() => onReset(line.productId)}
           />
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+    </BottomSheet>
   );
 }
 
@@ -1414,13 +1440,23 @@ function CustomerSheet({
   const [matches, setMatches] = useState<
     Awaited<ReturnType<typeof searchLocalCustomers>>
   >([]);
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    void searchLocalCustomers(query).then((rows) => {
-      if (!cancelled) setMatches(rows);
-    });
+    setSearching(true);
+    void searchLocalCustomers(query)
+      .then((rows) => {
+        if (!cancelled) setMatches(rows);
+      })
+      .catch((error: unknown) => {
+        console.warn("Customer search failed", error);
+        if (!cancelled) setMatches([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSearching(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -1434,141 +1470,172 @@ function CustomerSheet({
     contact,
     address,
   });
+  const needle = query.trim();
+  const shown = matches.slice(0, 8);
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={{ flex: 1, justifyContent: "flex-end", backgroundColor: `${color.ink}99` }}
-      >
-        <View
-          style={{
-            backgroundColor: color.surface,
-            borderTopLeftRadius: radius.lg,
-            borderTopRightRadius: radius.lg,
-            padding: space.lg,
-            gap: space.md,
-            width: "100%",
-            maxWidth: 560,
-            alignSelf: "center",
-            maxHeight: "90%",
-          }}
-        >
-          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-            <View style={[styles.iconWell, { width: 34, height: 34 }]}>
-              <UserRound size={18} color={color.primary} strokeWidth={2} />
+    <BottomSheet open={open} onClose={onClose}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+              <View style={[styles.iconWell, { width: 34, height: 34 }]}>
+                <UserRound size={18} color={color.primary} strokeWidth={2} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.subheading}>Customer</Text>
+                <Text style={{ fontSize: fontSize.caption, color: color.inkMuted }}>
+                  Reuse an existing account, or type a new one.
+                </Text>
+              </View>
+              <IconButton icon={X} label="Close" onPress={onClose} />
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.subheading}>Customer</Text>
-              <Text style={{ fontSize: fontSize.caption, color: color.inkMuted }}>
-                Reuse an existing account, or type a new one.
-              </Text>
-            </View>
-            <IconButton icon={X} label="Close" onPress={onClose} />
-          </View>
 
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: space.sm,
-              minHeight: 48,
-              borderWidth: 1,
-              borderColor: color.border,
-              borderRadius: radius.sm,
-              paddingHorizontal: space.md,
-              backgroundColor: color.paper,
-            }}
-          >
-            <Search size={16} color={color.inkMuted} strokeWidth={2} />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Search saved customers"
-              placeholderTextColor={color.inkMuted}
-              style={{ flex: 1, fontSize: fontSize.body, color: color.ink, paddingVertical: space.sm }}
-            />
-          </View>
-
-          {matches.length > 0 ? (
-            <View style={{ maxHeight: 140, gap: space.xs }}>
-              {matches.slice(0, 6).map((match) => (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: space.sm,
+                minHeight: 48,
+                borderWidth: 1,
+                borderColor: color.border,
+                borderRadius: radius.sm,
+                paddingHorizontal: space.md,
+                backgroundColor: color.paper,
+              }}
+            >
+              <Search size={16} color={color.inkMuted} strokeWidth={2} />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search by name, contact, or address"
+                placeholderTextColor={color.inkMuted}
+                autoFocus
+                autoCorrect={false}
+                autoCapitalize="none"
+                returnKeyType="search"
+                style={{
+                  flex: 1,
+                  fontSize: fontSize.body,
+                  color: color.ink,
+                  paddingVertical: space.sm,
+                }}
+              />
+              {query ? (
                 <Pressable
-                  key={match.id}
-                  onPress={() => {
-                    setCustomerId(match.id);
-                    setName(match.name);
-                    setContact(match.contact ?? "");
-                    setAddress(match.address ?? "");
-                    setQuery("");
-                  }}
-                  style={({ pressed }) => ({
-                    paddingVertical: space.sm,
-                    paddingHorizontal: space.md,
-                    borderRadius: radius.sm,
-                    backgroundColor: pressed
-                      ? color.surfacePressed
-                      : customerId === match.id
-                        ? color.primaryTint
-                        : color.paper,
-                    borderWidth: 1,
-                    borderColor: customerId === match.id ? color.primarySoft : color.border,
-                  })}
+                  onPress={() => setQuery("")}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear search"
+                  hitSlop={8}
                 >
-                  <Text style={{ fontSize: fontSize.body, fontWeight: "600", color: color.ink }}>
-                    {match.name}
-                  </Text>
-                  <Text style={{ fontSize: fontSize.caption, color: color.inkMuted }} numberOfLines={1}>
-                    {[match.contact, match.address].filter(Boolean).join(" · ") || "No contact"}
-                  </Text>
+                  <X size={16} color={color.inkMuted} strokeWidth={2} />
                 </Pressable>
-              ))}
+              ) : null}
             </View>
-          ) : null}
 
-          <CustomerField
-            icon={UserRound}
-            label="Name"
-            value={name}
-            onChangeText={setName}
-            placeholder="Who the sale is for"
-            autoFocus
-            autoCapitalize="words"
-          />
-          <CustomerField
-            icon={Phone}
-            label="Contact number"
-            value={contact}
-            onChangeText={setContact}
-            placeholder="09XX XXX XXXX"
-            keyboardType="phone-pad"
-          />
-          <CustomerField
-            icon={MapPin}
-            label="Address"
-            value={address}
-            onChangeText={setAddress}
-            placeholder="Where the delivery goes"
-            autoCapitalize="words"
-            multiline
-          />
+            {searching && shown.length === 0 ? (
+              <Text style={{ fontSize: fontSize.caption, color: color.inkMuted }}>
+                Searching…
+              </Text>
+            ) : shown.length > 0 ? (
+              <View style={{ gap: space.xs }}>
+                <Text
+                  style={{
+                    fontSize: fontSize.caption,
+                    fontWeight: "600",
+                    color: color.inkMuted,
+                  }}
+                >
+                  {needle ? "Matches" : "Saved customers"}
+                </Text>
+                {shown.map((match) => (
+                  <Pressable
+                    key={match.id}
+                    onPress={() => {
+                      setCustomerId(match.id);
+                      setName(match.name);
+                      setContact(match.contact ?? "");
+                      setAddress(match.address ?? "");
+                      setQuery("");
+                    }}
+                    style={({ pressed }) => ({
+                      paddingVertical: space.sm,
+                      paddingHorizontal: space.md,
+                      borderRadius: radius.sm,
+                      backgroundColor: pressed
+                        ? color.surfacePressed
+                        : customerId === match.id
+                          ? color.primaryTint
+                          : color.paper,
+                      borderWidth: 1,
+                      borderColor:
+                        customerId === match.id ? color.primarySoft : color.border,
+                    })}
+                  >
+                    <Text
+                      style={{ fontSize: fontSize.body, fontWeight: "600", color: color.ink }}
+                    >
+                      {match.name}
+                    </Text>
+                    <Text
+                      style={{ fontSize: fontSize.caption, color: color.inkMuted }}
+                      numberOfLines={1}
+                    >
+                      {[match.contact, match.address].filter(Boolean).join(" · ") ||
+                        "No contact"}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : (
+              <Text style={{ fontSize: fontSize.caption, color: color.inkMuted }}>
+                {needle
+                  ? "No saved customer matches that. Type a new one below."
+                  : "No saved customers yet. Sync, or type a new one below."}
+              </Text>
+            )}
 
-          <Button
-            label="Save customer"
-            large
-            icon={CheckCircle2}
-            onPress={() => onApply(draft)}
-          />
-          {hasCustomerDetails(draft) ? (
-            <Button
-              label="Leave blank"
-              variant="secondary"
-              onPress={() => onApply(NO_CUSTOMER)}
+            <CustomerField
+              icon={UserRound}
+              label="Name"
+              value={name}
+              onChangeText={(next) => {
+                setName(next);
+                // Typing a different name means this is no longer the picked row.
+                if (customerId) setCustomerId(null);
+              }}
+              placeholder="Who the sale is for"
+              autoCapitalize="words"
             />
-          ) : null}
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+            <CustomerField
+              icon={Phone}
+              label="Contact number"
+              value={contact}
+              onChangeText={setContact}
+              placeholder="09XX XXX XXXX"
+              keyboardType="phone-pad"
+            />
+            <CustomerField
+              icon={MapPin}
+              label="Address"
+              value={address}
+              onChangeText={setAddress}
+              placeholder="Where the delivery goes"
+              autoCapitalize="words"
+              multiline
+            />
+
+            <Button
+              label="Save customer"
+              large
+              icon={CheckCircle2}
+              onPress={() => onApply(draft)}
+            />
+            {hasCustomerDetails(draft) ? (
+              <Button
+                label="Leave blank"
+                variant="secondary"
+                onPress={() => onApply(NO_CUSTOMER)}
+              />
+            ) : null}
+    </BottomSheet>
   );
 }
 
@@ -1634,27 +1701,32 @@ function StepperButton({
   icon: Icon,
   label,
   tint,
+  disabled = false,
   onPress,
 }: {
   icon: LucideIcon;
   label: string;
   tint: string;
+  disabled?: boolean;
   onPress: () => void;
 }) {
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled }}
       style={({ pressed }) => ({
-        width: 48,
-        height: 48,
+        width: 40,
+        height: 40,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: pressed ? color.border : "transparent",
+        opacity: disabled ? 0.4 : 1,
+        backgroundColor: pressed && !disabled ? color.border : "transparent",
       })}
     >
-      <Icon size={20} color={tint} strokeWidth={2.25} />
+      <Icon size={18} color={tint} strokeWidth={2.25} />
     </Pressable>
   );
 }
@@ -1678,19 +1750,11 @@ function DraftPickerSheet({
   if (!open) return null;
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: `${color.ink}99` }}>
+    <BottomSheet open={open} onClose={onClose} scroll={false}>
         <View
           style={{
-            backgroundColor: color.surface,
-            borderTopLeftRadius: radius.lg,
-            borderTopRightRadius: radius.lg,
-            padding: space.lg,
             gap: space.md,
-            width: "100%",
-            maxWidth: 560,
-            alignSelf: "center",
-            maxHeight: "80%",
+            maxHeight: 520,
           }}
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
@@ -1767,8 +1831,7 @@ function DraftPickerSheet({
             />
           )}
         </View>
-      </View>
-    </Modal>
+    </BottomSheet>
   );
 }
 
@@ -1810,23 +1873,7 @@ function ConfirmSaleSheet({
     PAYMENT_METHODS.find((method) => method.value === payment)?.label ?? payment;
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={{ flex: 1, justifyContent: "flex-end", backgroundColor: `${color.ink}99` }}
-      >
-        <View
-          style={{
-            backgroundColor: color.surface,
-            borderTopLeftRadius: radius.lg,
-            borderTopRightRadius: radius.lg,
-            padding: space.lg,
-            gap: space.md,
-            width: "100%",
-            maxWidth: 560,
-            alignSelf: "center",
-          }}
-        >
+    <BottomSheet open={open} onClose={busy ? () => undefined : onClose}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
             <View style={[styles.iconWell, { width: 34, height: 34 }]}>
               <CheckCircle2 size={18} color={color.primary} strokeWidth={2} />
@@ -1977,9 +2024,7 @@ function ConfirmSaleSheet({
             onPress={onConfirm}
           />
           <Button label="Back to cart" variant="secondary" disabled={busy} onPress={onClose} />
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+    </BottomSheet>
   );
 }
 

@@ -42,43 +42,67 @@ export function BrandAuthShell({ children }: { children: ReactNode }) {
 }
 
 /**
- * Vendor credit. `onBanner` for unlock/setup (light text on the photo);
- * default for POS chrome on paper.
+ * Vendor credit bar — white strip at the bottom of unlock, setup, and POS.
+ * `onBanner` kept for call sites; look is the same white bar either way.
  */
-export function PoweredByLabel({ onBanner = false }: { onBanner?: boolean }) {
+export function PoweredByLabel({ onBanner: _onBanner = false }: { onBanner?: boolean }) {
   const insets = useSafeAreaInsets();
-  const mute = onBanner ? "rgba(255,255,255,0.55)" : color.inkMuted;
-  const link = onBanner ? "rgba(255,255,255,0.7)" : color.ink;
 
   return (
-    <Pressable
-      onPress={() => void Linking.openURL(POWERED_BY_MAILTO)}
-      accessibilityRole="link"
-      accessibilityLabel={`Powered by ${POWERED_BY_EMAIL}`}
+    <View
       style={{
-        flexDirection: "row",
-        flexWrap: "wrap",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: space.xs,
+        backgroundColor: color.surface,
+        borderTopWidth: 1,
+        borderTopColor: color.border,
         paddingTop: space.sm,
         paddingHorizontal: space.md,
-        paddingBottom: onBanner ? Math.max(insets.bottom, space.md) : Math.max(insets.bottom, space.sm),
-        borderTopWidth: onBanner ? 0 : StyleSheet.hairlineWidth,
-        borderTopColor: color.border,
+        paddingBottom: Math.max(insets.bottom, space.sm),
       }}
     >
-      <Image
-        source={LOGO}
-        style={{ width: 18, height: 18 }}
-        resizeMode="contain"
-        accessibilityIgnoresInvertColors
-      />
-      <Text style={{ fontSize: fontSize.caption, color: mute, textAlign: "center" }}>
-        Powered by:{" "}
-        <Text style={{ textDecorationLine: "underline", color: link }}>{POWERED_BY_EMAIL}</Text>
-      </Text>
-    </Pressable>
+      <Pressable
+        onPress={() => void Linking.openURL(POWERED_BY_MAILTO)}
+        accessibilityRole="link"
+        accessibilityLabel={`Powered by ${POWERED_BY_EMAIL}, 2026`}
+        style={({ pressed }) => ({
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: space.sm,
+          paddingVertical: space.xs,
+          opacity: pressed ? 0.85 : 1,
+        })}
+      >
+        <Image
+          source={LOGO}
+          style={{ width: 28, height: 28 }}
+          resizeMode="contain"
+          accessibilityIgnoresInvertColors
+        />
+        <View style={{ flexShrink: 1, minWidth: 0, gap: 2 }}>
+          <Text
+            style={{
+              fontSize: fontSize.caption,
+              fontWeight: "700",
+              letterSpacing: 0.3,
+              color: color.inkMuted,
+            }}
+          >
+            Powered by · 2026
+          </Text>
+          <Text
+            numberOfLines={1}
+            style={{
+              fontSize: fontSize.body,
+              fontWeight: "700",
+              color: color.primary,
+              textDecorationLine: "underline",
+            }}
+          >
+            {POWERED_BY_EMAIL}
+          </Text>
+        </View>
+      </Pressable>
+    </View>
   );
 }
 

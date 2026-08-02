@@ -1,15 +1,33 @@
 import { Modal, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
-import { LogOut, Shield, UserRound, X } from "lucide-react-native";
+import { usePathname, useRouter } from "expo-router";
+import {
+  CloudUpload,
+  LogOut,
+  Receipt,
+  Settings,
+  Shield,
+  ShoppingCart,
+  Truck,
+  UserRound,
+  X,
+} from "lucide-react-native";
 import { useSession } from "@/lib/session";
 import { useStoreSettings } from "@/lib/store";
 import { Button } from "@/components/ui";
 import { color, fontSize, radius, space, styles } from "@/theme";
 
+const TABS = [
+  { href: "/pos", label: "Sell", icon: ShoppingCart },
+  { href: "/pos/delivery", label: "Delivery", icon: Truck },
+  { href: "/pos/history", label: "History", icon: Receipt },
+  { href: "/pos/settings", label: "Settings", icon: Settings },
+  { href: "/pos/sync", label: "Sync", icon: CloudUpload },
+] as const;
+
 /**
- * Account panel opened from the store logo. Shift identity + end-shift live
- * here so the top chrome stays one line.
+ * Account panel opened from the store logo. Nav tabs, shift identity, and
+ * end-shift live here so the top chrome stays one quiet line.
  */
 export function AccountDrawer({
   open,
@@ -20,10 +38,16 @@ export function AccountDrawer({
 }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const pathname = usePathname();
   const { cashier, lock } = useSession();
   const store = useStoreSettings();
 
   if (!cashier) return null;
+
+  function go(href: (typeof TABS)[number]["href"]) {
+    onClose();
+    router.replace(href);
+  }
 
   function endShift() {
     lock();
@@ -69,6 +93,51 @@ export function AccountDrawer({
             >
               <X size={22} color={color.inkMuted} strokeWidth={2} />
             </Pressable>
+          </View>
+
+          <View style={{ gap: space.xs }}>
+            {TABS.map((tab) => {
+              const active = pathname === tab.href;
+              const TabIcon = tab.icon;
+
+              return (
+                <Pressable
+                  key={tab.href}
+                  onPress={() => go(tab.href)}
+                  accessibilityRole="button"
+                  accessibilityLabel={tab.label}
+                  accessibilityState={{ selected: active }}
+                  style={({ pressed }) => ({
+                    minHeight: 48,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: space.md,
+                    paddingHorizontal: space.md,
+                    borderRadius: radius.sm,
+                    backgroundColor: active
+                      ? color.primarySoft
+                      : pressed
+                        ? color.surfacePressed
+                        : "transparent",
+                  })}
+                >
+                  <TabIcon
+                    size={20}
+                    color={active ? color.primary : color.inkMuted}
+                    strokeWidth={active ? 2.25 : 2}
+                  />
+                  <Text
+                    style={{
+                      fontSize: fontSize.bodyLg,
+                      fontWeight: active ? "700" : "600",
+                      color: active ? color.primary : color.ink,
+                    }}
+                  >
+                    {tab.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
 
           <View style={[styles.ledgerLine, { marginVertical: space.xs }]} />

@@ -1,26 +1,29 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { Redirect } from "expo-router";
+import { CompanyIntro } from "@/components/company-intro";
 import { getSyncMeta } from "@/db/meta";
 import { useSession } from "@/lib/session";
 import { isEnrolled } from "@/lib/supabase";
 import { color, styles } from "@/theme";
 
 type Boot =
+  | { state: "intro" }
   | { state: "checking" }
   | { state: "needs-setup" }
   | { state: "needs-unlock" }
   | { state: "ready" };
 
 /**
- * Decides where a launch lands: enroll the terminal, pull data for the first
- * time, unlock a cashier, or straight to the POS.
+ * Cold start: company intro, then enroll / unlock / POS.
  */
 export default function Index() {
   const { cashier } = useSession();
-  const [boot, setBoot] = useState<Boot>({ state: "checking" });
+  const [boot, setBoot] = useState<Boot>({ state: "intro" });
 
   useEffect(() => {
+    if (boot.state === "intro") return;
+
     async function check() {
       const [enrolled, meta] = await Promise.all([isEnrolled(), getSyncMeta()]);
 
@@ -33,7 +36,11 @@ export default function Index() {
     }
 
     void check();
-  }, [cashier]);
+  }, [cashier, boot.state]);
+
+  if (boot.state === "intro") {
+    return <CompanyIntro onDone={() => setBoot({ state: "checking" })} />;
+  }
 
   if (boot.state === "checking") {
     return (

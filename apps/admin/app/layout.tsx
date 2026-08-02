@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, Inter, Manrope } from "next/font/google";
+import { CompanyIntro } from "@/components/company-intro";
 import "./globals.css";
 
 const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope" });
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body
         className={`${manrope.variable} ${inter.variable} ${plexMono.variable} antialiased`}
       >
+        <CompanyIntro />
         {children}
       </body>
     </html>

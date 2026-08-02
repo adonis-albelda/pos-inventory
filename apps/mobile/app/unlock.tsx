@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Image, Pressable, ScrollView, Text, View } from "react-native";
+import { Image, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -22,13 +22,14 @@ import {
   Shield,
   UserRound,
   Users,
+  X,
 } from "lucide-react-native";
 import {
   authChrome,
   BrandAuthShell,
   PoweredByLabel,
 } from "@/components/brand-auth-shell";
-import { Button, Card, EmptyState, ErrorNote } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorNote, IconButton } from "@/components/ui";
 import { color, fontSize, radius, space, styles } from "@/theme";
 
 /**
@@ -90,6 +91,13 @@ export default function UnlockScreen() {
     setError(null);
   }
 
+  function closePinDialog() {
+    if (busy) return;
+    setSelected(null);
+    setPin("");
+    setError(null);
+  }
+
   async function submit() {
     if (!selected) return;
 
@@ -114,8 +122,13 @@ export default function UnlockScreen() {
     }
   }
 
+  const listWidth = Math.min(layout.width - layout.gutter * 2, 520);
+  const cashierCols = listWidth < 400 ? 2 : 3;
+  const cashierTileWidth = (listWidth - space.sm * (cashierCols - 1)) / cashierCols;
+
   return (
     <BrandAuthShell>
+    <View style={{ flex: 1 }}>
     <ScrollView
       style={styles.screen}
       contentContainerStyle={{
@@ -128,6 +141,7 @@ export default function UnlockScreen() {
         maxWidth: 520,
         alignSelf: "center",
         flexGrow: 1,
+        paddingBottom: space.xl,
       }}
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
@@ -216,9 +230,16 @@ export default function UnlockScreen() {
           />
         </Card>
       ) : (
-        <View style={{ gap: space.sm }}>
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            gap: space.sm,
+          }}
+        >
           {cashiers.map((cashier) => {
             const active = selected?.id === cashier.id;
+
             return (
               <Pressable
                 key={cashier.id}
@@ -227,29 +248,34 @@ export default function UnlockScreen() {
                   setPin("");
                   setError(null);
                 }}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`${cashier.name}, ${cashier.role === "admin" ? "Admin" : "Cashier"}`}
                 style={({ pressed }) => [
                   styles.card,
                   {
-                    flexDirection: "row",
+                    width: cashierTileWidth,
                     alignItems: "center",
-                    gap: space.md,
-                    padding: space.lg,
-                    minHeight: 64,
-                    borderColor: active ? color.primary : color.border,
+                    justifyContent: "center",
+                    gap: space.sm,
+                    paddingVertical: space.lg,
+                    paddingHorizontal: space.md,
+                    minHeight: layout.tileMinHeight,
+                    borderColor: active ? color.primary : "rgba(255,255,255,0.45)",
                     borderWidth: active ? 2 : 1,
                     backgroundColor: pressed
-                      ? color.primarySoft
+                      ? "rgba(231,239,237,0.85)"
                       : active
-                        ? color.primaryTint
-                        : color.surface,
+                        ? "rgba(241,246,244,0.85)"
+                        : "rgba(255,255,255,0.85)",
                   },
                 ]}
               >
                 <View
                   style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 22,
+                    width: 56,
+                    height: 56,
+                    borderRadius: 28,
                     alignItems: "center",
                     justifyContent: "center",
                     backgroundColor: active ? color.primary : color.primarySoft,
@@ -257,30 +283,53 @@ export default function UnlockScreen() {
                 >
                   {cashier.role === "admin" ? (
                     <Shield
-                      size={18}
+                      size={24}
                       color={active ? color.onPrimary : color.primary}
                       strokeWidth={2}
                     />
                   ) : (
                     <UserRound
-                      size={18}
+                      size={24}
                       color={active ? color.onPrimary : color.primary}
                       strokeWidth={2}
                     />
                   )}
                 </View>
 
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: fontSize.bodyLg, fontWeight: "600" }}>
+                <View style={{ alignItems: "center", gap: space.xs, width: "100%" }}>
+                  <Text
+                    numberOfLines={2}
+                    style={{
+                      fontSize: fontSize.bodyLg,
+                      fontWeight: "700",
+                      color: color.ink,
+                      textAlign: "center",
+                    }}
+                  >
                     {cashier.name}
                   </Text>
-                  <Text style={styles.muted}>
+                  <Text
+                    style={{
+                      fontSize: fontSize.caption,
+                      fontWeight: "600",
+                      color: active ? color.primary : color.inkMuted,
+                      textAlign: "center",
+                    }}
+                  >
                     {cashier.role === "admin" ? "Admin" : "Cashier"}
                   </Text>
                 </View>
 
                 {active ? (
-                  <Check size={20} color={color.primary} strokeWidth={2.5} />
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: space.sm,
+                      right: space.sm,
+                    }}
+                  >
+                    <Check size={18} color={color.primary} strokeWidth={2.5} />
+                  </View>
                 ) : null}
               </Pressable>
             );
@@ -288,12 +337,55 @@ export default function UnlockScreen() {
         </View>
       )}
 
-      {selected ? (
-        <Card style={{ gap: space.lg }}>
-          <Text style={styles.subheading}>PIN for {selected.name}</Text>
-          <Text style={[styles.muted, { marginTop: -space.md }]}>
-            {PIN_LENGTH_MIN} to {PIN_LENGTH_MAX} digits.
-          </Text>
+    </ScrollView>
+
+    <PoweredByLabel />
+
+    <Modal
+      visible={selected !== null}
+      transparent
+      animationType="fade"
+      onRequestClose={closePinDialog}
+    >
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          padding: layout.gutter,
+          paddingTop: insets.top + space.md,
+          paddingBottom: insets.bottom + space.md,
+          backgroundColor: `${color.ink}99`,
+        }}
+      >
+        <Pressable
+          onPress={closePinDialog}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+          style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
+        />
+
+        <View
+          style={{
+            width: "100%",
+            maxWidth: 400,
+            alignSelf: "center",
+            backgroundColor: color.surface,
+            borderRadius: radius.md,
+            borderWidth: 1,
+            borderColor: color.border,
+            padding: space.lg,
+            gap: space.lg,
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.sm }}>
+            <View style={{ flex: 1, gap: space.xs }}>
+              <Text style={styles.subheading}>PIN for {selected?.name}</Text>
+              <Text style={styles.muted}>
+                {PIN_LENGTH_MIN} to {PIN_LENGTH_MAX} digits.
+              </Text>
+            </View>
+            <IconButton icon={X} label="Close" onPress={closePinDialog} disabled={busy} />
+          </View>
 
           <View style={{ flexDirection: "row", gap: space.sm, justifyContent: "center" }}>
             {Array.from({ length: PIN_LENGTH_MAX }).map((_, index) => {
@@ -345,7 +437,7 @@ export default function UnlockScreen() {
                     }
                     style={({ pressed }) => ({
                       flex: 1,
-                      minHeight: 64,
+                      minHeight: 56,
                       flexDirection: "row",
                       gap: space.xs,
                       alignItems: "center",
@@ -399,11 +491,10 @@ export default function UnlockScreen() {
             disabled={pin.length < PIN_LENGTH_MIN}
             onPress={() => void submit()}
           />
-        </Card>
-      ) : null}
-
-      <PoweredByLabel onBanner />
-    </ScrollView>
+        </View>
+      </View>
+    </Modal>
+    </View>
     </BrandAuthShell>
   );
 }

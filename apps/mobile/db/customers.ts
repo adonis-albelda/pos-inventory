@@ -41,14 +41,18 @@ export async function getLocalCustomer(id: string): Promise<LocalCustomer | null
 }
 
 export async function searchLocalCustomers(query: string): Promise<LocalCustomer[]> {
-  const needle = `%${query.trim().toLowerCase()}%`;
-  if (!query.trim()) return listLocalCustomers();
+  const trimmed = query.trim().toLowerCase();
+  if (!trimmed) return listLocalCustomers();
 
+  const needle = `%${trimmed}%`;
   const rows = await getDb().getAllAsync<CustomerRow>(
     `SELECT * FROM customers
-      WHERE lower(name) LIKE ? OR lower(coalesce(contact, '')) LIKE ?
+      WHERE lower(name) LIKE ?
+         OR lower(coalesce(contact, '')) LIKE ?
+         OR lower(coalesce(address, '')) LIKE ?
       ORDER BY name COLLATE NOCASE
       LIMIT 40`,
+    needle,
     needle,
     needle,
   );

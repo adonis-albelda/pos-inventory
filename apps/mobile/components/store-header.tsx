@@ -1,21 +1,7 @@
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
-import { usePathname, useRouter } from "expo-router";
-import {
-  ChevronRight,
-  CloudUpload,
-  Receipt,
-  Settings,
-  ShoppingCart,
-  Truck,
-} from "lucide-react-native";
+import { ActivityIndicator, Image, Pressable, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import { ChevronRight } from "lucide-react-native";
 import { storeInitial } from "@double-a/shared-types";
 import { AccountDrawer } from "@/components/account-drawer";
 import { useStoreSettings } from "@/lib/store";
@@ -24,24 +10,15 @@ import { useSync } from "@/sync/sync-provider";
 import { pendingLabel, syncLook, useMinuteTick } from "@/sync/status";
 import { color, fontSize, radius, space } from "@/theme";
 
-const TABS = [
-  { href: "/pos", label: "Sell", icon: ShoppingCart },
-  { href: "/pos/delivery", label: "Delivery", icon: Truck },
-  { href: "/pos/history", label: "History", icon: Receipt },
-  { href: "/pos/settings", label: "Settings", icon: Settings },
-  { href: "/pos/sync", label: "Sync", icon: CloudUpload },
-] as const;
-
 /**
- * One chrome row on every POS screen: logo (opens account drawer), shop name,
- * tabs, sync chip. Chip taps through to Sync — does not sync itself.
+ * One chrome row on every POS screen: logo (opens drawer with tabs), shop
+ * name, sync chip. Chip taps through to Sync — does not sync itself.
  */
 export function StoreHeader() {
   const store = useStoreSettings();
   const state = useSync();
   const router = useRouter();
-  const pathname = usePathname();
-  const { compact, expanded } = useLayout();
+  const { compact } = useLayout();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useMinuteTick();
@@ -67,7 +44,7 @@ export function StoreHeader() {
         <Pressable
           onPress={() => setDrawerOpen(true)}
           accessibilityRole="button"
-          accessibilityLabel={`${store.name}. Open account.`}
+          accessibilityLabel={`${store.name}. Open menu.`}
           style={({ pressed }) => ({
             width: logoSize,
             height: logoSize,
@@ -102,69 +79,15 @@ export function StoreHeader() {
         <Text
           numberOfLines={1}
           style={{
-            maxWidth: compact ? 88 : 160,
-            fontSize: compact ? fontSize.caption : fontSize.body,
+            flex: 1,
+            minWidth: 0,
+            fontSize: compact ? fontSize.body : fontSize.bodyLg,
             fontWeight: "700",
             color: color.ink,
-            flexShrink: 1,
           }}
         >
           {store.name}
         </Text>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: compact ? space.xs : space.sm,
-            paddingHorizontal: space.xs,
-          }}
-          style={{ flex: 1, minWidth: 0 }}
-        >
-          {TABS.map((tab) => {
-            const active = pathname === tab.href;
-            const TabIcon = tab.icon;
-
-            return (
-              <Pressable
-                key={tab.href}
-                onPress={() => router.replace(tab.href)}
-                accessibilityRole="button"
-                accessibilityLabel={tab.label}
-                style={{
-                  minHeight: 40,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: space.xs,
-                  paddingHorizontal: compact ? space.sm : space.md,
-                  justifyContent: "center",
-                  borderRadius: radius.sm,
-                  backgroundColor: active ? color.primarySoft : "transparent",
-                }}
-              >
-                <TabIcon
-                  size={18}
-                  color={active ? color.primary : color.inkMuted}
-                  strokeWidth={active ? 2.25 : 2}
-                />
-                {compact ? null : (
-                  <Text
-                    numberOfLines={1}
-                    style={{
-                      fontSize: fontSize.body,
-                      fontWeight: "600",
-                      color: active ? color.primary : color.inkMuted,
-                    }}
-                  >
-                    {tab.label}
-                  </Text>
-                )}
-              </Pressable>
-            );
-          })}
-        </ScrollView>
 
         <Pressable
           onPress={() => router.replace("/pos/sync")}
