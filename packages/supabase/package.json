@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./browser": "./src/client-browser.ts",
     "./server": "./src/client-server.ts",
+    "./service": "./src/client-service.ts",
     "./mobile": "./src/client-mobile.ts",
     "./queries": "./src/queries/index.ts",
     "./types": "./src/database.types.ts"

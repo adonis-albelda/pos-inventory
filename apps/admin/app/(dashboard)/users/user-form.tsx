@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
-import { Check, Info, KeyRound, Mail, UserRound } from "lucide-react";
-import type { User } from "@double-a/shared-types";
+import { useActionState, useEffect, useState } from "react";
+import { Check, Info, KeyRound, Lock, Mail, UserRound } from "lucide-react";
+import type { User, UserRole } from "@double-a/shared-types";
 import {
   Button,
   ErrorNote,
@@ -16,6 +16,7 @@ import { saveCashier } from "./actions";
 
 export function UserForm({ user, onDone }: { user?: User; onDone?: () => void }) {
   const [state, action, pending] = useActionState(saveCashier, EMPTY_FORM_STATE);
+  const [role, setRole] = useState<UserRole>(user?.role ?? "cashier");
 
   useEffect(() => {
     if (state.ok) onDone?.();
@@ -39,40 +40,70 @@ export function UserForm({ user, onDone }: { user?: User; onDone?: () => void })
           />
         </Field>
         <Field label="Role">
-          <Select name="role" defaultValue={user?.role ?? "cashier"}>
+          <Select
+            name="role"
+            value={role}
+            onChange={(event) => setRole(event.target.value as UserRole)}
+          >
             <option value="cashier">Cashier</option>
             <option value="admin">Admin</option>
             <option value="device">Terminal</option>
           </Select>
         </Field>
-        <Field
-          label={user ? "New PIN" : "PIN"}
-          hint={user ? "Leave empty to keep the current PIN." : "4 to 6 digits."}
-        >
-          <Input
-            icon={KeyRound}
-            name="pin"
-            inputMode="numeric"
-            pattern="\d{4,6}"
-            maxLength={6}
-            autoComplete="off"
-          />
-        </Field>
+
+        {role === "cashier" ? (
+          <Field
+            label={user ? "New PIN" : "PIN"}
+            hint={user ? "Leave empty to keep the current PIN." : "4 to 6 digits."}
+          >
+            <Input
+              icon={KeyRound}
+              name="pin"
+              inputMode="numeric"
+              pattern="\d{4,6}"
+              maxLength={6}
+              autoComplete="off"
+            />
+          </Field>
+        ) : null}
+
+        {role === "device" ? (
+          <Field
+            label={user ? "New password" : "Password"}
+            hint={
+              user
+                ? "Auth password for POS enrollment. Leave empty to keep the current one."
+                : "Used when connecting this terminal on the POS — not a cashier PIN."
+            }
+          >
+            <Input
+              icon={Lock}
+              name="password"
+              type="password"
+              autoComplete="new-password"
+              minLength={6}
+            />
+          </Field>
+        ) : null}
       </div>
 
       <p className="flex items-start gap-2 text-caption text-ink-muted">
         <Info size={14} className="mt-0.5 shrink-0" />
         <span>
-          Cashiers unlock a terminal with this PIN against the live server.
-          Admins sign in to this dashboard with an email and password. Enrolling
-          a POS device: admin signs in on the terminal first, then connects a
-          Terminal-role account — both against live Auth.
+          Cashiers unlock with a PIN against the live server. Terminals enroll
+          with an Auth email and password — changing a cashier PIN never changes
+          a terminal password. Admins sign in to this dashboard with email and
+          password.
         </span>
       </p>
 
       {state.error ? <ErrorNote>{state.error}</ErrorNote> : null}
       {state.ok ? (
-        <SuccessNote>Saved. Terminals see a new PIN on the next unlock.</SuccessNote>
+        <SuccessNote>
+          {role === "device"
+            ? "Saved. Use this password on the POS when connecting the terminal."
+            : "Saved. Terminals see a new PIN on the next unlock."}
+        </SuccessNote>
       ) : null}
 
       <div className="flex flex-col-reverse gap-2 sm:flex-row">

@@ -13,6 +13,8 @@ import { runFirstPull } from "@/sync";
 import {
   CheckCircle2,
   CloudDownload,
+  Eye,
+  EyeOff,
   LogIn,
   PlayCircle,
   Smartphone,
@@ -261,8 +263,9 @@ export default function SetupScreen() {
         <Card style={{ gap: space.md }}>
           <SectionTitle icon={Users} title="2. Connect a terminal account" />
           <Text style={styles.muted}>
-            Pick which terminal this device is, then enter that account's
-            password. The session kept on this device is the terminal's.
+            Pick which terminal this device is, then enter that account's Auth
+            password (set under Admin → Cashiers for a Terminal role — not a
+            cashier PIN). The session kept on this device is the terminal's.
           </Text>
 
           <View style={{ gap: space.xs }}>
@@ -388,27 +391,63 @@ export default function SetupScreen() {
 
 function LabelledInput({
   label,
+  secureTextEntry,
   ...props
 }: React.ComponentProps<typeof TextInput> & { label: string }) {
+  const [revealed, setRevealed] = useState(false);
+  const isPassword = Boolean(secureTextEntry);
+
   return (
     <View style={{ gap: space.xs }}>
       <Text style={{ fontSize: fontSize.caption, color: color.inkMuted, fontWeight: "600" }}>
         {label}
       </Text>
-      <TextInput
-        {...props}
+      <View
         style={{
           minHeight: 48,
+          flexDirection: "row",
+          alignItems: "center",
           borderWidth: 1,
           borderColor: color.border,
           borderRadius: radius.sm,
           backgroundColor: color.surface,
-          paddingHorizontal: space.md,
-          fontSize: fontSize.bodyLg,
-          color: color.ink,
+          paddingLeft: space.md,
+          paddingRight: isPassword ? space.xs : space.md,
         }}
-        placeholderTextColor={color.inkMuted}
-      />
+      >
+        <TextInput
+          {...props}
+          secureTextEntry={isPassword && !revealed}
+          style={{
+            flex: 1,
+            minHeight: 48,
+            paddingVertical: space.sm,
+            fontSize: fontSize.bodyLg,
+            color: color.ink,
+          }}
+          placeholderTextColor={color.inkMuted}
+        />
+        {isPassword ? (
+          <Pressable
+            onPress={() => setRevealed((value) => !value)}
+            accessibilityRole="button"
+            accessibilityLabel={revealed ? "Hide password" : "Show password"}
+            hitSlop={8}
+            style={{
+              width: 44,
+              height: 44,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {revealed ? (
+              <EyeOff size={20} color={color.inkMuted} strokeWidth={2} />
+            ) : (
+              <Eye size={20} color={color.inkMuted} strokeWidth={2} />
+            )}
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
