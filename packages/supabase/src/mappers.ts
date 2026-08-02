@@ -1,6 +1,7 @@
 import type {
   Category,
   Customer,
+  Expense,
   Fulfillment,
   InventoryMovement,
   InventoryReason,
@@ -60,6 +61,20 @@ export function toCustomer(row: Tables<"customers">): Customer {
     name: row.name,
     address: row.address,
     contact: row.contact,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toExpense(row: Tables<"expenses">): Expense {
+  return {
+    id: row.id,
+    description: row.description,
+    amount: Number(row.amount),
+    category: row.category,
+    expenseDate: row.expense_date,
+    note: row.note,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }

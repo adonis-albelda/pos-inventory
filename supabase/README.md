@@ -25,7 +25,7 @@ order:
 4. `20260801000004_hardware.sql` — nested categories, supplier cost, units, barcode, bulk price, reorder point, sale-line list/cost prices
 5. `20260801000005_reports.sql` — profit, top products, discounts, cashier/device, valuation, dead stock, reorder view
 6. `20260801000006_sale_customer.sql` — optional customer name, address and contact on a sale
-7. later migrations — store settings, customers/paid/delivery/markup, `verify_pin()`
+7. later migrations — store settings, customers/paid/delivery/markup, `verify_pin()`, expenses
 
 ## 3. Create the auth users
 

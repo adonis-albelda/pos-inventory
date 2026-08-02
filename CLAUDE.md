@@ -81,11 +81,11 @@ repeated on the unlock screen so a locked terminal can pull catalog before the s
 all call Supabase — never local SQLite. `verify_pin()` checks the PIN server-side. Local
 SQLite exists for POS work *after* the cashier unlocks (products, cart, pending sales).
 
-The *state* is not on a tab. `StoreHeader` sits above the tabs on every POS screen and carries
-"Last synced: X ago", the pending count, and the same teal/amber/terracotta colouring the bar
-uses, as a chip that taps through to the Sync tab. A cashier must never have to go looking to
-find out this terminal is behind. The chip navigates and does not itself sync: there is still
-exactly one button that sends sales.
+The *state* is not on a tab. `StoreHeader` is one chrome row on every POS screen: logo
+(opens the account drawer), shop name, tabs, and the sync chip ("Last synced: X ago",
+pending count, teal/amber/terracotta). A cashier must never have to go looking to find out
+this terminal is behind. The chip navigates and does not itself sync: there is still exactly
+one button that sends sales. End shift lives in the logo drawer.
 
 A pull always finishes with `StoreHeader` and the Sync tab still mounted and focused. Writing to
 SQLite is therefore only half the job: any component holding master data in state must re-read
@@ -177,6 +177,12 @@ cannot rewrite those columns. The POS Delivery tab lists open deliveries on that
 `categories.markup_percent` + `markup_applied`. When applied, the admin product form fills
 shelf price as `cost × (1 + percent/100)`. Owner can still override. Reporting never uses this —
 sale lines keep snapshotted prices.
+
+### 14. Operating expenses are admin-only and subtract from revenue
+The owner logs rent, utilities, wages and similar outlays in admin (`expenses` table). Not
+COGS — that stays on `sale_items.unit_cost`. Never written from the POS and never synced to
+SQLite. Dashboard and reports **Net** = revenue − sum of expenses whose `expense_date` falls
+in the same shop-day range. Gross profit (revenue − supplier cost) stays a separate figure.
 
 ---
 

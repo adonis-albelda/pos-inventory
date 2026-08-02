@@ -142,6 +142,47 @@ export interface Database {
         };
         Relationships: [];
       };
+      expenses: {
+        Row: {
+          id: string;
+          description: string;
+          amount: number;
+          category: string | null;
+          expense_date: string;
+          note: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          description: string;
+          amount: number;
+          category?: string | null;
+          expense_date?: string;
+          note?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          description?: string;
+          amount?: number;
+          category?: string | null;
+          expense_date?: string;
+          note?: string | null;
+          created_by?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "expenses_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       products: {
         Row: {
           id: string;

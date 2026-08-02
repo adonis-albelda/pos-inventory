@@ -8,6 +8,7 @@ import { countPendingSales } from "@/db/sales";
 import { countLocalUsers } from "@/db/users";
 import { getDeviceId, getDeviceLabel } from "@/lib/device";
 import { useLayout } from "@/lib/layout";
+import { useSession } from "@/lib/session";
 import { useStoreSettings } from "@/lib/store";
 import { useSync } from "@/sync/sync-provider";
 import { buildReceipt, getPrinterSettings, savePrinterSettings } from "@/printing/receipt";
@@ -27,6 +28,7 @@ import { color, fontSize, radius, space, styles } from "@/theme";
 export default function SettingsScreen() {
   const router = useRouter();
   const layout = useLayout();
+  const { lock } = useSession();
   const { dataVersion } = useSync();
   const store = useStoreSettings();
 
@@ -261,7 +263,10 @@ export default function SettingsScreen() {
           label="End shift"
           variant="secondary"
           icon={LogOut}
-          onPress={() => router.replace("/unlock")}
+          onPress={() => {
+            lock();
+            router.replace("/unlock");
+          }}
         />
       </Card>
     </ScrollView>

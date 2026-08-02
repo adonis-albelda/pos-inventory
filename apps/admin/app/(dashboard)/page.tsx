@@ -10,8 +10,10 @@ import {
   Receipt,
   ShoppingBag,
   Sun,
+  TrendingDown,
   TrendingUp,
   TriangleAlert,
+  Wallet,
 } from "lucide-react";
 import { formatMoney, formatPercent, stockLevel } from "@double-a/shared-types";
 import {
@@ -19,11 +21,12 @@ import {
   listProducts,
   listSales,
   reportProfit,
+  sumExpenses,
   summariseProfit,
   type ProfitRow,
 } from "@double-a/supabase";
 import { getServerClient } from "@/lib/supabase/server";
-import { todayRange } from "@/lib/date-range";
+import { resolveRange } from "@/lib/date-range";
 import {
   Badge,
   Card,
@@ -39,16 +42,18 @@ import {
 
 export default async function DashboardPage() {
   const supabase = await getServerClient();
-  const range = todayRange();
+  const { range, fromDay, toDay } = resolveRange({ preset: "today" });
 
-  const [todaysSales, products, oversold, profitRows] = await Promise.all([
-    listSales(supabase, { from: range.from, limit: 500 }),
-    listProducts(supabase, { includeInactive: true }),
-    listOversold(supabase),
-    // Profit is admin-only in the database. A manager signed in as a cashier
-    // still gets the rest of the dashboard rather than an error page.
-    reportProfit(supabase, range).catch((): ProfitRow[] | null => null),
-  ]);
+  const [todaysSales, products, oversold, profitRows, expensesTotal] =
+    await Promise.all([
+      listSales(supabase, { from: range.from, limit: 500 }),
+      listProducts(supabase, { includeInactive: true }),
+      listOversold(supabase),
+      // Profit is admin-only in the database. A manager signed in as a cashier
+      // still gets the rest of the dashboard rather than an error page.
+      reportProfit(supabase, range).catch((): ProfitRow[] | null => null),
+      sumExpenses(supabase, { fromDay, toDay }).catch((): number | null => null),
+    ]);
 
   const profit = profitRows ? summariseProfit(profitRows) : null;
 
@@ -58,6 +63,8 @@ export default async function DashboardPage() {
     (sum, sale) => sum + sale.items.reduce((n, item) => n + item.quantity, 0),
     0,
   );
+  const net =
+    expensesTotal === null ? null : revenue - expensesTotal;
   // Each product says for itself when it is low — a box of screws and a length
   // of GI pipe run out very differently.
   const lowStock = products.filter(
@@ -80,6 +87,32 @@ export default async function DashboardPage() {
           label="Revenue"
           value={formatMoney(revenue)}
           tone="primary"
+        />
+        <StatCard
+          icon={Wallet}
+          label="Expenses"
+          value={
+            expensesTotal === null ? "—" : formatMoney(expensesTotal)
+          }
+          hint={
+            expensesTotal === null
+              ? "Sign in as the owner to see expenses"
+              : expensesTotal > 0
+                ? "Logged for today"
+                : "Nothing logged today"
+          }
+          tone={expensesTotal && expensesTotal > 0 ? "warning" : "neutral"}
+        />
+        <StatCard
+          icon={TrendingDown}
+          label="Net"
+          value={net === null ? "—" : formatMoney(net)}
+          hint={
+            net === null
+              ? "Revenue minus expenses"
+              : "Revenue minus today's expenses"
+          }
+          tone={net !== null && net < 0 ? "danger" : "success"}
         />
         <StatCard
           icon={Coins}

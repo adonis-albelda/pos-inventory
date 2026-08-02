@@ -205,6 +205,27 @@ export interface Customer {
 }
 
 /**
+ * An operating expense the owner logged in admin. Not supplier cost on a sale
+ * line — that is COGS. Admin-only; never synced to a POS terminal.
+ */
+export interface Expense {
+  id: string;
+  description: string;
+  amount: number;
+  category: string | null;
+  /** Shop calendar day (yyyy-mm-dd), Asia/Manila. */
+  expenseDate: string;
+  note: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const EXPENSE_DESCRIPTION_MAX = 200;
+export const EXPENSE_CATEGORY_MAX = 80;
+export const EXPENSE_NOTE_MAX = 500;
+
+/**
  * Who the sale was for, when the counter bothered to ask. Every field is
  * optional and normally null: a walk-in buying a bag of cement is not going to
  * dictate an address, and nothing about completing a sale may wait on it.

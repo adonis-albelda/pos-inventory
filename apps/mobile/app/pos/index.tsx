@@ -111,6 +111,7 @@ export default function SellScreen() {
   const [customer, setCustomer] = useState<CustomerDetails>(NO_CUSTOMER);
   const [fulfillment, setFulfillment] = useState<Fulfillment>("pickup");
   const [editingCustomer, setEditingCustomer] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [categories, setCategories] = useState<LocalCategory[]>([]);
@@ -186,6 +187,9 @@ export default function SellScreen() {
 
   const total = cartTotal(lines);
   const discount = cartDiscount(lines);
+  const shelfTotal = roundMoney(
+    lines.reduce((sum, line) => sum + line.listPrice * line.quantity, 0),
+  );
   const inCart = useMemo(
     () => new Map(lines.map((line) => [line.productId, line.quantity])),
     [lines],
@@ -353,6 +357,7 @@ export default function SellScreen() {
       // put a stranger's name and address on the following receipt.
       setCustomer(NO_CUSTOMER);
       setFulfillment("pickup");
+      setConfirmOpen(false);
       setCartOpen(false);
       void load();
       void refresh();
@@ -504,265 +509,277 @@ export default function SellScreen() {
         open={cartOpen}
         onClose={() => setCartOpen(false)}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-          <View style={[styles.iconWell, { width: 34, height: 34 }]}>
-            <ShoppingCart size={18} color={color.primary} strokeWidth={2} />
-          </View>
-          <Text style={styles.subheading}>Cart</Text>
-          {itemCount > 0 ? (
+        {/* Column fills the panel: lines grow, checkout stays docked bottom. */}
+        <View style={{ flex: 1, minHeight: 0 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+            <View style={[styles.iconWell, { width: 34, height: 34 }]}>
+              <ShoppingCart size={18} color={color.primary} strokeWidth={2} />
+            </View>
+            <Text style={styles.subheading}>Cart</Text>
+            {itemCount > 0 ? (
+              <View
+                style={{
+                  backgroundColor: color.primary,
+                  borderRadius: radius.sm,
+                  paddingHorizontal: space.sm,
+                  paddingVertical: 2,
+                }}
+              >
+                <Text
+                  style={{
+                    color: color.onPrimary,
+                    fontSize: fontSize.caption,
+                    fontWeight: "700",
+                  }}
+                >
+                  {itemCount} items
+                </Text>
+              </View>
+            ) : null}
+
             <View
               style={{
-                backgroundColor: color.primary,
-                borderRadius: radius.sm,
-                paddingHorizontal: space.sm,
-                paddingVertical: 2,
+                marginLeft: "auto",
+                flexDirection: "row",
+                alignItems: "center",
+                gap: space.sm,
               }}
             >
-              <Text
-                style={{
-                  color: color.onPrimary,
-                  fontSize: fontSize.caption,
-                  fontWeight: "700",
-                }}
-              >
-                {itemCount} items
-              </Text>
-            </View>
-          ) : null}
-
-          <View
-            style={{
-              marginLeft: "auto",
-              flexDirection: "row",
-              alignItems: "center",
-              gap: space.sm,
-            }}
-          >
-            {lines.length > 0 ? (
-              <IconButton
-                icon={Trash2}
-                label="Empty the cart"
-                tone="danger"
-                onPress={confirmClearCart}
-              />
-            ) : null}
-            {compact ? (
-              <IconButton icon={X} label="Close cart" onPress={() => setCartOpen(false)} />
-            ) : null}
-          </View>
-        </View>
-
-        {lines.length === 0 ? (
-          <EmptyState
-            icon={ShoppingCart}
-            title="Nothing in the cart"
-            instruction="Tap a product to start a sale."
-          />
-        ) : (
-          <FlatList
-            style={{ flex: 1, marginTop: space.md }}
-            data={lines}
-            keyExtractor={(line) => line.productId}
-            keyboardShouldPersistTaps="handled"
-            ItemSeparatorComponent={() => (
-              <View style={{ height: 1, backgroundColor: color.border }} />
-            )}
-            renderItem={({ item }) => (
-              <CartRow
-                line={item}
-                product={byId.get(item.productId)}
-                overridden={overridden.includes(item.productId)}
-                onChange={(delta) => changeQuantity(item.productId, delta)}
-                onEditPrice={() => setEditingId(item.productId)}
-              />
-            )}
-          />
-        )}
-
-        {/* Cart items end, the total begins. */}
-        <LedgerLine />
-
-        {discount > 0 ? (
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: space.sm,
-              marginBottom: space.sm,
-            }}
-          >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
-              <Tag size={14} color={color.accentInk} strokeWidth={2.5} />
-              <Text style={{ fontSize: fontSize.body, color: color.accentInk }}>
-                Discount given
-              </Text>
-            </View>
-            <Text
-              style={[
-                styles.numeric,
-                { fontSize: fontSize.bodyLg, fontWeight: "700", color: color.accentInk },
-              ]}
-            >
-              -{formatMoney(discount)}
-            </Text>
-          </View>
-        ) : null}
-
-        {/* The one number the cashier reads out loud, so it sits on its own
-            tinted band rather than blending into the line items. */}
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "baseline",
-            gap: space.sm,
-            padding: space.md,
-            borderRadius: radius.sm,
-            backgroundColor: color.primaryTint,
-          }}
-        >
-          <View>
-            <Text
-              style={{
-                fontSize: fontSize.bodyLg,
-                fontWeight: "700",
-                color: color.primaryDark,
-              }}
-            >
-              TOTAL
-            </Text>
-            {itemCount > 0 ? (
-              <Text style={{ fontSize: fontSize.caption, color: color.inkMuted }}>
-                {itemCount} item{itemCount === 1 ? "" : "s"}
-              </Text>
-            ) : null}
-          </View>
-          <Money
-            value={total}
-            style={[
-              styles.total,
-              {
-                fontSize: compact ? fontSize.headingMd : fontSize.headingLg,
-                color: color.primaryDark,
-              },
-            ]}
-          />
-        </View>
-
-        <View style={{ flexDirection: "row", gap: space.sm, marginTop: space.md }}>
-          {PAYMENT_METHODS.map((method) => {
-            const selected = payment === method.value;
-            const MethodIcon = method.icon;
-
-            return (
-              <Pressable
-                key={method.value}
-                onPress={() => setPayment(method.value)}
-                accessibilityState={{ selected }}
-                style={{
-                  flex: 1,
-                  minHeight: compact ? 48 : 52,
-                  flexDirection: "row",
-                  gap: space.xs,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  paddingHorizontal: space.xs,
-                  borderRadius: radius.sm,
-                  borderWidth: 1,
-                  // The chosen method is filled, not outlined — one glance has to
-                  // settle what the customer is paying with.
-                  borderColor: selected ? color.primary : color.border,
-                  backgroundColor: selected ? color.primary : color.surface,
-                }}
-              >
-                <MethodIcon
-                  size={16}
-                  color={selected ? color.onPrimary : color.inkMuted}
-                  strokeWidth={2}
+              {lines.length > 0 ? (
+                <IconButton
+                  icon={Trash2}
+                  label="Empty the cart"
+                  tone="danger"
+                  onPress={confirmClearCart}
                 />
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    fontSize: fontSize.body,
-                    fontWeight: "600",
-                    color: selected ? color.onPrimary : color.ink,
-                  }}
-                >
-                  {method.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+              ) : null}
+              {compact ? (
+                <IconButton icon={X} label="Close cart" onPress={() => setCartOpen(false)} />
+              ) : null}
+            </View>
+          </View>
 
-        <View style={{ flexDirection: "row", gap: space.sm, marginTop: space.sm }}>
-          {([
-            { value: "pickup" as const, label: "Pickup" },
-            { value: "delivery" as const, label: "Delivery", icon: Truck },
-          ]).map((option) => {
-            const selected = fulfillment === option.value;
-            return (
-              <Pressable
-                key={option.value}
-                onPress={() => setFulfillment(option.value)}
-                accessibilityState={{ selected }}
+          <View style={{ flex: 1, minHeight: 0, marginTop: space.md }}>
+            {lines.length === 0 ? (
+              <View style={{ flex: 1, justifyContent: "center" }}>
+                <EmptyState
+                  icon={ShoppingCart}
+                  title="Nothing in the cart"
+                  instruction="Tap a product to start a sale."
+                />
+              </View>
+            ) : (
+              <FlatList
+                style={{ flex: 1 }}
+                data={lines}
+                keyExtractor={(line) => line.productId}
+                keyboardShouldPersistTaps="handled"
+                ItemSeparatorComponent={() => (
+                  <View style={{ height: 1, backgroundColor: color.border }} />
+                )}
+                renderItem={({ item }) => (
+                  <CartRow
+                    line={item}
+                    product={byId.get(item.productId)}
+                    overridden={overridden.includes(item.productId)}
+                    onChange={(delta) => changeQuantity(item.productId, delta)}
+                    onEditPrice={() => setEditingId(item.productId)}
+                  />
+                )}
+              />
+            )}
+          </View>
+
+          {/* Docked checkout — stays visible while the line list scrolls above. */}
+          <View style={{ flexShrink: 0, paddingTop: space.sm }}>
+            <LedgerLine />
+
+            {discount > 0 ? (
+              <View
                 style={{
-                  flex: 1,
-                  minHeight: 44,
                   flexDirection: "row",
-                  gap: space.xs,
+                  justifyContent: "space-between",
                   alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: radius.sm,
-                  borderWidth: 1,
-                  borderColor: selected ? color.primary : color.border,
-                  backgroundColor: selected ? color.primarySoft : color.surface,
+                  gap: space.sm,
+                  marginBottom: space.sm,
                 }}
               >
-                {option.icon ? (
-                  <Truck size={15} color={selected ? color.primary : color.inkMuted} strokeWidth={2} />
-                ) : null}
+                <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
+                  <Tag size={14} color={color.accentInk} strokeWidth={2.5} />
+                  <Text style={{ fontSize: fontSize.body, color: color.accentInk }}>
+                    Discount given
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.numeric,
+                    { fontSize: fontSize.bodyLg, fontWeight: "700", color: color.accentInk },
+                  ]}
+                >
+                  -{formatMoney(discount)}
+                </Text>
+              </View>
+            ) : null}
+
+            {/* The one number the cashier reads out loud, so it sits on its own
+                tinted band rather than blending into the line items. */}
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                gap: space.sm,
+                padding: space.md,
+                borderRadius: radius.sm,
+                backgroundColor: color.primaryTint,
+              }}
+            >
+              <View>
                 <Text
                   style={{
-                    fontSize: fontSize.body,
-                    fontWeight: "600",
-                    color: selected ? color.primaryDark : color.ink,
+                    fontSize: fontSize.bodyLg,
+                    fontWeight: "700",
+                    color: color.primaryDark,
                   }}
                 >
-                  {option.label}
+                  TOTAL
                 </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+                {itemCount > 0 ? (
+                  <Text style={{ fontSize: fontSize.caption, color: color.inkMuted }}>
+                    {itemCount} item{itemCount === 1 ? "" : "s"}
+                  </Text>
+                ) : null}
+              </View>
+              <Money
+                value={total}
+                style={[
+                  styles.total,
+                  {
+                    fontSize: compact ? fontSize.headingMd : fontSize.headingLg,
+                    color: color.primaryDark,
+                  },
+                ]}
+              />
+            </View>
 
-        {/* Optional, and it looks optional: one quiet row, never a required
-            step between the cashier and the total. */}
-        <CustomerButton
-          customer={customer}
-          onPress={() => setEditingCustomer(true)}
-          onClear={() => setCustomer(NO_CUSTOMER)}
-        />
+            <View style={{ flexDirection: "row", gap: space.sm, marginTop: space.md }}>
+              {PAYMENT_METHODS.map((method) => {
+                const selected = payment === method.value;
+                const MethodIcon = method.icon;
 
-        {oversellRisk ? (
-          <View style={{ marginTop: space.sm }}>
-            <WarningNote>
-              This sells more than the last counted stock. It still goes through — the
-              office will see it after you sync.
-            </WarningNote>
+                return (
+                  <Pressable
+                    key={method.value}
+                    onPress={() => setPayment(method.value)}
+                    accessibilityState={{ selected }}
+                    style={{
+                      flex: 1,
+                      minHeight: compact ? 48 : 52,
+                      flexDirection: "row",
+                      gap: space.xs,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      paddingHorizontal: space.xs,
+                      borderRadius: radius.sm,
+                      borderWidth: 1,
+                      // The chosen method is filled, not outlined — one glance has to
+                      // settle what the customer is paying with.
+                      borderColor: selected ? color.primary : color.border,
+                      backgroundColor: selected ? color.primary : color.surface,
+                    }}
+                  >
+                    <MethodIcon
+                      size={16}
+                      color={selected ? color.onPrimary : color.inkMuted}
+                      strokeWidth={2}
+                    />
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        fontSize: fontSize.body,
+                        fontWeight: "600",
+                        color: selected ? color.onPrimary : color.ink,
+                      }}
+                    >
+                      {method.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View style={{ flexDirection: "row", gap: space.sm, marginTop: space.sm }}>
+              {([
+                { value: "pickup" as const, label: "Pickup" },
+                { value: "delivery" as const, label: "Delivery", icon: Truck },
+              ]).map((option) => {
+                const selected = fulfillment === option.value;
+                return (
+                  <Pressable
+                    key={option.value}
+                    onPress={() => setFulfillment(option.value)}
+                    accessibilityState={{ selected }}
+                    style={{
+                      flex: 1,
+                      minHeight: 44,
+                      flexDirection: "row",
+                      gap: space.xs,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderRadius: radius.sm,
+                      borderWidth: 1,
+                      borderColor: selected ? color.primary : color.border,
+                      backgroundColor: selected ? color.primarySoft : color.surface,
+                    }}
+                  >
+                    {option.icon ? (
+                      <Truck
+                        size={15}
+                        color={selected ? color.primary : color.inkMuted}
+                        strokeWidth={2}
+                      />
+                    ) : null}
+                    <Text
+                      style={{
+                        fontSize: fontSize.body,
+                        fontWeight: "600",
+                        color: selected ? color.primaryDark : color.ink,
+                      }}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Optional, and it looks optional: one quiet row, never a required
+                step between the cashier and the total. */}
+            <CustomerButton
+              customer={customer}
+              onPress={() => setEditingCustomer(true)}
+              onClear={() => setCustomer(NO_CUSTOMER)}
+            />
+
+            {oversellRisk ? (
+              <View style={{ marginTop: space.sm }}>
+                <WarningNote>
+                  This sells more than the last counted stock. It still goes through — the
+                  office will see it after you sync.
+                </WarningNote>
+              </View>
+            ) : null}
+
+            <Button
+              label="Complete sale"
+              large
+              icon={CheckCircle2}
+              disabled={lines.length === 0 || saving}
+              style={{ marginTop: space.md }}
+              onPress={() => setConfirmOpen(true)}
+            />
           </View>
-        ) : null}
-
-        <Button
-          label={saving ? "Saving..." : "Complete sale"}
-          large
-          icon={CheckCircle2}
-          busy={saving}
-          disabled={lines.length === 0}
-          style={{ marginTop: space.md }}
-          onPress={() => void finishSale()}
-        />
+        </View>
 
         {/* Inside the cart on purpose: on a phone the cart is itself a modal,
             and a sheet presented from outside it would open underneath. */}
@@ -783,6 +800,19 @@ export default function SellScreen() {
             setCustomer(next);
             setEditingCustomer(false);
           }}
+        />
+
+        <ConfirmSaleSheet
+          key={confirmOpen ? "confirm-open" : "confirm-closed"}
+          open={confirmOpen}
+          shelfTotal={shelfTotal}
+          discount={discount}
+          amountDue={total}
+          payment={payment}
+          itemCount={itemCount}
+          busy={saving}
+          onClose={() => setConfirmOpen(false)}
+          onConfirm={() => void finishSale()}
         />
       </CartShell>
 
@@ -1521,6 +1551,265 @@ function StepperButton({
 }
 
 /**
+ * Last look before the sale is written. Cash needs the notes in hand so change
+ * is clear; GCash/card only need the amount due confirmed.
+ */
+function ConfirmSaleSheet({
+  open,
+  shelfTotal,
+  discount,
+  amountDue,
+  payment,
+  itemCount,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  shelfTotal: number;
+  discount: number;
+  amountDue: number;
+  payment: PaymentMethod;
+  itemCount: number;
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const isCash = payment === "cash";
+  const [cashDraft, setCashDraft] = useState(() => amountDue.toFixed(2));
+
+  if (!open) return null;
+
+  const cashOnHand = Number(cashDraft);
+  const cashValid = Number.isFinite(cashOnHand) && cashOnHand >= amountDue;
+  const change = cashValid ? roundMoney(cashOnHand - amountDue) : 0;
+  const canConfirm = isCash ? cashValid : true;
+  const methodLabel =
+    PAYMENT_METHODS.find((method) => method.value === payment)?.label ?? payment;
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={{ flex: 1, justifyContent: "flex-end", backgroundColor: `${color.ink}99` }}
+      >
+        <View
+          style={{
+            backgroundColor: color.surface,
+            borderTopLeftRadius: radius.lg,
+            borderTopRightRadius: radius.lg,
+            padding: space.lg,
+            gap: space.md,
+            width: "100%",
+            maxWidth: 560,
+            alignSelf: "center",
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+            <View style={[styles.iconWell, { width: 34, height: 34 }]}>
+              <CheckCircle2 size={18} color={color.primary} strokeWidth={2} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.subheading}>Confirm sale</Text>
+              <Text style={{ fontSize: fontSize.caption, color: color.inkMuted }}>
+                {itemCount} item{itemCount === 1 ? "" : "s"} · {methodLabel}
+              </Text>
+            </View>
+            <IconButton icon={X} label="Close" onPress={onClose} disabled={busy} />
+          </View>
+
+          <View
+            style={{
+              gap: space.sm,
+              padding: space.md,
+              borderRadius: radius.md,
+              backgroundColor: color.paper,
+              borderWidth: 1,
+              borderColor: color.border,
+            }}
+          >
+            <ConfirmRow label="Total amount" value={shelfTotal} />
+            <ConfirmRow
+              label="Discount"
+              value={discount}
+              muted={discount === 0}
+              prefix={discount > 0 ? "-" : undefined}
+            />
+            <LedgerLine />
+            <ConfirmRow label="Amount to pay" value={amountDue} emphasize />
+          </View>
+
+          {isCash ? (
+            <View style={{ gap: space.sm }}>
+              <Text style={{ fontSize: fontSize.body, fontWeight: "600" }}>
+                Cash on hand
+              </Text>
+              <TextInput
+                value={cashDraft}
+                onChangeText={(next) => setCashDraft(next.replace(/[^0-9.]/g, ""))}
+                keyboardType="decimal-pad"
+                autoFocus
+                selectTextOnFocus
+                accessibilityLabel="Cash on hand from the customer"
+                style={[
+                  styles.numeric,
+                  {
+                    minHeight: 64,
+                    borderWidth: 2,
+                    borderColor: cashValid ? color.primary : color.danger,
+                    borderRadius: radius.sm,
+                    backgroundColor: cashValid ? color.primaryTint : color.dangerSoft,
+                    color: cashValid ? color.primaryDark : color.dangerInk,
+                    paddingHorizontal: space.md,
+                    fontSize: fontSize.headingMd,
+                    fontWeight: "700",
+                  },
+                ]}
+              />
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
+                <Pressable
+                  onPress={() => setCashDraft(amountDue.toFixed(2))}
+                  style={({ pressed }) => ({
+                    minHeight: 44,
+                    paddingHorizontal: space.md,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: radius.sm,
+                    borderWidth: 1,
+                    borderColor: color.primarySoft,
+                    backgroundColor: pressed ? color.primarySoft : color.primaryTint,
+                  })}
+                >
+                  <Text style={{ fontWeight: "600", color: color.primary }}>Exact</Text>
+                </Pressable>
+                {[50, 100, 200, 500, 1000]
+                  .map((bill) => roundMoney(Math.ceil(amountDue / bill) * bill))
+                  .filter((next, index, all) => next > amountDue && all.indexOf(next) === index)
+                  .slice(0, 3)
+                  .map((next) => (
+                    <Pressable
+                      key={next}
+                      onPress={() => setCashDraft(next.toFixed(2))}
+                      style={({ pressed }) => ({
+                        minHeight: 44,
+                        paddingHorizontal: space.md,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderRadius: radius.sm,
+                        borderWidth: 1,
+                        borderColor: color.border,
+                        backgroundColor: pressed ? color.surfacePressed : color.surface,
+                      })}
+                    >
+                      <Text style={{ fontWeight: "600", color: color.ink }}>
+                        {formatMoney(next)}
+                      </Text>
+                    </Pressable>
+                  ))}
+              </View>
+              {!cashValid ? (
+                <Text style={{ fontSize: fontSize.body, color: color.dangerInk }}>
+                  Cash on hand must cover {formatMoney(amountDue)}.
+                </Text>
+              ) : (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "baseline",
+                    padding: space.md,
+                    borderRadius: radius.sm,
+                    backgroundColor: color.successSoft,
+                  }}
+                >
+                  <Text style={{ fontSize: fontSize.body, fontWeight: "600", color: color.successInk }}>
+                    Change
+                  </Text>
+                  <Text
+                    style={[
+                      styles.numeric,
+                      {
+                        fontSize: fontSize.headingSm,
+                        fontWeight: "700",
+                        color: color.successInk,
+                      },
+                    ]}
+                  >
+                    {formatMoney(change)}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ) : (
+            <Text style={{ fontSize: fontSize.body, color: color.inkMuted }}>
+              Customer pays {formatMoney(amountDue)} by {methodLabel}. No cash change.
+            </Text>
+          )}
+
+          <Button
+            label={busy ? "Saving..." : "Confirm and complete"}
+            large
+            icon={CheckCircle2}
+            busy={busy}
+            disabled={!canConfirm || busy}
+            onPress={onConfirm}
+          />
+          <Button label="Back to cart" variant="secondary" disabled={busy} onPress={onClose} />
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+function ConfirmRow({
+  label,
+  value,
+  emphasize,
+  muted,
+  prefix,
+}: {
+  label: string;
+  value: number;
+  emphasize?: boolean;
+  muted?: boolean;
+  prefix?: string;
+}) {
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "baseline",
+        gap: space.sm,
+      }}
+    >
+      <Text
+        style={{
+          fontSize: emphasize ? fontSize.bodyLg : fontSize.body,
+          fontWeight: emphasize ? "700" : "500",
+          color: muted ? color.inkMuted : emphasize ? color.primaryDark : color.ink,
+        }}
+      >
+        {label}
+      </Text>
+      <Text
+        style={[
+          styles.numeric,
+          {
+            fontSize: emphasize ? fontSize.headingSm : fontSize.bodyLg,
+            fontWeight: "700",
+            color: muted ? color.inkMuted : emphasize ? color.primaryDark : color.ink,
+          },
+        ]}
+      >
+        {prefix}
+        {formatMoney(value)}
+      </Text>
+    </View>
+  );
+}
+
+/**
  * The cart is a fixed side panel on a tablet and a full-screen sheet on a phone,
  * where there is no room to show it next to the product grid.
  */
@@ -1542,14 +1831,16 @@ function CartShell({
   const body = (
     <View
       style={{
-        // A fixed share rather than a flex ratio: on a 13" tablet a flexed cart
-        // stretches into a near-empty column.
+        // Phone modal: fill the sheet. Tablet: fixed width, stretch tall so the
+        // line list can grow — never flex along the row (that empties the grid).
         flex: compact ? 1 : undefined,
         width: compact ? undefined : width,
+        alignSelf: compact ? undefined : "stretch",
         backgroundColor: color.surface,
         borderLeftWidth: compact ? 0 : 1,
         borderLeftColor: color.border,
         padding: compact ? space.lg : padding,
+        minHeight: 0,
       }}
     >
       {children}

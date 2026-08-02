@@ -13,10 +13,12 @@ import {
   Snowflake,
   SlidersHorizontal,
   Trophy,
+  TrendingDown,
   TrendingUp,
   TriangleAlert,
   Truck,
   UserRound,
+  Wallet,
   Warehouse,
 } from "lucide-react";
 import { formatMoney, formatPercent } from "@double-a/shared-types";
@@ -30,6 +32,7 @@ import {
   reportInventoryValuation,
   reportProfit,
   reportTopProducts,
+  sumExpenses,
   summariseProfit,
 } from "@double-a/supabase";
 import { getServerClient } from "@/lib/supabase/server";
@@ -91,6 +94,7 @@ export default async function ReportsPage({
     valuation,
     deadStock,
     reorder,
+    expensesTotal,
   ] = await Promise.all([
     reportProfit(supabase, range),
     reportTopProducts(supabase, range, 20),
@@ -100,9 +104,11 @@ export default async function ReportsPage({
     reportInventoryValuation(supabase),
     reportDeadStock(supabase, deadStockDays),
     listBelowReorder(supabase),
+    sumExpenses(supabase, { fromDay, toDay }),
   ]);
 
   const totals = summariseProfit(profitRows);
+  const net = totals.revenue - expensesTotal;
   const rangeQuery = `from=${fromDay}&to=${toDay}`;
 
   const stockCost = valuation.reduce((sum, row) => sum + Number(row.cost_value), 0);
@@ -136,7 +142,7 @@ export default async function ReportsPage({
       {/* ------------------------------------------------------------------ */}
       {/* Profit                                                             */}
       {/* ------------------------------------------------------------------ */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           icon={TrendingUp}
           label="Revenue"
@@ -168,6 +174,20 @@ export default async function ReportsPage({
           value={formatMoney(totals.discount)}
           hint="Knocked off at the counter"
           tone={totals.discount > 0 ? "warning" : "neutral"}
+        />
+        <StatCard
+          icon={Wallet}
+          label="Expenses"
+          value={formatMoney(expensesTotal)}
+          hint="Operating outlays in this range"
+          tone={expensesTotal > 0 ? "warning" : "neutral"}
+        />
+        <StatCard
+          icon={TrendingDown}
+          label="Net"
+          value={formatMoney(net)}
+          hint="Revenue minus expenses"
+          tone={net < 0 ? "danger" : "success"}
         />
       </div>
 
