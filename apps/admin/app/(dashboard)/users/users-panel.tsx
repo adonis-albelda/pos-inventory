@@ -44,7 +44,7 @@ export function UsersPanel({
             instruction={
               query
                 ? "Try a different name or email."
-                : "Add a cashier with a PIN so they can unlock a terminal and start selling."
+                : "Add a cashier with a PIN, an admin with a dashboard password, or a terminal login."
             }
           />
         ) : (
@@ -65,7 +65,7 @@ export function UsersPanel({
         open={creating}
         onClose={() => setCreating(false)}
         title="Add a person"
-        description="Who can ring up a sale, and on which terminals."
+        description="Cashiers unlock with a PIN. Admins sign in here with email and password."
         wide
       >
         <UserForm onDone={() => setCreating(false)} />

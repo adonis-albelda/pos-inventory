@@ -64,7 +64,7 @@ export function CategoryTabs({
         horizontal
         showsHorizontalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ gap: space.sm, paddingRight: space.sm }}
+        contentContainerStyle={{ gap: space.sm }}
       >
         <Chip
           label="All"

@@ -155,10 +155,29 @@ export function DashboardShell({
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 pt-[calc(3.5rem+env(safe-area-inset-top))] lg:pt-0">
-        <div className="px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+      <main className="flex min-w-0 min-h-screen flex-1 flex-col pt-[calc(3.5rem+env(safe-area-inset-top))] lg:pt-0">
+        <div className="flex-1 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
           <div className="mx-auto max-w-6xl">{children}</div>
         </div>
+
+        <footer className="mt-auto border-t border-border px-4 py-4 sm:px-6 lg:px-8">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-2 text-caption text-ink-muted">
+            <img
+              src="/logo.png"
+              alt=""
+              className="size-5 shrink-0 object-contain"
+            />
+            <span>
+              Powered by:{" "}
+              <a
+                href="mailto:doubleadigitalsolutions@gmail.com"
+                className="text-ink-muted underline decoration-border underline-offset-2 transition-colors hover:text-ink hover:decoration-ink-muted"
+              >
+                doubleadigitalsolutions@gmail.com
+              </a>
+            </span>
+          </div>
+        </footer>
       </main>
     </div>
   );

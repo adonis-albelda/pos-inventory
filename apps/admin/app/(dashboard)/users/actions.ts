@@ -12,11 +12,16 @@ function hashPin(userId: string, pin: string): string {
   return createHash("sha256").update(pinHashInput(userId, pin)).digest("hex");
 }
 
+/** Roles that sign in through Supabase Auth (email/password), not pin_hash. */
+function needsAuthPassword(role: string): boolean {
+  return role === "admin" || role === "device";
+}
+
 /**
- * Terminal enrollment signs in with Supabase Auth email/password — not pin_hash.
- * Cashiers unlock with PIN. Keep those paths separate.
+ * Admins use Auth email/password for the dashboard; terminals use the same for
+ * POS enrollment. Cashiers unlock with PIN only — keep those paths separate.
  */
-async function syncTerminalAuthPassword(opts: {
+async function syncAuthPassword(opts: {
   userId: string;
   email: string;
   password: string;
@@ -39,7 +44,7 @@ async function syncTerminalAuthPassword(opts: {
     email_confirm: true,
   });
   if (error) throw new Error(error.message);
-  if (!data.user) throw new Error("Auth did not return a user for this terminal.");
+  if (!data.user) throw new Error("Auth did not return a user for this login.");
 
   const { error: linkError } = await service
     .from("users")
@@ -71,15 +76,24 @@ export async function saveCashier(
     }
   }
 
-  if (role === "device") {
+  if (needsAuthPassword(role)) {
     if (!id && !password) {
       return {
-        error: "Set a password — the POS uses it when connecting this terminal.",
+        error:
+          role === "admin"
+            ? "Set a password so this admin can sign in to the dashboard."
+            : "Set a password — the POS uses it when connecting this terminal.",
         ok: false,
       };
     }
     if (password && password.length < 6) {
-      return { error: "Terminal password must be at least 6 characters.", ok: false };
+      return {
+        error:
+          role === "admin"
+            ? "Admin password must be at least 6 characters."
+            : "Terminal password must be at least 6 characters.",
+        ok: false,
+      };
     }
   }
 
@@ -94,7 +108,7 @@ export async function saveCashier(
         ...(role === "cashier" && pin ? { pin_hash: hashPin(id, pin) } : {}),
       });
 
-      if (role === "device" && password) {
+      if (needsAuthPassword(role) && password) {
         const service = createServiceRoleClient();
         const { data: row, error } = await service
           .from("users")
@@ -103,7 +117,7 @@ export async function saveCashier(
           .single();
         if (error) throw new Error(error.message);
 
-        await syncTerminalAuthPassword({
+        await syncAuthPassword({
           userId: id,
           email,
           password,
@@ -113,7 +127,7 @@ export async function saveCashier(
     } else {
       const newId = randomUUID();
 
-      if (role === "device") {
+      if (needsAuthPassword(role)) {
         // Auth user first so public.users can link auth_user_id in one insert.
         const service = createServiceRoleClient();
         const { data, error } = await service.auth.admin.createUser({
@@ -122,7 +136,7 @@ export async function saveCashier(
           email_confirm: true,
         });
         if (error) throw new Error(error.message);
-        if (!data.user) throw new Error("Auth did not return a user for this terminal.");
+        if (!data.user) throw new Error("Auth did not return a user for this login.");
 
         await createUser(supabase, {
           id: newId,

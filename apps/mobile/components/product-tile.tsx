@@ -9,6 +9,8 @@ export function ProductTile({
   inCart,
   compact = false,
   minHeight,
+  /** Same token as the sell-screen gutter — card inset matches page padding. */
+  padding = space.sm,
   onPress,
   onRemove,
 }: {
@@ -16,6 +18,7 @@ export function ProductTile({
   inCart: number;
   compact?: boolean;
   minHeight?: number;
+  padding?: number;
   onPress: () => void;
   onRemove: () => void;
 }) {
@@ -36,7 +39,7 @@ export function ProductTile({
         {
           flex: 1,
           minHeight: minHeight ?? (compact ? 96 : 112),
-          padding: compact ? space.xs : space.sm,
+          padding,
           justifyContent: "space-between",
           // A tile already in the cart is filled, not just outlined — the state
           // has to survive a glance across a counter.

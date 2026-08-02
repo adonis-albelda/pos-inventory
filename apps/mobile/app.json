@@ -4,6 +4,7 @@
     "slug": "double-a-pos",
     "version": "1.0.0",
     "orientation": "default",
+    "icon": "./assets/icon.png",
     "scheme": "doubleapos",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -19,7 +20,8 @@
     "android": {
       "package": "com.doublea.pos",
       "adaptiveIcon": {
-        "backgroundColor": "#0F5C52"
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#000000"
       }
     },
     "plugins": ["expo-router", "expo-sqlite", "expo-secure-store"],

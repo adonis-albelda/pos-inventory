@@ -383,7 +383,7 @@ export default function SetupScreen() {
         </Text>
       </View>
 
-      <PoweredByLabel />
+      <PoweredByLabel onBanner />
     </ScrollView>
     </BrandAuthShell>
   );

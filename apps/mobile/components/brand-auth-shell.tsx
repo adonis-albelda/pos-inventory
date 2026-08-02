@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import {
+  Image,
   ImageBackground,
   Linking,
   Pressable,
@@ -12,7 +13,9 @@ import { StatusBar } from "expo-status-bar";
 import { color, fontSize, space } from "@/theme";
 
 const BANNER = require("../assets/banner.png");
-const POWERED_BY_URL = "https://doubleadigitalsolutions.com";
+const LOGO = require("../assets/logo.png");
+const POWERED_BY_EMAIL = "doubleadigitalsolutions@gmail.com";
+const POWERED_BY_MAILTO = `mailto:${POWERED_BY_EMAIL}`;
 
 /**
  * Full-bleed shop banner behind unlock / setup. Same treatment as the admin
@@ -38,32 +41,42 @@ export function BrandAuthShell({ children }: { children: ReactNode }) {
   );
 }
 
-/** Footer credit under unlock / setup content. */
-export function PoweredByLabel() {
+/**
+ * Vendor credit. `onBanner` for unlock/setup (light text on the photo);
+ * default for POS chrome on paper.
+ */
+export function PoweredByLabel({ onBanner = false }: { onBanner?: boolean }) {
   const insets = useSafeAreaInsets();
+  const mute = onBanner ? "rgba(255,255,255,0.55)" : color.inkMuted;
+  const link = onBanner ? "rgba(255,255,255,0.7)" : color.ink;
 
   return (
     <Pressable
-      onPress={() => void Linking.openURL(POWERED_BY_URL)}
+      onPress={() => void Linking.openURL(POWERED_BY_MAILTO)}
       accessibilityRole="link"
-      accessibilityLabel="Powered by doubleadigitalsolutions.com"
+      accessibilityLabel={`Powered by ${POWERED_BY_EMAIL}`}
       style={{
-        paddingTop: space.lg,
-        paddingBottom: Math.max(insets.bottom, space.md),
+        flexDirection: "row",
+        flexWrap: "wrap",
         alignItems: "center",
+        justifyContent: "center",
+        gap: space.xs,
+        paddingTop: space.sm,
+        paddingHorizontal: space.md,
+        paddingBottom: onBanner ? Math.max(insets.bottom, space.md) : Math.max(insets.bottom, space.sm),
+        borderTopWidth: onBanner ? 0 : StyleSheet.hairlineWidth,
+        borderTopColor: color.border,
       }}
     >
-      <Text
-        style={{
-          fontSize: fontSize.caption,
-          color: "rgba(255,255,255,0.55)",
-          textAlign: "center",
-        }}
-      >
-        Powered by{" "}
-        <Text style={{ textDecorationLine: "underline", color: "rgba(255,255,255,0.7)" }}>
-          doubleadigitalsolutions.com
-        </Text>
+      <Image
+        source={LOGO}
+        style={{ width: 18, height: 18 }}
+        resizeMode="contain"
+        accessibilityIgnoresInvertColors
+      />
+      <Text style={{ fontSize: fontSize.caption, color: mute, textAlign: "center" }}>
+        Powered by:{" "}
+        <Text style={{ textDecorationLine: "underline", color: link }}>{POWERED_BY_EMAIL}</Text>
       </Text>
     </Pressable>
   );

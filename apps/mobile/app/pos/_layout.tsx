@@ -1,6 +1,7 @@
 import { Redirect, Stack } from "expo-router";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { PoweredByLabel } from "@/components/brand-auth-shell";
 import { useSession } from "@/lib/session";
 import { StoreHeader } from "@/components/store-header";
 import { styles } from "@/theme";
@@ -14,12 +15,15 @@ export default function PosLayout() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <StoreHeader />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: "transparent" },
-        }}
-      />
+      <View style={{ flex: 1, minHeight: 0 }}>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: "transparent" },
+          }}
+        />
+      </View>
+      <PoweredByLabel />
     </View>
   );
 }

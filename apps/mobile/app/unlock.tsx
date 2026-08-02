@@ -402,7 +402,7 @@ export default function UnlockScreen() {
         </Card>
       ) : null}
 
-      <PoweredByLabel />
+      <PoweredByLabel onBanner />
     </ScrollView>
     </BrandAuthShell>
   );

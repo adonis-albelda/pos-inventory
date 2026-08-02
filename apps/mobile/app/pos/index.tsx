@@ -539,7 +539,7 @@ export default function SellScreen() {
             key={`grid-${columns}`}
             numColumns={columns}
             columnWrapperStyle={{ gap: layout.gap }}
-            contentContainerStyle={{ gap: layout.gap, paddingBottom: space.xl }}
+            contentContainerStyle={{ gap: layout.gap, paddingBottom: layout.gutter }}
             keyboardShouldPersistTaps="handled"
             ListEmptyComponent={
               <EmptyState
@@ -554,6 +554,7 @@ export default function SellScreen() {
                 inCart={inCart.get(item.id) ?? 0}
                 compact={compact}
                 minHeight={layout.tileMinHeight}
+                padding={layout.gutter}
                 onPress={() => addToCart(item)}
                 onRemove={() => changeQuantity(item.id, -1)}
               />
@@ -2060,7 +2061,7 @@ function CartShell({
         backgroundColor: color.surface,
         borderLeftWidth: compact ? 0 : 1,
         borderLeftColor: color.border,
-        padding: compact ? space.md : padding,
+        padding,
         minHeight: 0,
       }}
     >

@@ -14,6 +14,16 @@ import {
 import { EMPTY_FORM_STATE } from "@/lib/form-state";
 import { saveCashier } from "./actions";
 
+function successMessage(role: UserRole): string {
+  if (role === "admin") {
+    return "Saved. They can sign in to this dashboard with that email and password.";
+  }
+  if (role === "device") {
+    return "Saved. Use this password on the POS when connecting the terminal.";
+  }
+  return "Saved. Terminals see a new PIN on the next unlock.";
+}
+
 export function UserForm({ user, onDone }: { user?: User; onDone?: () => void }) {
   const [state, action, pending] = useActionState(saveCashier, EMPTY_FORM_STATE);
   const [role, setRole] = useState<UserRole>(user?.role ?? "cashier");
@@ -67,6 +77,26 @@ export function UserForm({ user, onDone }: { user?: User; onDone?: () => void })
           </Field>
         ) : null}
 
+        {role === "admin" ? (
+          <Field
+            label={user ? "New password" : "Password"}
+            hint={
+              user
+                ? "Dashboard login password. Leave empty to keep the current one."
+                : "Used to sign in to this dashboard — not a cashier PIN."
+            }
+          >
+            <Input
+              icon={Lock}
+              name="password"
+              type="password"
+              autoComplete="new-password"
+              minLength={6}
+              required={!user}
+            />
+          </Field>
+        ) : null}
+
         {role === "device" ? (
           <Field
             label={user ? "New password" : "Password"}
@@ -82,6 +112,7 @@ export function UserForm({ user, onDone }: { user?: User; onDone?: () => void })
               type="password"
               autoComplete="new-password"
               minLength={6}
+              required={!user}
             />
           </Field>
         ) : null}
@@ -90,21 +121,14 @@ export function UserForm({ user, onDone }: { user?: User; onDone?: () => void })
       <p className="flex items-start gap-2 text-caption text-ink-muted">
         <Info size={14} className="mt-0.5 shrink-0" />
         <span>
-          Cashiers unlock with a PIN against the live server. Terminals enroll
-          with an Auth email and password — changing a cashier PIN never changes
-          a terminal password. Admins sign in to this dashboard with email and
-          password.
+          Cashiers unlock with a PIN against the live server. Admins sign in here
+          with email and password. Terminals enroll with an Auth email and
+          password — changing a cashier PIN never changes an Auth password.
         </span>
       </p>
 
       {state.error ? <ErrorNote>{state.error}</ErrorNote> : null}
-      {state.ok ? (
-        <SuccessNote>
-          {role === "device"
-            ? "Saved. Use this password on the POS when connecting the terminal."
-            : "Saved. Terminals see a new PIN on the next unlock."}
-        </SuccessNote>
-      ) : null}
+      {state.ok ? <SuccessNote>{successMessage(role)}</SuccessNote> : null}
 
       <div className="flex flex-col-reverse gap-2 sm:flex-row">
         <Button type="submit" loading={pending} icon={Check} className="w-full sm:w-auto">
