@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { Check, Info, KeyRound, Mail, UserRound } from "lucide-react";
 import type { User } from "@double-a/shared-types";
 import {
@@ -16,6 +16,10 @@ import { saveCashier } from "./actions";
 
 export function UserForm({ user, onDone }: { user?: User; onDone?: () => void }) {
   const [state, action, pending] = useActionState(saveCashier, EMPTY_FORM_STATE);
+
+  useEffect(() => {
+    if (state.ok) onDone?.();
+  }, [state.ok, onDone]);
 
   return (
     <form action={action} className="space-y-4">
@@ -59,15 +63,16 @@ export function UserForm({ user, onDone }: { user?: User; onDone?: () => void })
       <p className="flex items-start gap-2 text-caption text-ink-muted">
         <Info size={14} className="mt-0.5 shrink-0" />
         <span>
-          Cashiers unlock a terminal with this PIN, with no connection needed. Admins
-          sign in to this dashboard with an email and password instead. A terminal is
-          enrolled once during setup.
+          Cashiers unlock a terminal with this PIN against the live server.
+          Admins sign in to this dashboard with an email and password. Enrolling
+          a POS device: admin signs in on the terminal first, then connects a
+          Terminal-role account — both against live Auth.
         </span>
       </p>
 
       {state.error ? <ErrorNote>{state.error}</ErrorNote> : null}
       {state.ok ? (
-        <SuccessNote>Saved. Terminals pick this up on their next sync.</SuccessNote>
+        <SuccessNote>Saved. Terminals see a new PIN on the next unlock.</SuccessNote>
       ) : null}
 
       <div className="flex flex-col-reverse gap-2 sm:flex-row">

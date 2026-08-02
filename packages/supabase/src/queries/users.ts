@@ -30,9 +30,37 @@ export async function fetchUsersChangedSince(
 }
 
 /**
- * PIN hashes for the cashiers this terminal may unlock. Fetched during sync and
- * stored locally so the PIN check itself never needs connectivity. Exposed as a
- * function in Postgres because pin_hash is revoked as a readable column.
+ * Who can unlock a terminal. Live list — unlock never reads the local users
+ * table for credentials or the picker.
+ */
+export async function listCashiers(
+  client: DoubleAClient,
+): Promise<User[]> {
+  const users = await listUsers(client);
+  return users.filter(
+    (user) => user.role === "cashier" || user.role === "admin",
+  );
+}
+
+/**
+ * Live PIN check. pin_hash stays on the server; the device only learns ok/fail.
+ */
+export async function verifyCashierPin(
+  client: DoubleAClient,
+  userId: string,
+  pin: string,
+): Promise<boolean> {
+  const { data, error } = await client.rpc("verify_pin", {
+    p_user_id: userId,
+    p_pin: pin,
+  });
+  if (error) throw error;
+  return Boolean(data);
+}
+
+/**
+ * @deprecated Unlock uses verify_pin(); hashes are no longer pulled to devices.
+ * Kept while older terminals may still call the RPC.
  */
 export async function fetchCashierPins(
   client: DoubleAClient,

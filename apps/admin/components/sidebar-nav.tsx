@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   Boxes,
   ChartColumn,
+  ContactRound,
   FolderTree,
   LayoutDashboard,
   LoaderCircle,
@@ -26,6 +27,7 @@ const NAV: { href: Route; label: string; icon: LucideIcon }[] = [
   { href: "/categories", label: "Categories", icon: FolderTree },
   { href: "/inventory", label: "Inventory", icon: Boxes },
   { href: "/sales", label: "Sales", icon: Receipt },
+  { href: "/customers" as Route, label: "Customers", icon: ContactRound },
   { href: "/reports", label: "Reports", icon: ChartColumn },
   { href: "/users", label: "Cashiers", icon: Users },
   { href: "/settings", label: "Settings", icon: Settings },

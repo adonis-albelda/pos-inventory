@@ -6,11 +6,12 @@
 -- PREREQUISITE. Auth users cannot be created from SQL, so create these two in
 -- Authentication - Users first, with "Auto Confirm User" ticked:
 --   * your own email          -> logs into apps/admin
---   * terminal-1@shop.local   -> what apps/mobile signs in as during setup
+--   * terminal-1@shop.local   -> terminal account; admin picks it during POS setup
 -- Then edit the two email literals below to match, and run.
 --
--- Cashiers are different: they are not auth users at all. They are rows here
--- with a PIN hash, unlocked entirely offline. Section 3 creates two of them.
+-- Cashiers are different: they are not auth users at all. They are
+-- public.users rows with a PIN hash; unlock calls live verify_pin().
+-- Section 3 creates two of them.
 
 -- ---------------------------------------------------------------------------
 -- 1. Admin — the dashboard login
@@ -68,7 +69,7 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- 3. Cashiers — no auth account, just a PIN hash for the offline shift lock.
+-- 3. Cashiers — no auth account, just a PIN hash for live verify_pin unlock.
 --    email is required by the schema but never used to authenticate, so a
 --    .local placeholder is fine.
 -- ---------------------------------------------------------------------------

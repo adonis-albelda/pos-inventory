@@ -84,6 +84,8 @@ export interface Database {
           name: string;
           parent_id: string | null;
           is_active: boolean;
+          markup_percent: number;
+          markup_applied: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -92,6 +94,8 @@ export interface Database {
           name: string;
           parent_id?: string | null;
           is_active?: boolean;
+          markup_percent?: number;
+          markup_applied?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -99,6 +103,8 @@ export interface Database {
           name?: string;
           parent_id?: string | null;
           is_active?: boolean;
+          markup_percent?: number;
+          markup_applied?: boolean;
           updated_at?: string;
         };
         Relationships: [
@@ -109,6 +115,32 @@ export interface Database {
             referencedColumns: ["id"];
           },
         ];
+      };
+      customers: {
+        Row: {
+          id: string;
+          name: string;
+          address: string | null;
+          contact: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          /** Required when created on-device; admin may omit for server default. */
+          id?: string;
+          name: string;
+          address?: string | null;
+          contact?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          address?: string | null;
+          contact?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
       };
       products: {
         Row: {
@@ -185,10 +217,14 @@ export interface Database {
           status: string;
           device_id: string | null;
           created_at: string;
+          customer_id: string | null;
           /** Optional, and null on most sales — a walk-in is never asked. */
           customer_name: string | null;
           customer_address: string | null;
           customer_contact: string | null;
+          is_paid: boolean;
+          fulfillment: string;
+          delivery_completed: boolean;
           synced_at: string;
           updated_at: string;
         };
@@ -202,9 +238,13 @@ export interface Database {
           status?: string;
           device_id?: string | null;
           created_at: string;
+          customer_id?: string | null;
           customer_name?: string | null;
           customer_address?: string | null;
           customer_contact?: string | null;
+          is_paid?: boolean;
+          fulfillment?: string;
+          delivery_completed?: boolean;
           synced_at?: string;
           updated_at?: string;
         };
@@ -215,9 +255,13 @@ export interface Database {
           payment_method?: string | null;
           status?: string;
           device_id?: string | null;
+          customer_id?: string | null;
           customer_name?: string | null;
           customer_address?: string | null;
           customer_contact?: string | null;
+          is_paid?: boolean;
+          fulfillment?: string;
+          delivery_completed?: boolean;
           updated_at?: string;
         };
         Relationships: [
@@ -225,6 +269,12 @@ export interface Database {
             foreignKeyName: "sales_user_id_fkey";
             columns: ["user_id"];
             referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "sales_customer_id_fkey";
+            columns: ["customer_id"];
+            referencedRelation: "customers";
             referencedColumns: ["id"];
           },
         ];
@@ -462,6 +512,13 @@ export interface Database {
         Args: Record<string, never>;
         Returns: { id: string; pin_hash: string | null }[];
       };
+      verify_pin: {
+        Args: {
+          p_user_id: string;
+          p_pin: string;
+        };
+        Returns: boolean;
+      };
       current_app_role: {
         Args: Record<string, never>;
         Returns: string | null;
@@ -469,6 +526,14 @@ export interface Database {
       is_admin: {
         Args: Record<string, never>;
         Returns: boolean;
+      };
+      patch_sale_flags: {
+        Args: {
+          p_id: string;
+          p_is_paid: boolean;
+          p_delivery_completed: boolean;
+        };
+        Returns: undefined;
       };
     };
     Enums: Record<string, never>;

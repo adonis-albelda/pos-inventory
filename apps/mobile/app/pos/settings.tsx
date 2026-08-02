@@ -117,6 +117,10 @@ export default function SettingsScreen() {
           customerName: null,
           customerAddress: null,
           customerContact: null,
+          customerId: null,
+          isPaid: true,
+          fulfillment: "pickup",
+          deliveryCompleted: false,
           syncStatus: "synced",
           syncedAt: null,
           items: [

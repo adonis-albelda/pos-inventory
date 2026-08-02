@@ -1,12 +1,18 @@
-import { FolderPlus, FolderTree, ListTree } from "lucide-react";
+import { FolderTree } from "lucide-react";
 import { listCategories, listProducts } from "@double-a/supabase";
 import { getServerClient } from "@/lib/supabase/server";
 import { toCategoryOptions } from "@/lib/category-options";
-import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui";
-import { CategoriesTree } from "./categories-tree";
-import { CategoryForm } from "./category-form";
+import { matchesQuery, paginateItems, parseListQuery } from "@/lib/list-query";
+import { PageHeader } from "@/components/ui";
+import { CategoriesPanel } from "./categories-panel";
 
-export default async function CategoriesPage() {
+export default async function CategoriesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; page?: string }>;
+}) {
+  const params = await searchParams;
+  const { q, page } = parseListQuery(params);
   const supabase = await getServerClient();
 
   const [categories, products] = await Promise.all([
@@ -22,6 +28,14 @@ export default async function CategoriesPage() {
     productCounts[product.categoryId] = (productCounts[product.categoryId] ?? 0) + 1;
   }
 
+  const filtered = options.filter((category) =>
+    matchesQuery([category.name, category.path], q),
+  );
+  const { pageItems, page: safePage, pageCount, total, pageSize } = paginateItems(
+    filtered,
+    page,
+  );
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -30,29 +44,16 @@ export default async function CategoriesPage() {
         description="How the shop is laid out — Plumbing / Pipes / PVC. Products carry the full path, so a rename reaches every one of them."
       />
 
-      <Card>
-        <CardHeader
-          icon={ListTree}
-          title="The tree"
-          description={`${options.length} ${options.length === 1 ? "category" : "categories"}, ${products.filter((product) => !product.categoryId).length} products with none`}
-        />
-        {options.length === 0 ? (
-          <EmptyState
-            icon={FolderTree}
-            title="No categories yet"
-            instruction="Add a top-level category like Plumbing, then nest Pipes underneath it."
-          />
-        ) : (
-          <CategoriesTree categories={options} productCounts={productCounts} />
-        )}
-      </Card>
-
-      <Card>
-        <CardHeader icon={FolderPlus} title="Add a category" />
-        <div className="px-4 py-5 sm:px-6">
-          <CategoryForm categories={options} />
-        </div>
-      </Card>
+      <CategoriesPanel
+        categories={pageItems}
+        allCategories={options}
+        productCounts={productCounts}
+        query={q}
+        page={safePage}
+        pageCount={pageCount}
+        total={total}
+        pageSize={pageSize}
+      />
     </div>
   );
 }

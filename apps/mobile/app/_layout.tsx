@@ -43,7 +43,12 @@ export default function RootLayout() {
       <SessionProvider>
         <SyncProvider>
           <StatusBar style="dark" />
-          <Stack screenOptions={{ headerShown: false }} />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { flex: 1, backgroundColor: color.paper },
+            }}
+          />
         </SyncProvider>
       </SessionProvider>
     </SafeAreaProvider>

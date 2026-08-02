@@ -1,7 +1,7 @@
 import { Redirect, Stack, usePathname, useRouter } from "expo-router";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { CloudUpload, LogOut, Receipt, Settings, ShoppingCart } from "lucide-react-native";
+import { CloudUpload, LogOut, Receipt, Settings, ShoppingCart, Truck } from "lucide-react-native";
 import { useSession } from "@/lib/session";
 import { useLayout } from "@/lib/layout";
 import { StoreHeader } from "@/components/store-header";
@@ -9,6 +9,7 @@ import { color, fontSize, radius, space, styles } from "@/theme";
 
 const TABS = [
   { href: "/pos", label: "Sell", icon: ShoppingCart },
+  { href: "/pos/delivery", label: "Delivery", icon: Truck },
   { href: "/pos/history", label: "History", icon: Receipt },
   { href: "/pos/settings", label: "Settings", icon: Settings },
   { href: "/pos/sync", label: "Sync", icon: CloudUpload },

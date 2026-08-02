@@ -66,6 +66,14 @@ export function formatPercent(value: number): string {
 }
 
 /**
+ * Shelf price from supplier cost and a category markup percent.
+ * `percent` is 30 for "+30%", not 0.3.
+ */
+export function shelfPriceFromMarkup(costPrice: number, percent: number): number {
+  return roundMoney(costPrice * (1 + percent / 100));
+}
+
+/**
  * The price a product sells at for a given quantity. Contractors buying a
  * whole box get the bulk price without the attendant having to remember it.
  */

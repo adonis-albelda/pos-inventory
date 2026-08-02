@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { ClipboardCheck } from "lucide-react";
 import type { Product } from "@double-a/shared-types";
 import {
@@ -17,11 +17,17 @@ import { moveStock } from "./actions";
 export function StockForm({
   products,
   defaultProductId,
+  onDone,
 }: {
   products: Product[];
   defaultProductId?: string;
+  onDone?: () => void;
 }) {
   const [state, action, pending] = useActionState(moveStock, EMPTY_FORM_STATE);
+
+  useEffect(() => {
+    if (state.ok) onDone?.();
+  }, [state.ok, onDone]);
 
   return (
     <form action={action} className="space-y-4">

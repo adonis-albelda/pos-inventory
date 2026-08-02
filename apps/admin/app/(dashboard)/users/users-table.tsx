@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { useState, useTransition } from "react";
 import {
   Pencil,
   Shield,
@@ -8,11 +8,11 @@ import {
   UserCheck,
   UserRound,
   UserX,
-  X,
   type LucideIcon,
 } from "lucide-react";
 import type { User } from "@double-a/shared-types";
 import { Badge, IconButton, Table, Td, Th } from "@/components/ui";
+import { ConfirmDialog, Sheet } from "@/components/overlay";
 import { toggleCashierActive } from "./actions";
 import { UserForm } from "./user-form";
 
@@ -29,27 +29,39 @@ const ROLE_ICONS: Record<string, LucideIcon> = {
 };
 
 export function UsersTable({ users }: { users: User[] }) {
-  const [editing, setEditing] = useState<string | null>(null);
+  const [editing, setEditing] = useState<User | null>(null);
+  const [toggling, setToggling] = useState<User | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function confirmToggle() {
+    if (!toggling) return;
+    const form = new FormData();
+    form.set("id", toggling.id);
+    form.set("is_active", String(!toggling.isActive));
+    startTransition(async () => {
+      await toggleCashierActive(form);
+      setToggling(null);
+    });
+  }
 
   return (
-    <Table>
-      <thead>
-        <tr>
-          <Th>Name</Th>
-          <Th>Email</Th>
-          <Th>Role</Th>
-          <Th>State</Th>
-          <Th />
-        </tr>
-      </thead>
-      <tbody>
-        {users.map((user) => {
-          const isEditing = editing === user.id;
-          const RoleIcon = ROLE_ICONS[user.role] ?? UserRound;
+    <>
+      <Table>
+        <thead>
+          <tr>
+            <Th>Name</Th>
+            <Th>Email</Th>
+            <Th>Role</Th>
+            <Th>State</Th>
+            <Th />
+          </tr>
+        </thead>
+        <tbody>
+          {users.map((user) => {
+            const RoleIcon = ROLE_ICONS[user.role] ?? UserRound;
 
-          return (
-            <Fragment key={user.id}>
-              <tr className={user.isActive ? "" : "opacity-60"}>
+            return (
+              <tr key={user.id} className={user.isActive ? "" : "opacity-60"}>
                 <Td>
                   <span className="flex items-center gap-2.5">
                     <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -70,34 +82,49 @@ export function UsersTable({ users }: { users: User[] }) {
                 <Td>
                   <div className="flex justify-end gap-1">
                     <IconButton
-                      icon={isEditing ? X : Pencil}
-                      label={isEditing ? "Close editor" : "Edit person"}
-                      onClick={() => setEditing(isEditing ? null : user.id)}
+                      icon={Pencil}
+                      label="Edit person"
+                      onClick={() => setEditing(user)}
                     />
-                    <form action={toggleCashierActive}>
-                      <input type="hidden" name="id" value={user.id} />
-                      <input type="hidden" name="is_active" value={String(!user.isActive)} />
-                      <IconButton
-                        icon={user.isActive ? UserX : UserCheck}
-                        label={user.isActive ? "Deactivate" : "Reactivate"}
-                        tone={user.isActive ? "danger" : "neutral"}
-                        type="submit"
-                      />
-                    </form>
+                    <IconButton
+                      icon={user.isActive ? UserX : UserCheck}
+                      label={user.isActive ? "Deactivate" : "Reactivate"}
+                      tone={user.isActive ? "danger" : "neutral"}
+                      onClick={() => setToggling(user)}
+                    />
                   </div>
                 </Td>
               </tr>
-              {isEditing ? (
-                <tr>
-                  <Td colSpan={5} className="border-l-2 border-l-primary bg-paper">
-                    <UserForm user={user} onDone={() => setEditing(null)} />
-                  </Td>
-                </tr>
-              ) : null}
-            </Fragment>
-          );
-        })}
-      </tbody>
-    </Table>
+            );
+          })}
+        </tbody>
+      </Table>
+
+      <Sheet
+        open={editing !== null}
+        onClose={() => setEditing(null)}
+        title={editing ? `Edit ${editing.name}` : "Edit person"}
+        description="Changes reach terminals on their next sync."
+        wide
+      >
+        {editing ? (
+          <UserForm key={editing.id} user={editing} onDone={() => setEditing(null)} />
+        ) : null}
+      </Sheet>
+
+      <ConfirmDialog
+        open={toggling !== null}
+        onClose={() => setToggling(null)}
+        onConfirm={confirmToggle}
+        pending={pending}
+        title={toggling?.isActive ? "Deactivate person?" : "Reactivate person?"}
+        description={
+          toggling?.isActive
+            ? `${toggling.name} will no longer unlock a terminal or sign in (live check).`
+            : `${toggling?.name ?? "This person"} will be able to sign in again.`
+        }
+        confirmLabel={toggling?.isActive ? "Deactivate" : "Reactivate"}
+      />
+    </>
   );
 }

@@ -33,19 +33,31 @@ export async function saveCategory(
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const parentId = String(formData.get("parent_id") ?? "").trim() || null;
+  const markupPercent = Number(formData.get("markup_percent") ?? 0);
+  const markupApplied = formData.get("markup_applied") === "true";
 
   if (!name) return { error: "Give the category a name.", ok: false };
   if (id && parentId === id) {
     return { error: "A category cannot be its own parent.", ok: false };
   }
+  if (!Number.isFinite(markupPercent) || markupPercent < 0) {
+    return { error: "Markup percent must be zero or more.", ok: false };
+  }
 
   const supabase = await getServerClient();
 
+  const patch = {
+    name,
+    parent_id: parentId,
+    markup_percent: markupPercent,
+    markup_applied: markupApplied,
+  };
+
   try {
     if (id) {
-      await updateCategory(supabase, id, { name, parent_id: parentId });
+      await updateCategory(supabase, id, patch);
     } else {
-      await createCategory(supabase, { name, parent_id: parentId });
+      await createCategory(supabase, patch);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

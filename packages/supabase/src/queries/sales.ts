@@ -33,12 +33,34 @@ export async function pushSales(
   if (itemsError) throw itemsError;
 }
 
+/**
+ * Later mark-paid / mark-delivered from the POS. The sale insert uses
+ * ignoreDuplicates, so these columns cannot ride a second upsert — they go
+ * through `patch_sale_flags` instead.
+ */
+export async function patchSaleFlags(
+  client: DoubleAClient,
+  saleId: string,
+  flags: { isPaid: boolean; deliveryCompleted: boolean },
+): Promise<void> {
+  const { error } = await client.rpc("patch_sale_flags", {
+    p_id: saleId,
+    p_is_paid: flags.isPaid,
+    p_delivery_completed: flags.deliveryCompleted,
+  });
+  if (error) throw error;
+}
+
 export interface SalesFilter {
   from?: string;
   to?: string;
   userId?: string;
   deviceId?: string;
   status?: string;
+  customerId?: string;
+  fulfillment?: string;
+  isPaid?: boolean;
+  deliveryOpen?: boolean;
   limit?: number;
 }
 
@@ -57,6 +79,15 @@ export async function listSales(
   if (filter.userId) query = query.eq("user_id", filter.userId);
   if (filter.deviceId) query = query.eq("device_id", filter.deviceId);
   if (filter.status) query = query.eq("status", filter.status);
+  if (filter.customerId) query = query.eq("customer_id", filter.customerId);
+  if (filter.fulfillment) query = query.eq("fulfillment", filter.fulfillment);
+  if (filter.isPaid !== undefined) query = query.eq("is_paid", filter.isPaid);
+  if (filter.deliveryOpen) {
+    query = query
+      .eq("fulfillment", "delivery")
+      .eq("delivery_completed", false)
+      .eq("status", "completed");
+  }
 
   const { data, error } = await query;
   if (error) throw error;
@@ -103,6 +134,26 @@ export async function voidSale(client: DoubleAClient, id: string): Promise<void>
   const { error } = await client
     .from("sales")
     .update({ status: "voided" })
+    .eq("id", id);
+
+  if (error) throw error;
+}
+
+/** Admin: flip paid / delivery without going through the device RPC. */
+export async function updateSaleFlags(
+  client: DoubleAClient,
+  id: string,
+  patch: { isPaid?: boolean; deliveryCompleted?: boolean; fulfillment?: string },
+): Promise<void> {
+  const { error } = await client
+    .from("sales")
+    .update({
+      ...(patch.isPaid !== undefined ? { is_paid: patch.isPaid } : {}),
+      ...(patch.deliveryCompleted !== undefined
+        ? { delivery_completed: patch.deliveryCompleted }
+        : {}),
+      ...(patch.fulfillment !== undefined ? { fulfillment: patch.fulfillment } : {}),
+    })
     .eq("id", id);
 
   if (error) throw error;

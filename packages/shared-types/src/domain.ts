@@ -8,6 +8,16 @@
 export type UserRole = "cashier" | "admin" | "device";
 export type PaymentMethod = "cash" | "gcash" | "card" | "other";
 export type SaleStatus = "completed" | "voided" | "refunded";
+/** How the customer takes the goods. Default pickup — delivery is opt-in. */
+export type Fulfillment = "pickup" | "delivery";
+
+/**
+ * Cash is settled at the counter. GCash / card / other wait on a later
+ * confirmation that the payment actually landed.
+ */
+export function isPaidByDefault(method: PaymentMethod): boolean {
+  return method === "cash";
+}
 export type InventoryReason =
   | "sale"
   | "restock"
@@ -120,6 +130,12 @@ export interface Category {
   name: string;
   parentId: string | null;
   isActive: boolean;
+  /**
+   * When `markupApplied`, a new product under this category gets a shelf price
+   * of cost × (1 + markupPercent/100). Stored as a plain percent (30 = 30%).
+   */
+  markupPercent: number;
+  markupApplied: boolean;
   updatedAt: string;
 }
 
@@ -175,16 +191,31 @@ export interface ProductWithEstimatedStock extends Product {
 }
 
 /**
+ * A reusable customer record. Created on-device with a client UUID (same as
+ * sales) so an offline terminal can link orders without waiting on the server.
+ * Pulled to every terminal like products; the POS never treats local SQLite as
+ * the source of truth once a sync has landed.
+ */
+export interface Customer {
+  id: string;
+  name: string;
+  address: string | null;
+  contact: string | null;
+  updatedAt: string;
+}
+
+/**
  * Who the sale was for, when the counter bothered to ask. Every field is
  * optional and normally null: a walk-in buying a bag of cement is not going to
  * dictate an address, and nothing about completing a sale may wait on it.
  *
- * Recorded for delivery and for a contractor who needs the sale under their
- * name. Snapshotted text, not a link to a customer table — there is no customer
- * table, and a sale must be complete and valid on a device that has never
- * spoken to the server.
+ * When linked to a `Customer`, `customerId` is set and the three text fields
+ * are still snapshotted onto the sale so a receipt reads the same after a
+ * later rename. Free text alone (no id) is no longer the happy path — the
+ * sheet creates or reuses a customer row.
  */
 export interface CustomerDetails {
+  customerId: string | null;
   name: string | null;
   address: string | null;
   contact: string | null;
@@ -211,10 +242,18 @@ export function normaliseCustomerDetails(
     return trimmed.slice(0, CUSTOMER_FIELD_MAX_LENGTH);
   };
 
+  const name = clean(input.name);
+  const address = clean(input.address);
+  const contact = clean(input.contact);
+  // Drop a dangling id when every text field was cleared — that is a walk-in.
+  const hasText = Boolean(name || address || contact);
+  const rawId = (input.customerId ?? "").trim() || null;
+
   return {
-    name: clean(input.name),
-    address: clean(input.address),
-    contact: clean(input.contact),
+    customerId: hasText ? rawId : null,
+    name,
+    address,
+    contact,
   };
 }
 
@@ -235,14 +274,22 @@ export interface Sale {
   deviceId: string | null;
   /** The real moment of sale, set by the client, not the server. */
   createdAt: string;
+  /** Link to `customers`. Null on walk-ins and on sales from before the table. */
+  customerId: string | null;
   customerName: string | null;
   customerAddress: string | null;
   customerContact: string | null;
+  /** False until the cashier confirms GCash/card/online actually landed. */
+  isPaid: boolean;
+  fulfillment: Fulfillment;
+  /** Only meaningful when `fulfillment === "delivery"`. */
+  deliveryCompleted: boolean;
 }
 
-/** The three customer columns of a sale, as `CustomerDetails`. */
+/** The customer columns of a sale, as `CustomerDetails`. */
 export function saleCustomer(sale: Sale): CustomerDetails {
   return {
+    customerId: sale.customerId,
     name: sale.customerName,
     address: sale.customerAddress,
     contact: sale.customerContact,

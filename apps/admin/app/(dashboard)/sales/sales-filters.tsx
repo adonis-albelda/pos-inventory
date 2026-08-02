@@ -21,6 +21,8 @@ export function SalesFilters({
     for (const [key, value] of formData.entries()) {
       if (typeof value === "string" && value) next.set(key, value);
     }
+    const q = params.get("q");
+    if (q) next.set("q", q);
     router.push(`/sales?${next.toString()}` as Route);
   }
 

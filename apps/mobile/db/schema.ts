@@ -180,6 +180,37 @@ CREATE TABLE IF NOT EXISTS store_settings (
 INSERT OR IGNORE INTO store_settings (id) VALUES (1);
 `;
 
+/**
+ * v6: reusable customers, paid/fulfillment flags on sales, category markup.
+ *
+ * Customers are client-UUID rows (like sales) so an offline terminal can create
+ * and link one without waiting on the server. Flag changes after a sale has
+ * already synced use `flags_pending` — the insert upsert ignores duplicates,
+ * so paid/delivery updates go through a separate patch on push.
+ */
+const V6_CUSTOMERS_PAID_DELIVERY = `
+CREATE TABLE IF NOT EXISTS customers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  address TEXT,
+  contact TEXT,
+  updated_at TEXT,
+  sync_status TEXT NOT NULL DEFAULT 'synced'
+);
+
+CREATE INDEX IF NOT EXISTS customers_name_idx ON customers (name);
+CREATE INDEX IF NOT EXISTS customers_sync_status_idx ON customers (sync_status);
+
+ALTER TABLE sales ADD COLUMN customer_id TEXT;
+ALTER TABLE sales ADD COLUMN is_paid INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE sales ADD COLUMN fulfillment TEXT NOT NULL DEFAULT 'pickup';
+ALTER TABLE sales ADD COLUMN delivery_completed INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE sales ADD COLUMN flags_pending INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE categories ADD COLUMN markup_percent REAL NOT NULL DEFAULT 0;
+ALTER TABLE categories ADD COLUMN markup_applied INTEGER NOT NULL DEFAULT 0;
+`;
+
 /** Ordered, append-only. Never edit a step that has shipped. */
 export const MIGRATIONS: Migration[] = [
   { version: 1, sql: V1_INITIAL },
@@ -187,6 +218,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 3, sql: V3_CATEGORIES },
   { version: 4, sql: V4_SALE_CUSTOMER },
   { version: 5, sql: V5_STORE_SETTINGS },
+  { version: 6, sql: V6_CUSTOMERS_PAID_DELIVERY },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.reduce(

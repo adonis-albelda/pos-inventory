@@ -7,30 +7,28 @@ import {
   type ReactNode,
 } from "react";
 import type { User } from "@double-a/shared-types";
-import { getLocalUser } from "@/db/users";
 import { verifyPin } from "@/lib/pin";
 
 interface SessionValue {
   cashier: User | null;
-  unlock: (userId: string, pin: string) => Promise<boolean>;
+  unlock: (user: User, pin: string) => Promise<boolean>;
   lock: () => void;
 }
 
 const SessionContext = createContext<SessionValue | null>(null);
 
 /**
- * The cashier's shift, held in memory only. Deliberately not persisted: closing
- * the app should end the shift, and nothing here ever touches the network — the
- * PIN is checked against a hash pulled during the last sync.
+ * The cashier's shift, held in memory only. Closing the app ends the shift.
+ * Unlock always calls live verify_pin — local SQLite is for POS work after.
  */
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [cashier, setCashier] = useState<User | null>(null);
 
-  const unlock = useCallback(async (userId: string, pin: string) => {
-    const ok = await verifyPin(userId, pin);
+  const unlock = useCallback(async (user: User, pin: string) => {
+    const ok = await verifyPin(user.id, pin);
     if (!ok) return false;
 
-    setCashier(await getLocalUser(userId));
+    setCashier(user);
     return true;
   }, []);
 

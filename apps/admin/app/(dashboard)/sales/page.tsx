@@ -4,7 +4,6 @@ import {
   Banknote,
   ChevronRight,
   CreditCard,
-  Download,
   Receipt,
   SlidersHorizontal,
   UserRound,
@@ -12,9 +11,9 @@ import {
 import { formatMoney } from "@double-a/shared-types";
 import { listSales, listUsers } from "@double-a/supabase";
 import { getServerClient } from "@/lib/supabase/server";
+import { matchesQuery, paginateItems, parseListQuery } from "@/lib/list-query";
 import {
   Badge,
-  ButtonLink,
   Card,
   CardHeader,
   EmptyState,
@@ -24,6 +23,7 @@ import {
   Td,
   Th,
 } from "@/components/ui";
+import { Pagination, RecordToolbar } from "@/components/record-list";
 import { SalesFilters } from "./sales-filters";
 
 export default async function SalesPage({
@@ -35,9 +35,12 @@ export default async function SalesPage({
     userId?: string;
     deviceId?: string;
     status?: string;
+    q?: string;
+    page?: string;
   }>;
 }) {
   const params = await searchParams;
+  const { q, page } = parseListQuery(params);
   const supabase = await getServerClient();
 
   const [sales, users] = await Promise.all([
@@ -52,18 +55,43 @@ export default async function SalesPage({
     listUsers(supabase, { includeInactive: true }),
   ]);
 
-  const revenue = sales
+  const filtered = sales.filter((sale) =>
+    matchesQuery(
+      [
+        sale.cashierName,
+        sale.customerName,
+        sale.deviceId,
+        sale.paymentMethod,
+        sale.status,
+        sale.id,
+      ],
+      q,
+    ),
+  );
+  const { pageItems, page: safePage, pageCount, total, pageSize } = paginateItems(
+    filtered,
+    page,
+  );
+
+  const revenue = filtered
     .filter((sale) => sale.status === "completed")
     .reduce((sum, sale) => sum + sale.totalAmount, 0);
 
   const devices = [...new Set(sales.map((sale) => sale.deviceId).filter(Boolean))] as string[];
 
-  // The export takes the same dates and state the table is showing, so what
-  // downloads matches what is on screen.
   const exportQuery = new URLSearchParams();
   if (params.from) exportQuery.set("from", params.from);
   if (params.to) exportQuery.set("to", params.to);
   if (params.status) exportQuery.set("status", params.status);
+
+  const listQuery = {
+    q: q || undefined,
+    from: params.from,
+    to: params.to,
+    userId: params.userId,
+    deviceId: params.deviceId,
+    status: params.status,
+  };
 
   return (
     <div className="space-y-6">
@@ -71,15 +99,6 @@ export default async function SalesPage({
         icon={Receipt}
         title="Sales"
         description="Every sale that has reached Supabase. A sale made offline appears here only after its terminal syncs."
-        action={
-          <ButtonLink
-            href={`/api/export/sales?${exportQuery.toString()}`}
-            icon={Download}
-            download
-          >
-            Export CSV
-          </ButtonLink>
-        }
       />
 
       <Card>
@@ -90,16 +109,26 @@ export default async function SalesPage({
       </Card>
 
       <Card>
-        <CardHeader
-          icon={Receipt}
-          title={`${sales.length} sales`}
-          description={`${formatMoney(revenue)} from completed sales in this range.`}
+        <RecordToolbar
+          searchPlaceholder="Search cashier, customer, terminal…"
+          query={q}
+          exportHref={`/api/export/sales?${exportQuery.toString()}`}
+          preserve={listQuery}
         />
-        {sales.length === 0 ? (
+        <div className="border-b border-border px-4 py-3 text-caption text-ink-muted sm:px-6">
+          {formatMoney(revenue)} from completed sales in this range
+          {q ? ` · ${total} match${total === 1 ? "" : "es"}` : ""}
+        </div>
+
+        {total === 0 ? (
           <EmptyState
             icon={Receipt}
-            title="No sales in this range"
-            instruction="Widen the dates, or check that the terminal has synced."
+            title={q ? "Nothing matches that search" : "No sales in this range"}
+            instruction={
+              q
+                ? "Try a different cashier, customer or terminal."
+                : "Widen the dates, or check that the terminal has synced."
+            }
           />
         ) : (
           <Table>
@@ -118,7 +147,7 @@ export default async function SalesPage({
               </tr>
             </thead>
             <tbody>
-              {sales.map((sale) => {
+              {pageItems.map((sale) => {
                 const soldAt = new Date(sale.createdAt).toLocaleString("en-PH", {
                   dateStyle: "medium",
                   timeStyle: "short",
@@ -127,7 +156,6 @@ export default async function SalesPage({
                 return (
                   <tr key={sale.id} className="group relative cursor-pointer">
                     <Td className="whitespace-nowrap">
-                      {/* Covers the whole row so any cell opens the sale detail. */}
                       <Link
                         href={`/sales/${sale.id}` as Route}
                         className="absolute inset-0 z-10"
@@ -136,9 +164,6 @@ export default async function SalesPage({
                       <span className="num font-medium text-primary group-hover:underline">
                         {soldAt}
                       </span>
-                      {/* Under the timestamp rather than in a column of its own:
-                          most sales have no customer, and an eighth column that is
-                          usually a dash costs every row width. */}
                       {sale.customerName ? (
                         <span className="mt-0.5 flex items-center gap-1.5 text-caption text-ink-muted">
                           <UserRound size={12} />
@@ -150,13 +175,27 @@ export default async function SalesPage({
                     <Td className="num text-ink-muted">{sale.deviceId ?? "—"}</Td>
                     <Td>
                       {sale.paymentMethod ? (
-                        <span className="inline-flex items-center gap-2 whitespace-nowrap capitalize">
-                          {sale.paymentMethod === "cash" ? (
-                            <Banknote size={15} className="text-ink-muted" />
-                          ) : (
-                            <CreditCard size={15} className="text-ink-muted" />
-                          )}
-                          {sale.paymentMethod}
+                        <span className="inline-flex flex-col gap-0.5">
+                          <span className="inline-flex items-center gap-2 whitespace-nowrap capitalize">
+                            {sale.paymentMethod === "cash" ? (
+                              <Banknote size={15} className="text-ink-muted" />
+                            ) : (
+                              <CreditCard size={15} className="text-ink-muted" />
+                            )}
+                            {sale.paymentMethod}
+                          </span>
+                          <span className="flex flex-wrap gap-1">
+                            {sale.isPaid ? (
+                              <Badge tone="success">Paid</Badge>
+                            ) : (
+                              <Badge tone="warning">Unpaid</Badge>
+                            )}
+                            {sale.fulfillment === "delivery" ? (
+                              <Badge tone={sale.deliveryCompleted ? "success" : "warning"}>
+                                {sale.deliveryCompleted ? "Delivered" : "Delivery"}
+                              </Badge>
+                            ) : null}
+                          </span>
                         </span>
                       ) : (
                         "—"
@@ -190,6 +229,15 @@ export default async function SalesPage({
             </tbody>
           </Table>
         )}
+
+        <Pagination
+          page={safePage}
+          pageCount={pageCount}
+          total={total}
+          pageSize={pageSize}
+          basePath="/sales"
+          query={listQuery}
+        />
       </Card>
     </div>
   );

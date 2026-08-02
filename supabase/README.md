@@ -25,6 +25,7 @@ order:
 4. `20260801000004_hardware.sql` — nested categories, supplier cost, units, barcode, bulk price, reorder point, sale-line list/cost prices
 5. `20260801000005_reports.sql` — profit, top products, discounts, cashier/device, valuation, dead stock, reorder view
 6. `20260801000006_sale_customer.sql` — optional customer name, address and contact on a sale
+7. later migrations — store settings, customers/paid/delivery/markup, `verify_pin()`
 
 ## 3. Create the auth users
 
@@ -39,8 +40,8 @@ _Auto Confirm User_ ticked:
 Every device authenticates once and never again — the session is persisted on device, so later
 syncs need no login. Add one auth user per extra terminal.
 
-Cashiers are **not** auth users. They are rows in `public.users` with role `cashier` and a PIN
-hash, unlocked entirely offline with no network call.
+Cashiers are **not** auth users. They are rows in `public.users` with role `cashier` and a
+PIN hash. Unlock calls live `verify_pin()` — the device never stores hashes for login.
 
 ## 4. Run the seeders
 

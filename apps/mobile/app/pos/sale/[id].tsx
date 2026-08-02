@@ -22,7 +22,7 @@ import {
   type ProductUnit,
 } from "@double-a/shared-types";
 import { getProductUnits } from "@/db/products";
-import { getLocalSale, voidPendingSale } from "@/db/sales";
+import { getLocalSale, updateLocalSaleFlags, voidPendingSale } from "@/db/sales";
 import { useLayout } from "@/lib/layout";
 import { useSession } from "@/lib/session";
 import { printReceipt } from "@/printing/receipt";
@@ -225,10 +225,46 @@ export default function SaleScreen() {
         </View>
 
         <Text style={[styles.muted, { marginTop: space.sm }]}>
-          Paid by {sale.paymentMethod ?? "unrecorded"} ·{" "}
-          {new Date(sale.createdAt).toLocaleTimeString()}
+          {sale.paymentMethod ?? "unrecorded"} ·{" "}
+          {sale.isPaid ? "Paid" : "Unpaid"} ·{" "}
+          {sale.fulfillment === "delivery"
+            ? sale.deliveryCompleted
+              ? "Delivered"
+              : "Delivery open"
+            : "Pickup"}{" "}
+          · {new Date(sale.createdAt).toLocaleTimeString()}
         </Text>
       </Card>
+
+      {!sale.isPaid ? (
+        <Button
+          label="Mark as paid"
+          large
+          icon={CheckCircle2}
+          onPress={() => {
+            void updateLocalSaleFlags(sale.id, { isPaid: true }).then(async () => {
+              setSale(await getLocalSale(sale.id));
+              void refresh();
+            });
+          }}
+        />
+      ) : null}
+
+      {sale.fulfillment === "delivery" && !sale.deliveryCompleted ? (
+        <Button
+          label="Mark delivered"
+          variant="secondary"
+          icon={CheckCircle2}
+          onPress={() => {
+            void updateLocalSaleFlags(sale.id, { deliveryCompleted: true }).then(
+              async () => {
+                setSale(await getLocalSale(sale.id));
+                void refresh();
+              },
+            );
+          }}
+        />
+      ) : null}
 
       {/* Only when the counter took details — otherwise this card would be an
           empty promise on every walk-in sale. */}

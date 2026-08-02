@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,9 +9,10 @@ import {
   timeAgo,
   type User,
 } from "@double-a/shared-types";
-import { listCashiers } from "@/db/users";
+import { listCashiers } from "@double-a/supabase";
 import { useLayout } from "@/lib/layout";
 import { useSession } from "@/lib/session";
+import { ensureFreshSession, getSupabase } from "@/lib/supabase";
 import { useStoreSettings } from "@/lib/store";
 import { useSync } from "@/sync/sync-provider";
 import {
@@ -26,8 +27,8 @@ import { Button, Card, EmptyState, ErrorNote } from "@/components/ui";
 import { color, fontSize, radius, space, styles } from "@/theme";
 
 /**
- * Start of a shift. Entirely offline: the cashier list and their PIN hashes came
- * down on the last sync, so a terminal with no signal still opens.
+ * Start of a shift. Cashier list + PIN check hit live Supabase. Local SQLite
+ * is for selling after unlock — never for credentials.
  */
 export default function UnlockScreen() {
   const router = useRouter();
@@ -41,22 +42,45 @@ export default function UnlockScreen() {
   const [selected, setSelected] = useState<User | null>(null);
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadingList, setLoadingList] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    void listCashiers().then(setCashiers);
+  const loadCashiers = useCallback(async () => {
+    setLoadingList(true);
+    setLoadError(null);
+    try {
+      await ensureFreshSession();
+      const next = await listCashiers(getSupabase());
+      setCashiers(next);
+      setSelected((prev) =>
+        prev && next.some((c) => c.id === prev.id)
+          ? (next.find((c) => c.id === prev.id) ?? null)
+          : null,
+      );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Could not reach the server.";
+      setLoadError(message);
+      setCashiers([]);
+    } finally {
+      setLoadingList(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadCashiers();
+  }, [loadCashiers]);
 
   const syncing = phase === "pushing" || phase === "pulling";
 
   /**
-   * The only way out of a locked terminal whose PIN was changed in admin after
-   * the last sync — without it the cashier list and hashes here can never
-   * catch up.
+   * Pull catalog into SQLite for the shift, then reload the live cashier list.
+   * PIN itself is always live — this is for products/prices, not hashes.
    */
   async function refreshCashiers() {
     await pullOnly();
-    setCashiers(await listCashiers());
+    await loadCashiers();
     setPin("");
     setError(null);
   }
@@ -67,16 +91,22 @@ export default function UnlockScreen() {
     setBusy(true);
     setError(null);
 
-    const ok = await unlock(selected.id, pin);
-    setBusy(false);
-
-    if (!ok) {
+    try {
+      const ok = await unlock(selected, pin);
+      if (!ok) {
+        setPin("");
+        setError("That PIN does not match. Try again, or ask an admin to reset it.");
+        return;
+      }
+      router.replace("/pos");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Could not reach the server.";
+      setError(message);
       setPin("");
-      setError("That PIN does not match. Try again, or ask an admin to reset it.");
-      return;
+    } finally {
+      setBusy(false);
     }
-
-    router.replace("/pos");
   }
 
   return (
@@ -133,26 +163,26 @@ export default function UnlockScreen() {
         <View style={{ flex: 1 }}>
           <Text style={styles.heading}>Who is on shift?</Text>
           <Text style={[styles.muted, { marginTop: space.xs }]}>
-            Pick your name, then enter your PIN.
+            Pick your name, then enter your PIN. Needs a connection.
           </Text>
           <Text
             style={{
               fontSize: fontSize.caption,
-              color: syncError ? color.danger : color.inkMuted,
+              color: loadError || syncError ? color.danger : color.inkMuted,
               marginTop: space.xs,
             }}
           >
-            {syncing
+            {loadingList || syncing
               ? "Fetching latest data..."
-              : (syncError ?? `Last synced: ${timeAgo(lastSyncedAt)}`)}
+              : (loadError ?? syncError ?? `Last synced: ${timeAgo(lastSyncedAt)}`)}
           </Text>
         </View>
 
         <Button
-          label={syncing ? "Refreshing..." : "Refresh"}
+          label={syncing || loadingList ? "Refreshing..." : "Refresh"}
           variant="secondary"
           icon={RefreshCw}
-          busy={syncing}
+          busy={syncing || loadingList}
           onPress={() => void refreshCashiers()}
         />
       </View>
@@ -161,8 +191,18 @@ export default function UnlockScreen() {
         <Card>
           <EmptyState
             icon={Users}
-            title="No cashiers on this terminal yet"
-            instruction="Press Refresh once there is a connection to bring the cashier list down."
+            title={
+              loadError
+                ? "Cannot reach the server"
+                : loadingList
+                  ? "Loading cashiers..."
+                  : "No cashiers yet"
+            }
+            instruction={
+              loadError
+                ? "Check the connection, then press Refresh."
+                : "Add a cashier in the admin dashboard, then press Refresh."
+            }
           />
         </Card>
       ) : (

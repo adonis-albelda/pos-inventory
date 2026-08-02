@@ -1,5 +1,7 @@
 import type {
   Category,
+  Customer,
+  Fulfillment,
   InventoryMovement,
   InventoryReason,
   PaymentMethod,
@@ -46,6 +48,18 @@ export function toCategory(row: Tables<"categories">): Category {
     name: row.name,
     parentId: row.parent_id,
     isActive: row.is_active,
+    markupPercent: Number(row.markup_percent ?? 0),
+    markupApplied: row.markup_applied ?? false,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toCustomer(row: Tables<"customers">): Customer {
+  return {
+    id: row.id,
+    name: row.name,
+    address: row.address,
+    contact: row.contact,
     updatedAt: row.updated_at,
   };
 }
@@ -91,9 +105,13 @@ export function toSale(row: Tables<"sales">): Sale {
     status: row.status as SaleStatus,
     deviceId: row.device_id,
     createdAt: row.created_at,
+    customerId: row.customer_id,
     customerName: row.customer_name,
     customerAddress: row.customer_address,
     customerContact: row.customer_contact,
+    isPaid: row.is_paid ?? true,
+    fulfillment: (row.fulfillment as Fulfillment) ?? "pickup",
+    deliveryCompleted: row.delivery_completed ?? false,
   };
 }
 

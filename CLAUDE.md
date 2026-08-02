@@ -61,10 +61,12 @@ resolve `node_modules` from the repo root, not just its own folder.
 
 ### 1. Sync is manual, one button, two steps, in order
 The mobile app has exactly one sync action:
-1. **Push** — upload local `sales`/`sale_items` where `sync_status = 'pending'` to Supabase.
-   If this fails, stop — do not proceed to pull.
+1. **Push** — upload pending local `customers`, then `sales`/`sale_items` where
+   `sync_status = 'pending'`, then patch `is_paid` / `delivery_completed` for sales
+   with `flags_pending`. If this fails, stop — do not proceed to pull.
 2. **Pull** — fetch products/users/inventory from Supabase where `updated_at > last_synced_at`,
-   overwrite local rows, update `last_synced_at`.
+   overwrite local rows, update `last_synced_at`. Categories, customers, and store settings
+   are fetched whole every pull.
 
 There is no auto-sync on reconnect, no background sync, no real-time subscriptions on mobile.
 The UI must always show a "Last synced: X ago" indicator.
@@ -73,8 +75,11 @@ Alongside it there is a second, pull-only **Refresh** action (`runPullOnly`), fo
 price or product change mid-shift without sending sales. It skips the push step deliberately;
 pending sales stay pending and still go out on the next Sync. Sync remains the only way sales
 leave the device. Both live in the `SyncBar`, which sits on the **Sync tab**, and Refresh is
-repeated on the unlock screen — a terminal locked with a stale PIN hash has no other way to
-catch up.
+repeated on the unlock screen so a locked terminal can pull catalog before the shift starts.
+
+**Login is always live.** Admin email/password, terminal enrollment, and cashier PIN unlock
+all call Supabase — never local SQLite. `verify_pin()` checks the PIN server-side. Local
+SQLite exists for POS work *after* the cashier unlocks (products, cart, pending sales).
 
 The *state* is not on a tab. `StoreHeader` sits above the tabs on every POS screen and carries
 "Last synced: X ago", the pending count, and the same teal/amber/terracotta colouring the bar
@@ -153,14 +158,25 @@ The logo is a public URL in the `store-logos` bucket, so a terminal that has nev
 shows the initial instead — a header must not wait on a fetch. Filtering by category is done on ids —
 the path text on a product survives the category being deleted.
 
-### 10. Customer details on a sale are optional, free text, and snapshotted
-`sales.customer_name`, `customer_address` and `customer_contact` are nullable and null on most
-sales. They exist for a delivery or a contractor's account, are typed at the counter, and are
-never a required step before completing a sale. There is deliberately no customer table: a
-foreign key would put a server-owned row in the middle of a sale a device creates offline, and
-snapshotted text keeps a printed receipt readable the same way in a year. Normalise with
-`normaliseCustomerDetails()` (trim, blank to null, cap at `CUSTOMER_FIELD_MAX_LENGTH`) before
-writing, so the server's length check never rejects a pushed batch.
+### 11. Customers are reusable records; sales still snapshot the text
+`customers` is a real table (id, name, address, contact). Devices create rows offline with client
+UUIDs — same rule as sales — and push them before sale headers (FK). Sales carry `customer_id`
+plus snapshotted `customer_name` / `address` / `contact` so a receipt still reads after a rename.
+Walk-ins stay null on every customer field. The POS pulls customers whole each sync (like
+categories) and never treats SQLite as the source of truth after a pull lands. Admin lists
+customers and filters sales by `customer_id`.
+
+### 12. Paid and fulfillment live on the sale
+`sales.is_paid` defaults from payment method: cash → paid; GCash / card / other → unpaid until
+the cashier (or admin) marks paid. `sales.fulfillment` is `pickup` | `delivery` (default pickup).
+`delivery_completed` is only meaningful for deliveries. Flag changes after a sale has already
+synced go through `patch_sale_flags` on the next Sync — insert upserts use `ignoreDuplicates` and
+cannot rewrite those columns. The POS Delivery tab lists open deliveries on that terminal.
+
+### 13. Category markup can fill shelf price from cost
+`categories.markup_percent` + `markup_applied`. When applied, the admin product form fills
+shelf price as `cost × (1 + percent/100)`. Owner can still override. Reporting never uses this —
+sale lines keep snapshotted prices.
 
 ---
 

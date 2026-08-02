@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { Check, FolderPlus } from "lucide-react";
 import { Button, ErrorNote, Field, Input, Select, SuccessNote } from "@/components/ui";
 import {
@@ -21,6 +21,10 @@ export function CategoryForm({
   onDone?: () => void;
 }) {
   const [state, action, pending] = useActionState(saveCategory, EMPTY_FORM_STATE);
+
+  useEffect(() => {
+    if (state.ok) onDone?.();
+  }, [state.ok, onDone]);
 
   // Moving a category under one of its own children would orphan the branch.
   const blocked = category ? descendantIds(categories, category.id) : new Set<string>();
@@ -49,6 +53,33 @@ export function CategoryForm({
                 </option>
               ))}
           </Select>
+        </Field>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field
+          label="Markup %"
+          hint="When applied, new products under this category get shelf = cost × (1 + %)."
+        >
+          <Input
+            name="markup_percent"
+            type="number"
+            step="0.01"
+            min="0"
+            defaultValue={category?.markupPercent ?? 0}
+          />
+        </Field>
+        <Field label="Apply markup" hint="Off = owner types shelf price by hand.">
+          <label className="flex min-h-11 items-center gap-2 rounded-sm border border-border bg-surface px-3 text-body">
+            <input
+              type="checkbox"
+              name="markup_applied"
+              value="true"
+              defaultChecked={category?.markupApplied ?? false}
+              className="size-4 accent-primary"
+            />
+            Use markup when creating products
+          </label>
         </Field>
       </div>
 

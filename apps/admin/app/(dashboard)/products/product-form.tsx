@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Check, Info, TriangleAlert } from "lucide-react";
 import type { Product } from "@double-a/shared-types";
 import {
@@ -8,6 +8,7 @@ import {
   formatPercent,
   marginPercent,
   PRODUCT_UNITS,
+  shelfPriceFromMarkup,
   UNIT_LABELS,
 } from "@double-a/shared-types";
 import {
@@ -37,11 +38,24 @@ export function ProductForm({
   // they are still typing the price.
   const [price, setPrice] = useState(product ? String(product.price) : "");
   const [costPrice, setCostPrice] = useState(product ? String(product.costPrice) : "");
+  const [categoryId, setCategoryId] = useState(product?.categoryId ?? "");
+
+  useEffect(() => {
+    if (state.ok) onDone?.();
+  }, [state.ok, onDone]);
 
   const priceValue = Number(price);
   const costValue = Number(costPrice);
   const bothSet = price !== "" && costPrice !== "" && Number.isFinite(priceValue) && Number.isFinite(costValue);
   const belowCost = bothSet && priceValue < costValue;
+  const selectedCategory = categories.find((entry) => entry.id === categoryId);
+
+  function applyCategoryMarkup(nextCategoryId: string, nextCost: string) {
+    const category = categories.find((entry) => entry.id === nextCategoryId);
+    const cost = Number(nextCost);
+    if (!category?.markupApplied || !Number.isFinite(cost) || nextCost === "") return;
+    setPrice(String(shelfPriceFromMarkup(cost, category.markupPercent)));
+  }
 
   return (
     <form action={action} className="space-y-4">
@@ -65,7 +79,11 @@ export function ProductForm({
             step="0.01"
             min="0"
             value={costPrice}
-            onChange={(event) => setCostPrice(event.target.value)}
+            onChange={(event) => {
+              const next = event.target.value;
+              setCostPrice(next);
+              applyCategoryMarkup(categoryId, next);
+            }}
             required
           />
         </Field>
@@ -103,13 +121,29 @@ export function ProductForm({
           </div>
         </div>
 
-        <Field label="Category">
-          <Select name="category_id" defaultValue={product?.categoryId ?? ""}>
+        <Field
+          label="Category"
+          hint={
+            selectedCategory?.markupApplied
+              ? `Markup ${selectedCategory.markupPercent}% fills shelf from cost.`
+              : undefined
+          }
+        >
+          <Select
+            name="category_id"
+            value={categoryId}
+            onChange={(event) => {
+              const next = event.target.value;
+              setCategoryId(next);
+              applyCategoryMarkup(next, costPrice);
+            }}
+          >
             <option value="">No category</option>
             {categories.map((category) => (
               <option key={category.id} value={category.id}>
                 {indentLabel(category)}
                 {category.isActive ? "" : " (hidden)"}
+                {category.markupApplied ? ` (+${category.markupPercent}%)` : ""}
               </option>
             ))}
           </Select>

@@ -1,3 +1,4 @@
+import type { Route } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -28,6 +29,7 @@ import {
   Th,
 } from "@/components/ui";
 import { VoidSale } from "./void-sale";
+import { SaleFlags } from "./sale-flags";
 
 export default async function SaleDetailPage({
   params,
@@ -92,7 +94,28 @@ export default async function SaleDetailPage({
         >
           {sale.paymentMethod ?? "payment not recorded"}
         </Badge>
+        {sale.isPaid ? (
+          <Badge tone="success">Paid</Badge>
+        ) : (
+          <Badge tone="warning">Unpaid</Badge>
+        )}
+        <Badge tone={sale.fulfillment === "delivery" ? "warning" : "neutral"}>
+          {sale.fulfillment === "delivery"
+            ? sale.deliveryCompleted
+              ? "Delivery done"
+              : "Delivery open"
+            : "Pickup"}
+        </Badge>
       </div>
+
+      {sale.status === "completed" ? (
+        <SaleFlags
+          saleId={id}
+          isPaid={sale.isPaid}
+          fulfillment={sale.fulfillment}
+          deliveryCompleted={sale.deliveryCompleted}
+        />
+      ) : null}
 
       {/* Absent on most sales, and absent from the page rather than shown empty:
           a walk-in was never asked, which is not missing data. */}
@@ -101,12 +124,27 @@ export default async function SaleDetailPage({
           <CardHeader
             icon={UserRound}
             title="Customer"
-            description="Taken at the counter and snapshotted onto the sale."
+            description={
+              sale.customerId
+                ? "Linked customer — text below is the snapshot from the sale."
+                : "Taken at the counter and snapshotted onto the sale."
+            }
           />
           <dl className="grid gap-4 px-4 py-4 sm:grid-cols-3 sm:px-6">
             <div>
               <dt className="text-caption text-ink-muted">Name</dt>
-              <dd className="mt-1 text-body font-medium">{customer.name ?? "—"}</dd>
+              <dd className="mt-1 text-body font-medium">
+                {sale.customerId ? (
+                  <Link
+                    href={`/customers/${sale.customerId}` as Route}
+                    className="text-primary hover:underline"
+                  >
+                    {customer.name ?? "—"}
+                  </Link>
+                ) : (
+                  (customer.name ?? "—")
+                )}
+              </dd>
             </div>
             <div>
               <dt className="text-caption text-ink-muted">Contact</dt>

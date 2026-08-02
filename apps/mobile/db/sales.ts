@@ -2,11 +2,13 @@ import * as Crypto from "expo-crypto";
 import {
   cartDiscount,
   cartTotal,
+  isPaidByDefault,
   lineSubtotal,
   normaliseCustomerDetails,
   roundMoney,
   type CartLine,
   type CustomerDetails,
+  type Fulfillment,
   type LocalSale,
   type LocalSaleWithItems,
   type PaymentMethod,
@@ -23,9 +25,14 @@ interface SaleRow {
   status: string;
   device_id: string | null;
   created_at: string;
+  customer_id: string | null;
   customer_name: string | null;
   customer_address: string | null;
   customer_contact: string | null;
+  is_paid: number | null;
+  fulfillment: string | null;
+  delivery_completed: number | null;
+  flags_pending: number | null;
   sync_status: string;
   synced_at: string | null;
 }
@@ -52,21 +59,18 @@ function toLocalSale(row: SaleRow): LocalSale {
     status: row.status as LocalSale["status"],
     deviceId: row.device_id,
     createdAt: row.created_at,
-    // Null on every sale nobody was asked about, and on every sale written
-    // before the columns existed. Both mean the same thing.
+    customerId: row.customer_id,
     customerName: row.customer_name,
     customerAddress: row.customer_address,
     customerContact: row.customer_contact,
+    isPaid: (row.is_paid ?? 1) === 1,
+    fulfillment: (row.fulfillment as Fulfillment) ?? "pickup",
+    deliveryCompleted: (row.delivery_completed ?? 0) === 1,
     syncStatus: row.sync_status as LocalSale["syncStatus"],
     syncedAt: row.synced_at,
   };
 }
 
-/**
- * A sale written before the hardware-store columns existed has a zero list
- * price. Reading it back as the price paid keeps the receipt honest — it shows
- * no discount rather than claiming the whole line was given away.
- */
 function toLocalSaleItem(row: SaleItemRow): SaleItem {
   return {
     id: row.id,
@@ -86,19 +90,10 @@ export interface CompleteSaleInput {
   userId: string;
   deviceId: string;
   paymentMethod: PaymentMethod;
-  /** Optional throughout. Omit it entirely for a walk-in. */
   customer?: CustomerDetails;
+  fulfillment?: Fulfillment;
 }
 
-/**
- * Writes a sale and its line items in one local transaction and returns
- * immediately. No network call, online or off — the cashier must never wait on
- * connectivity to finish a sale or print a receipt.
- *
- * Both the sale id and every line item id are UUIDs generated here. The line
- * item ids matter as much as the sale id: the push upserts on them, which is
- * what stops a retried push from decrementing stock twice server-side.
- */
 export async function completeSale(
   input: CompleteSaleInput,
 ): Promise<LocalSaleWithItems> {
@@ -107,13 +102,11 @@ export async function completeSale(
   const saleId = Crypto.randomUUID();
   const createdAt = new Date().toISOString();
   const total = cartTotal(input.lines);
-  // What the counter gave away, recorded on the sale so the office can report on
-  // it without re-deriving it from every line.
   const discount = cartDiscount(input.lines);
-  // Normalised here rather than trusting the sheet, so the row that goes to
-  // Supabase is already trimmed and within the length the server checks. A
-  // rejected row would hold up the whole batch of pending sales.
   const customer = normaliseCustomerDetails(input.customer ?? {});
+  const fulfillment = input.fulfillment ?? "pickup";
+  const isPaid = isPaidByDefault(input.paymentMethod);
+  const deliveryCompleted = false;
 
   const items: SaleItem[] = input.lines.map((line) => ({
     id: Crypto.randomUUID(),
@@ -131,8 +124,9 @@ export async function completeSale(
     await db.runAsync(
       `INSERT INTO sales
          (id, user_id, total_amount, discount_amount, payment_method, status, device_id, created_at,
-          customer_name, customer_address, customer_contact, sync_status)
-       VALUES (?, ?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?, 'pending')`,
+          customer_id, customer_name, customer_address, customer_contact,
+          is_paid, fulfillment, delivery_completed, flags_pending, sync_status)
+       VALUES (?, ?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'pending')`,
       saleId,
       input.userId,
       total,
@@ -140,9 +134,13 @@ export async function completeSale(
       input.paymentMethod,
       input.deviceId,
       createdAt,
+      customer.customerId,
       customer.name,
       customer.address,
       customer.contact,
+      isPaid ? 1 : 0,
+      fulfillment,
+      deliveryCompleted ? 1 : 0,
     );
 
     for (const item of items) {
@@ -172,26 +170,106 @@ export async function completeSale(
     status: "completed",
     deviceId: input.deviceId,
     createdAt,
+    customerId: customer.customerId,
     customerName: customer.name,
     customerAddress: customer.address,
     customerContact: customer.contact,
+    isPaid,
+    fulfillment,
+    deliveryCompleted,
     syncStatus: "pending",
     syncedAt: null,
     items,
   };
 }
 
+export async function updateLocalSaleFlags(
+  saleId: string,
+  patch: { isPaid?: boolean; deliveryCompleted?: boolean },
+): Promise<void> {
+  const db = getDb();
+  const row = await db.getFirstAsync<{
+    sync_status: string;
+    is_paid: number;
+    delivery_completed: number;
+  }>("SELECT sync_status, is_paid, delivery_completed FROM sales WHERE id = ?", saleId);
+
+  if (!row) throw new Error("That sale is no longer on this device.");
+
+  const isPaid = patch.isPaid ?? row.is_paid === 1;
+  const deliveryCompleted = patch.deliveryCompleted ?? row.delivery_completed === 1;
+  const flagsPending = row.sync_status === "synced" ? 1 : 0;
+
+  await db.runAsync(
+    `UPDATE sales
+        SET is_paid = ?, delivery_completed = ?, flags_pending = ?
+      WHERE id = ?`,
+    isPaid ? 1 : 0,
+    deliveryCompleted ? 1 : 0,
+    flagsPending,
+    saleId,
+  );
+}
+
+export async function listOpenDeliveries(): Promise<LocalSaleWithItems[]> {
+  const sales = await getDb().getAllAsync<SaleRow>(
+    `SELECT * FROM sales
+      WHERE fulfillment = 'delivery'
+        AND delivery_completed = 0
+        AND status = 'completed'
+      ORDER BY created_at DESC`,
+  );
+  return hydrateSales(sales);
+}
+
+export async function listFlagPendingSales(): Promise<LocalSale[]> {
+  const rows = await getDb().getAllAsync<SaleRow>(
+    "SELECT * FROM sales WHERE flags_pending = 1 ORDER BY created_at",
+  );
+  return rows.map(toLocalSale);
+}
+
+export async function markFlagsSynced(saleIds: string[]): Promise<void> {
+  if (saleIds.length === 0) return;
+  const placeholders = saleIds.map(() => "?").join(", ");
+  await getDb().runAsync(
+    `UPDATE sales SET flags_pending = 0 WHERE id IN (${placeholders})`,
+    ...saleIds,
+  );
+}
+
+async function hydrateSales(sales: SaleRow[]): Promise<LocalSaleWithItems[]> {
+  if (sales.length === 0) return [];
+
+  const placeholders = sales.map(() => "?").join(", ");
+  const items = await getDb().getAllAsync<SaleItemRow>(
+    `SELECT * FROM sale_items WHERE sale_id IN (${placeholders})`,
+    ...sales.map((sale) => sale.id),
+  );
+
+  const bySale = new Map<string, SaleItem[]>();
+  for (const row of items) {
+    const list = bySale.get(row.sale_id) ?? [];
+    list.push(toLocalSaleItem(row));
+    bySale.set(row.sale_id, list);
+  }
+
+  return sales.map((sale) => ({
+    ...toLocalSale(sale),
+    items: bySale.get(sale.id) ?? [],
+  }));
+}
+
 export async function getLocalSale(
   saleId: string,
 ): Promise<LocalSaleWithItems | null> {
-  const db = getDb();
-  const sale = await db.getFirstAsync<SaleRow>(
+  const sale = await getDb().getFirstAsync<SaleRow>(
     "SELECT * FROM sales WHERE id = ?",
     saleId,
   );
   if (!sale) return null;
 
-  const items = await db.getAllAsync<SaleItemRow>(
+  const items = await getDb().getAllAsync<SaleItemRow>(
     "SELECT * FROM sale_items WHERE sale_id = ?",
     saleId,
   );
@@ -202,57 +280,18 @@ export async function getLocalSale(
 export async function listLocalSales(
   limit = 100,
 ): Promise<LocalSaleWithItems[]> {
-  const db = getDb();
-  const sales = await db.getAllAsync<SaleRow>(
+  const sales = await getDb().getAllAsync<SaleRow>(
     "SELECT * FROM sales ORDER BY created_at DESC LIMIT ?",
     limit,
   );
-  if (sales.length === 0) return [];
-
-  const placeholders = sales.map(() => "?").join(", ");
-  const items = await db.getAllAsync<SaleItemRow>(
-    `SELECT * FROM sale_items WHERE sale_id IN (${placeholders})`,
-    ...sales.map((sale) => sale.id),
-  );
-
-  const bySale = new Map<string, SaleItem[]>();
-  for (const row of items) {
-    const list = bySale.get(row.sale_id) ?? [];
-    list.push(toLocalSaleItem(row));
-    bySale.set(row.sale_id, list);
-  }
-
-  return sales.map((sale) => ({
-    ...toLocalSale(sale),
-    items: bySale.get(sale.id) ?? [],
-  }));
+  return hydrateSales(sales);
 }
 
-/** What the push step uploads. */
 export async function listPendingSales(): Promise<LocalSaleWithItems[]> {
-  const db = getDb();
-  const sales = await db.getAllAsync<SaleRow>(
+  const sales = await getDb().getAllAsync<SaleRow>(
     "SELECT * FROM sales WHERE sync_status = 'pending' ORDER BY created_at",
   );
-  if (sales.length === 0) return [];
-
-  const placeholders = sales.map(() => "?").join(", ");
-  const items = await db.getAllAsync<SaleItemRow>(
-    `SELECT * FROM sale_items WHERE sale_id IN (${placeholders})`,
-    ...sales.map((sale) => sale.id),
-  );
-
-  const bySale = new Map<string, SaleItem[]>();
-  for (const row of items) {
-    const list = bySale.get(row.sale_id) ?? [];
-    list.push(toLocalSaleItem(row));
-    bySale.set(row.sale_id, list);
-  }
-
-  return sales.map((sale) => ({
-    ...toLocalSale(sale),
-    items: bySale.get(sale.id) ?? [],
-  }));
+  return hydrateSales(sales);
 }
 
 export async function countPendingSales(): Promise<number> {
@@ -268,9 +307,8 @@ export async function markSalesSynced(
 ): Promise<void> {
   if (saleIds.length === 0) return;
 
-  const db = getDb();
   const placeholders = saleIds.map(() => "?").join(", ");
-  await db.runAsync(
+  await getDb().runAsync(
     `UPDATE sales SET sync_status = 'synced', synced_at = ?
       WHERE id IN (${placeholders})`,
     syncedAt,
@@ -278,29 +316,16 @@ export async function markSalesSynced(
   );
 }
 
-/**
- * Marks a failed push so the cashier can see it. Rows stay eligible for the
- * next attempt — a failed sale is never dropped.
- */
 export async function markSalesFailed(saleIds: string[]): Promise<void> {
   if (saleIds.length === 0) return;
 
-  const db = getDb();
   const placeholders = saleIds.map(() => "?").join(", ");
-  await db.runAsync(
+  await getDb().runAsync(
     `UPDATE sales SET sync_status = 'pending' WHERE id IN (${placeholders})`,
     ...saleIds,
   );
 }
 
-/**
- * A sale can only be voided on the device while it is still pending, in which
- * case it is deleted outright and never pushed.
- *
- * Once a sale has been pushed, voiding has to happen in the admin dashboard: the
- * server decrements stock when sale_items arrive, and only an UPDATE to
- * sales.status puts that stock back.
- */
 export async function voidPendingSale(saleId: string): Promise<void> {
   const db = getDb();
   const sale = await db.getFirstAsync<{ sync_status: string }>(

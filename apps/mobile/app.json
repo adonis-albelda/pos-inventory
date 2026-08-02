@@ -3,7 +3,7 @@
     "name": "DOUBLE A POS",
     "slug": "double-a-pos",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "scheme": "doubleapos",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,

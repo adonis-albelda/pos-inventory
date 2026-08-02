@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
+import * as Crypto from "expo-crypto";
 import {
   Banknote,
   CheckCircle2,
@@ -30,6 +31,7 @@ import {
   Tag,
   Trash2,
   TriangleAlert,
+  Truck,
   UserRound,
   X,
   type LucideIcon,
@@ -50,10 +52,12 @@ import {
   roundMoney,
   type CartLine,
   type CustomerDetails,
+  type Fulfillment,
   type PaymentMethod,
   type ProductWithEstimatedStock,
 } from "@double-a/shared-types";
 import { listLocalCategories, type LocalCategory } from "@/db/categories";
+import { searchLocalCustomers, upsertLocalCustomer } from "@/db/customers";
 import { findLocalProductByBarcode, listLocalProducts } from "@/db/products";
 import { completeSale } from "@/db/sales";
 import { getDeviceId } from "@/lib/device";
@@ -75,7 +79,7 @@ import {
 import { color, fontSize, radius, space, styles } from "@/theme";
 
 /** What a cart with no customer attached looks like. Also the state after a sale. */
-const NO_CUSTOMER: CustomerDetails = { name: null, address: null, contact: null };
+const NO_CUSTOMER: CustomerDetails = { customerId: null, name: null, address: null, contact: null };
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; icon: LucideIcon }[] = [
   { value: "cash", label: "Cash", icon: Banknote },
@@ -105,6 +109,7 @@ export default function SellScreen() {
   // at the end, so a cashier can take a name while the order is still being
   // built and never has a dialog between them and completing the sale.
   const [customer, setCustomer] = useState<CustomerDetails>(NO_CUSTOMER);
+  const [fulfillment, setFulfillment] = useState<Fulfillment>("pickup");
   const [editingCustomer, setEditingCustomer] = useState(false);
   const [saving, setSaving] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
@@ -300,6 +305,7 @@ export default function SellScreen() {
           setLines([]);
           setOverridden([]);
           setCustomer(NO_CUSTOMER);
+          setFulfillment("pickup");
         },
       },
     ]);
@@ -314,12 +320,31 @@ export default function SellScreen() {
 
     setSaving(true);
     try {
+      let saleCustomer = normaliseCustomerDetails(customer);
+      if (hasCustomerDetails(saleCustomer)) {
+        const name =
+          saleCustomer.name ??
+          saleCustomer.contact ??
+          saleCustomer.address ??
+          "Customer";
+        const customerId = saleCustomer.customerId ?? Crypto.randomUUID();
+        await upsertLocalCustomer({
+          id: customerId,
+          name,
+          address: saleCustomer.address,
+          contact: saleCustomer.contact,
+          pending: true,
+        });
+        saleCustomer = { ...saleCustomer, customerId, name };
+      }
+
       const sale = await completeSale({
         lines,
         userId: cashier.id,
         deviceId: await getDeviceId(),
         paymentMethod: payment,
-        customer,
+        customer: saleCustomer,
+        fulfillment,
       });
 
       setLines([]);
@@ -327,6 +352,7 @@ export default function SellScreen() {
       // The next customer is a different customer. Carrying details over would
       // put a stranger's name and address on the following receipt.
       setCustomer(NO_CUSTOMER);
+      setFulfillment("pickup");
       setCartOpen(false);
       void load();
       void refresh();
@@ -664,6 +690,47 @@ export default function SellScreen() {
                   }}
                 >
                   {method.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <View style={{ flexDirection: "row", gap: space.sm, marginTop: space.sm }}>
+          {([
+            { value: "pickup" as const, label: "Pickup" },
+            { value: "delivery" as const, label: "Delivery", icon: Truck },
+          ]).map((option) => {
+            const selected = fulfillment === option.value;
+            return (
+              <Pressable
+                key={option.value}
+                onPress={() => setFulfillment(option.value)}
+                accessibilityState={{ selected }}
+                style={{
+                  flex: 1,
+                  minHeight: 44,
+                  flexDirection: "row",
+                  gap: space.xs,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: radius.sm,
+                  borderWidth: 1,
+                  borderColor: selected ? color.primary : color.border,
+                  backgroundColor: selected ? color.primarySoft : color.surface,
+                }}
+              >
+                {option.icon ? (
+                  <Truck size={15} color={selected ? color.primary : color.inkMuted} strokeWidth={2} />
+                ) : null}
+                <Text
+                  style={{
+                    fontSize: fontSize.body,
+                    fontWeight: "600",
+                    color: selected ? color.primaryDark : color.ink,
+                  }}
+                >
+                  {option.label}
                 </Text>
               </Pressable>
             );
@@ -1185,12 +1252,9 @@ function CustomerButton({
 }
 
 /**
- * Name, contact number and address, all optional, all free text.
- *
- * Free text and not a customer record on purpose: the cashier is talking to
- * someone at a counter, offline, and must not have to create or search anything
- * to write down where a delivery goes. What is typed here is snapshotted onto
- * the sale, so a receipt reads the same in a year.
+ * Pick an existing customer or type a new one. Saving with details creates or
+ * updates a local customer row (client UUID) so later sales can reuse them and
+ * the office can see every order under one person after sync.
  */
 function CustomerSheet({
   open,
@@ -1203,15 +1267,34 @@ function CustomerSheet({
   onClose: () => void;
   onApply: (next: CustomerDetails) => void;
 }) {
-  // Seeded at mount, like the price sheet: the caller keys this on open/closed,
-  // so each open starts from whatever is currently on the cart.
   const [name, setName] = useState(customer.name ?? "");
   const [contact, setContact] = useState(customer.contact ?? "");
   const [address, setAddress] = useState(customer.address ?? "");
+  const [customerId, setCustomerId] = useState<string | null>(customer.customerId);
+  const [query, setQuery] = useState("");
+  const [matches, setMatches] = useState<
+    Awaited<ReturnType<typeof searchLocalCustomers>>
+  >([]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void searchLocalCustomers(query).then((rows) => {
+      if (!cancelled) setMatches(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, query]);
 
   if (!open) return null;
 
-  const draft = normaliseCustomerDetails({ name, contact, address });
+  const draft = normaliseCustomerDetails({
+    customerId,
+    name,
+    contact,
+    address,
+  });
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -1229,6 +1312,7 @@ function CustomerSheet({
             width: "100%",
             maxWidth: 560,
             alignSelf: "center",
+            maxHeight: "90%",
           }}
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
@@ -1238,11 +1322,70 @@ function CustomerSheet({
             <View style={{ flex: 1 }}>
               <Text style={styles.subheading}>Customer</Text>
               <Text style={{ fontSize: fontSize.caption, color: color.inkMuted }}>
-                All optional. Leave blank for a walk-in.
+                Reuse an existing account, or type a new one.
               </Text>
             </View>
             <IconButton icon={X} label="Close" onPress={onClose} />
           </View>
+
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: space.sm,
+              minHeight: 48,
+              borderWidth: 1,
+              borderColor: color.border,
+              borderRadius: radius.sm,
+              paddingHorizontal: space.md,
+              backgroundColor: color.paper,
+            }}
+          >
+            <Search size={16} color={color.inkMuted} strokeWidth={2} />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search saved customers"
+              placeholderTextColor={color.inkMuted}
+              style={{ flex: 1, fontSize: fontSize.body, color: color.ink, paddingVertical: space.sm }}
+            />
+          </View>
+
+          {matches.length > 0 ? (
+            <View style={{ maxHeight: 140, gap: space.xs }}>
+              {matches.slice(0, 6).map((match) => (
+                <Pressable
+                  key={match.id}
+                  onPress={() => {
+                    setCustomerId(match.id);
+                    setName(match.name);
+                    setContact(match.contact ?? "");
+                    setAddress(match.address ?? "");
+                    setQuery("");
+                  }}
+                  style={({ pressed }) => ({
+                    paddingVertical: space.sm,
+                    paddingHorizontal: space.md,
+                    borderRadius: radius.sm,
+                    backgroundColor: pressed
+                      ? color.surfacePressed
+                      : customerId === match.id
+                        ? color.primaryTint
+                        : color.paper,
+                    borderWidth: 1,
+                    borderColor: customerId === match.id ? color.primarySoft : color.border,
+                  })}
+                >
+                  <Text style={{ fontSize: fontSize.body, fontWeight: "600", color: color.ink }}>
+                    {match.name}
+                  </Text>
+                  <Text style={{ fontSize: fontSize.caption, color: color.inkMuted }} numberOfLines={1}>
+                    {[match.contact, match.address].filter(Boolean).join(" · ") || "No contact"}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
 
           <CustomerField
             icon={UserRound}

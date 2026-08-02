@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { useState, useTransition } from "react";
 import {
   CornerDownRight,
   Eye,
@@ -8,155 +8,173 @@ import {
   Folder,
   Pencil,
   Trash2,
-  TriangleAlert,
-  X,
 } from "lucide-react";
-import { Badge, Button, IconButton, Table, Td, Th } from "@/components/ui";
+import { Badge, IconButton, Table, Td, Th } from "@/components/ui";
+import { ConfirmDialog, Sheet } from "@/components/overlay";
 import type { CategoryOption } from "@/lib/category-options";
 import { removeCategory, toggleCategoryActive } from "./actions";
 import { CategoryForm } from "./category-form";
 
 export function CategoriesTree({
   categories,
+  allCategories,
   productCounts,
 }: {
   categories: CategoryOption[];
-  /** How many products point at each category, for the delete warning. */
+  allCategories: CategoryOption[];
   productCounts: Record<string, number>;
 }) {
-  const [editing, setEditing] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const [editing, setEditing] = useState<CategoryOption | null>(null);
+  const [deleting, setDeleting] = useState<CategoryOption | null>(null);
+  const [hiding, setHiding] = useState<CategoryOption | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function confirmDelete() {
+    if (!deleting) return;
+    const form = new FormData();
+    form.set("id", deleting.id);
+    startTransition(async () => {
+      await removeCategory(form);
+      setDeleting(null);
+    });
+  }
+
+  function confirmHide() {
+    if (!hiding) return;
+    const form = new FormData();
+    form.set("id", hiding.id);
+    form.set("is_active", String(!hiding.isActive));
+    startTransition(async () => {
+      await toggleCategoryActive(form);
+      setHiding(null);
+    });
+  }
+
+  const deleteChildCount = deleting
+    ? allCategories.filter((other) => other.parentId === deleting.id).length
+    : 0;
+  const deleteProductCount = deleting ? (productCounts[deleting.id] ?? 0) : 0;
 
   return (
-    <Table>
-      <thead>
-        <tr>
-          <Th>Category</Th>
-          <Th>Full path</Th>
-          <Th numeric>Products</Th>
-          <Th>State</Th>
-          <Th />
-        </tr>
-      </thead>
-      <tbody>
-        {categories.map((category) => {
-          const isEditing = editing === category.id;
-          const isDeleting = deleting === category.id;
-          const childCount = categories.filter(
-            (other) => other.parentId === category.id,
-          ).length;
-
-          return (
-            <Fragment key={category.id}>
-              <tr className={category.isActive ? "" : "opacity-60"}>
-                <Td>
-                  <span
-                    className="flex items-center gap-2"
-                    style={{ paddingLeft: Math.min(category.depth, 4) * 12 }}
-                  >
-                    {category.depth > 0 ? (
-                      <CornerDownRight size={14} className="shrink-0 text-ink-muted" />
-                    ) : (
-                      <Folder size={14} className="shrink-0 text-ink-muted" />
-                    )}
-                    <span className="font-medium">{category.name}</span>
-                  </span>
-                </Td>
-                <Td className="text-ink-muted">{category.path}</Td>
-                <Td numeric>{productCounts[category.id] ?? 0}</Td>
-                <Td>
-                  {category.isActive ? (
-                    <Badge tone="success">Active</Badge>
+    <>
+      <Table>
+        <thead>
+          <tr>
+            <Th>Category</Th>
+            <Th>Full path</Th>
+            <Th numeric>Markup</Th>
+            <Th numeric>Products</Th>
+            <Th>State</Th>
+            <Th />
+          </tr>
+        </thead>
+        <tbody>
+          {categories.map((category) => (
+            <tr key={category.id} className={category.isActive ? "" : "opacity-60"}>
+              <Td>
+                <span
+                  className="flex items-center gap-2"
+                  style={{ paddingLeft: Math.min(category.depth, 4) * 12 }}
+                >
+                  {category.depth > 0 ? (
+                    <CornerDownRight size={14} className="shrink-0 text-ink-muted" />
                   ) : (
-                    <Badge tone="neutral">Hidden</Badge>
+                    <Folder size={14} className="shrink-0 text-ink-muted" />
                   )}
-                </Td>
-                <Td>
-                  <div className="flex justify-end gap-1">
-                    <IconButton
-                      icon={isEditing ? X : Pencil}
-                      label={isEditing ? "Close editor" : "Rename or move"}
-                      onClick={() => {
-                        setDeleting(null);
-                        setEditing(isEditing ? null : category.id);
-                      }}
-                    />
-                    <form action={toggleCategoryActive}>
-                      <input type="hidden" name="id" value={category.id} />
-                      <input
-                        type="hidden"
-                        name="is_active"
-                        value={String(!category.isActive)}
-                      />
-                      <IconButton
-                        icon={category.isActive ? EyeOff : Eye}
-                        label={category.isActive ? "Hide category" : "Show category"}
-                        type="submit"
-                      />
-                    </form>
-                    <IconButton
-                      icon={Trash2}
-                      label="Delete category"
-                      tone="danger"
-                      onClick={() => {
-                        setEditing(null);
-                        setDeleting(isDeleting ? null : category.id);
-                      }}
-                    />
-                  </div>
-                </Td>
-              </tr>
+                  <span className="font-medium">{category.name}</span>
+                </span>
+              </Td>
+              <Td className="text-ink-muted">{category.path}</Td>
+              <Td numeric className="text-ink-muted">
+                {category.markupApplied ? `${category.markupPercent}%` : "—"}
+              </Td>
+              <Td numeric>{productCounts[category.id] ?? 0}</Td>
+              <Td>
+                {category.isActive ? (
+                  <Badge tone="success">Active</Badge>
+                ) : (
+                  <Badge tone="neutral">Hidden</Badge>
+                )}
+              </Td>
+              <Td>
+                <div className="flex justify-end gap-1">
+                  <IconButton
+                    icon={Pencil}
+                    label="Rename or move"
+                    onClick={() => setEditing(category)}
+                  />
+                  <IconButton
+                    icon={category.isActive ? EyeOff : Eye}
+                    label={category.isActive ? "Hide category" : "Show category"}
+                    onClick={() => setHiding(category)}
+                  />
+                  <IconButton
+                    icon={Trash2}
+                    label="Delete category"
+                    tone="danger"
+                    onClick={() => setDeleting(category)}
+                  />
+                </div>
+              </Td>
+            </tr>
+          ))}
+        </tbody>
+      </Table>
 
-              {isEditing ? (
-                <tr>
-                  <Td colSpan={5} className="border-l-2 border-l-primary bg-paper">
-                    <CategoryForm
-                      category={category}
-                      categories={categories}
-                      onDone={() => setEditing(null)}
-                    />
-                  </Td>
-                </tr>
-              ) : null}
+      <Sheet
+        open={editing !== null}
+        onClose={() => setEditing(null)}
+        title={editing ? `Edit ${editing.name}` : "Edit category"}
+        description="Products under it pick up the new path on their next sync."
+      >
+        {editing ? (
+          <CategoryForm
+            key={editing.id}
+            category={editing}
+            categories={allCategories}
+            onDone={() => setEditing(null)}
+          />
+        ) : null}
+      </Sheet>
 
-              {isDeleting ? (
-                <tr>
-                  <Td colSpan={5} className="border-l-2 border-l-danger bg-danger/8">
-                    <p className="flex items-start gap-2 text-body text-danger">
-                      <TriangleAlert size={16} className="mt-0.5 shrink-0" />
-                      <span>
-                        Delete {category.path}?{" "}
-                        {childCount > 0
-                          ? `The ${childCount} ${childCount === 1 ? "category" : "categories"} nested under it go too. `
-                          : ""}
-                        {productCounts[category.id]
-                          ? `${productCounts[category.id]} products keep the category name already on their receipts, but lose the link. `
-                          : ""}
-                        This cannot be undone.
-                      </span>
-                    </p>
-                    <div className="mt-3 flex gap-2">
-                      <form action={removeCategory}>
-                        <input type="hidden" name="id" value={category.id} />
-                        <Button variant="danger" size="sm" icon={Trash2} type="submit">
-                          Yes, delete it
-                        </Button>
-                      </form>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setDeleting(null)}
-                      >
-                        Keep category
-                      </Button>
-                    </div>
-                  </Td>
-                </tr>
-              ) : null}
-            </Fragment>
-          );
-        })}
-      </tbody>
-    </Table>
+      <ConfirmDialog
+        open={deleting !== null}
+        onClose={() => setDeleting(null)}
+        onConfirm={confirmDelete}
+        pending={pending}
+        title="Delete category?"
+        description={
+          deleting
+            ? [
+                `Delete ${deleting.path}?`,
+                deleteChildCount > 0
+                  ? `The ${deleteChildCount} ${deleteChildCount === 1 ? "category" : "categories"} nested under it go too.`
+                  : null,
+                deleteProductCount > 0
+                  ? `${deleteProductCount} products keep the category name already on their receipts, but lose the link.`
+                  : null,
+                "This cannot be undone.",
+              ]
+                .filter(Boolean)
+                .join(" ")
+            : ""
+        }
+        confirmLabel="Delete category"
+      />
+
+      <ConfirmDialog
+        open={hiding !== null}
+        onClose={() => setHiding(null)}
+        onConfirm={confirmHide}
+        pending={pending}
+        title={hiding?.isActive ? "Hide category?" : "Show category?"}
+        description={
+          hiding?.isActive
+            ? `${hiding.path} will stop appearing as a shelf choice on terminals after their next sync.`
+            : `${hiding?.path ?? "This category"} will show on terminals again after their next sync.`
+        }
+        confirmLabel={hiding?.isActive ? "Hide category" : "Show category"}
+      />
+    </>
   );
 }

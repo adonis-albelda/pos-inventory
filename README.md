@@ -83,9 +83,9 @@ estimated stock = last synced stock - pending local sales
   row with role `admin`.
 - **Terminal** — enrolled once during setup with its own account (role `device`). That session
   persists on device so later syncs need no login.
-- **Cashier** — picks their name and enters a PIN, checked against a hash pulled during sync.
-  Entirely offline. The PIN is a shift lock, not a data boundary: the terminal session is what
-  RLS actually authenticates.
+- **Cashier** — picks their name and enters a PIN; live `verify_pin()` checks it.
+  Needs a connection to unlock. After unlock, selling uses local SQLite. The PIN is a
+  shift lock, not a data boundary: the terminal session is what RLS authenticates.
 
 ## Receipt printing
 

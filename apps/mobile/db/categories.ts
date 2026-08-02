@@ -136,13 +136,15 @@ export async function replaceCategories(categories: Category[]): Promise<void> {
 
     for (const category of categories) {
       await db.runAsync(
-        `INSERT INTO categories (id, name, parent_id, is_active, updated_at)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO categories (id, name, parent_id, is_active, updated_at, markup_percent, markup_applied)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         category.id,
         category.name,
         category.parentId,
         category.isActive ? 1 : 0,
         category.updatedAt,
+        category.markupPercent,
+        category.markupApplied ? 1 : 0,
       );
     }
   });

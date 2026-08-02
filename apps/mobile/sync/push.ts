@@ -3,8 +3,22 @@ import {
   type LocalSaleWithItems,
   type PushResult,
 } from "@double-a/shared-types";
-import { pushSales, type TablesInsert } from "@double-a/supabase";
-import { listPendingSales, markSalesSynced } from "@/db/sales";
+import {
+  patchSaleFlags,
+  pushCustomers,
+  pushSales,
+  type TablesInsert,
+} from "@double-a/supabase";
+import {
+  listPendingCustomers,
+  markCustomersSynced,
+} from "@/db/customers";
+import {
+  listFlagPendingSales,
+  listPendingSales,
+  markFlagsSynced,
+  markSalesSynced,
+} from "@/db/sales";
 import { getSupabase } from "@/lib/supabase";
 
 const BATCH_SIZE = 50;
@@ -19,9 +33,13 @@ function toSaleInsert(sale: LocalSaleWithItems): TablesInsert<"sales"> {
     status: sale.status,
     device_id: sale.deviceId,
     created_at: sale.createdAt,
+    customer_id: sale.customerId,
     customer_name: sale.customerName,
     customer_address: sale.customerAddress,
     customer_contact: sale.customerContact,
+    is_paid: sale.isPaid,
+    fulfillment: sale.fulfillment,
+    delivery_completed: sale.deliveryCompleted,
   };
 }
 
@@ -46,17 +64,35 @@ function toItemInserts(sale: LocalSaleWithItems): TablesInsert<"sale_items">[] {
 }
 
 /**
- * Step one of sync: local sales up to Supabase.
+ * Step one of sync: local customers and sales up to Supabase.
+ *
+ * Customers first — sales.customer_id is a foreign key. Then new sales. Then
+ * flag patches for sales that already landed but had paid/delivery flipped
+ * later (ignoreDuplicates cannot update those columns).
  *
  * Rows are only marked synced after the upload for their batch succeeds. If the
- * connection drops halfway, whatever did not land stays 'pending' and goes again
+ * connection drops halfway, whatever did not land stays pending and goes again
  * next time. Sync stops here on failure and never proceeds to the pull.
  */
 export async function push(): Promise<PushResult> {
-  const pending = await listPendingSales();
-  if (pending.length === 0) return { salesPushed: 0, itemsPushed: 0 };
-
   const supabase = getSupabase();
+
+  const pendingCustomers = await listPendingCustomers();
+  if (pendingCustomers.length > 0) {
+    await pushCustomers(
+      supabase,
+      pendingCustomers.map((customer) => ({
+        id: customer.id,
+        name: customer.name,
+        address: customer.address,
+        contact: customer.contact,
+        updated_at: customer.updatedAt || undefined,
+      })),
+    );
+    await markCustomersSynced(pendingCustomers.map((customer) => customer.id));
+  }
+
+  const pending = await listPendingSales();
 
   // A malformed row would fail its whole batch, so bad rows are held back rather
   // than blocking every other sale on the device.
@@ -93,7 +129,16 @@ export async function push(): Promise<PushResult> {
     itemsPushed += itemRows.length;
   }
 
-  if (rejected.length > 0 && salesPushed === 0) {
+  const flagPending = await listFlagPendingSales();
+  for (const sale of flagPending) {
+    await patchSaleFlags(supabase, sale.id, {
+      isPaid: sale.isPaid,
+      deliveryCompleted: sale.deliveryCompleted,
+    });
+  }
+  await markFlagsSynced(flagPending.map((sale) => sale.id));
+
+  if (rejected.length > 0 && salesPushed === 0 && pending.length > 0) {
     throw new Error(
       `${rejected.length} sale(s) could not be sent because their totals do not add up. Show this terminal to an admin.`,
     );

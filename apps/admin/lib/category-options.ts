@@ -14,6 +14,8 @@ export interface CategoryOption {
   depth: number;
   parentId: string | null;
   isActive: boolean;
+  markupPercent: number;
+  markupApplied: boolean;
 }
 
 export function toCategoryOptions(categories: Category[]): CategoryOption[] {
@@ -24,6 +26,8 @@ export function toCategoryOptions(categories: Category[]): CategoryOption[] {
     depth: node.depth,
     parentId: node.parentId,
     isActive: node.isActive,
+    markupPercent: node.markupPercent,
+    markupApplied: node.markupApplied,
   }));
 }
 
