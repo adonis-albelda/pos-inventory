@@ -25,7 +25,7 @@ import { saveCashier } from "./actions";
 
 function successMessage(role: UserRole): string {
   if (role === "admin") {
-    return "Saved. They can sign in to this dashboard with that email and password.";
+    return "Saved. Password signs in to this dashboard; the PIN, if set, unlocks a terminal.";
   }
   if (role === "device") {
     return "Saved. Use this password on the POS when connecting the terminal.";
@@ -35,7 +35,7 @@ function successMessage(role: UserRole): string {
 
 function roleDescription(role: UserRole): string {
   if (role === "admin") {
-    return "Admins sign in to this dashboard with email and password. They can also unlock a terminal with a PIN if you set one later. Changing a PIN never changes this Auth password.";
+    return "Admins need two secrets: a password for this dashboard, and an optional PIN to unlock a terminal on the shop floor. They are separate — changing one never changes the other.";
   }
   if (role === "device") {
     return "Terminals enroll once with this Auth email and password. That session stays on the device — cashiers then unlock with their own PIN, not this password.";
@@ -92,10 +92,16 @@ export function UserForm({ user, onDone }: { user?: User; onDone?: () => void })
           </Select>
         </Field>
 
-        {role === "cashier" ? (
+        {role === "cashier" || role === "admin" ? (
           <Field
             label={user ? "New PIN" : "PIN"}
-            hint={user ? "Leave empty to keep the current PIN." : "4 to 6 digits."}
+            hint={
+              user
+                ? "Leave empty to keep the current PIN."
+                : role === "admin"
+                  ? "Optional — 4 to 6 digits, for unlocking a terminal."
+                  : "4 to 6 digits."
+            }
           >
             <Input
               icon={KeyRound}

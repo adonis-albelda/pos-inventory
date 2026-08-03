@@ -8,9 +8,9 @@
     "scheme": "doubleapos",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "backgroundColor": "#FAF8F4",
+    "backgroundColor": "#F5F5F3",
     "splash": {
-      "backgroundColor": "#0F5C52",
+      "backgroundColor": "#F5F5F3",
       "resizeMode": "contain"
     },
     "ios": {

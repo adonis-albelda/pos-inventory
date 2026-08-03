@@ -35,10 +35,15 @@ _Auto Confirm User_ ticked:
 | Email                     | What it is                                                  |
 | ------------------------- | ----------------------------------------------------------- |
 | your own email            | logs into `apps/admin`                                      |
-| `terminal-1@shop.local`   | what `apps/mobile` signs in as, once, during device setup    |
+| `terminal-1@shop.local`   | optional — a dedicated login for `apps/mobile` device setup   |
 
 Every device authenticates once and never again — the session is persisted on device, so later
-syncs need no login. Add one auth user per extra terminal.
+syncs need no login.
+
+The terminal login is optional because setup accepts any account whose `public.users` role is
+`admin` or `device`; both are allowed to push sales and call `verify_pin()`. Use a `device`
+account when terminals should not hold the admin password. Terminals are told apart by their own
+generated device id, so several may share one account.
 
 Cashiers are **not** auth users. They are rows in `public.users` with role `cashier` and a
 PIN hash. Unlock calls live `verify_pin()` — the device never stores hashes for login.

@@ -1,42 +1,75 @@
 import type { ReactNode } from "react";
-import {
-  Image,
-  ImageBackground,
-  Linking,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Image, Linking, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { color, fontSize, space } from "@/theme";
+import { PaperBackdrop } from "@/components/paper-backdrop";
+import { color, fontSize, radius, space } from "@/theme";
 
-const BANNER = require("../assets/banner.png");
 const LOGO = require("../assets/logo.png");
 const POWERED_BY_EMAIL = "doubleadigitalsolutions@gmail.com";
 const POWERED_BY_MAILTO = `mailto:${POWERED_BY_EMAIL}`;
 
 /**
- * Full-bleed shop banner behind unlock / setup. Same treatment as the admin
- * login page: photo + ink wash so surface cards stay readable on top.
+ * Chrome behind unlock / setup: flat off-white paper, no photograph. Cards and
+ * the teal brand marks are the only things carrying contrast, so a form stays
+ * readable in bright shop light where a washed photo did not.
  */
 export function BrandAuthShell({ children }: { children: ReactNode }) {
   return (
-    <View style={{ flex: 1 }}>
-      <StatusBar style="light" />
-      <ImageBackground
-        source={BANNER}
-        resizeMode="cover"
-        style={StyleSheet.absoluteFill}
-        accessibilityIgnoresInvertColors
-      />
-      <View
-        pointerEvents="none"
-        accessibilityElementsHidden
-        style={[StyleSheet.absoluteFill, { backgroundColor: `${color.ink}8C` }]}
-      />
+    <View style={{ flex: 1, backgroundColor: color.paper }}>
+      <StatusBar style="dark" />
+      <PaperBackdrop />
       {children}
+    </View>
+  );
+}
+
+/**
+ * Brand lockup above an auth form: logo tile, title, one teal rule. `logoUrl`
+ * is the shop's own logo once a pull has landed; without it the vendor mark
+ * stands in, so a terminal that has never been online still reads as branded.
+ */
+export function AuthBrandMark({
+  logoUrl,
+  title,
+  subtitle,
+}: {
+  logoUrl?: string | null;
+  title: string;
+  subtitle?: string;
+}) {
+  return (
+    <View style={{ alignItems: "center", gap: space.md }}>
+      <View
+        style={{
+          width: 76,
+          height: 76,
+          borderRadius: radius.sm,
+          borderWidth: 1,
+          borderColor: color.border,
+          backgroundColor: color.surface,
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "hidden",
+          padding: space.sm,
+        }}
+      >
+        <Image
+          source={logoUrl ? { uri: logoUrl } : LOGO}
+          style={{ width: "100%", height: "100%" }}
+          resizeMode="contain"
+          accessibilityIgnoresInvertColors
+        />
+      </View>
+
+      <View style={{ alignItems: "center", gap: space.xs }}>
+        <Text style={[authChrome.heading, { textAlign: "center" }]}>{title}</Text>
+        {subtitle ? (
+          <Text style={[authChrome.muted, { textAlign: "center" }]}>{subtitle}</Text>
+        ) : null}
+      </View>
+
+      <View style={{ width: 44, height: 3, backgroundColor: color.primary }} />
     </View>
   );
 }
@@ -106,24 +139,25 @@ export function PoweredByLabel({ onBanner: _onBanner = false }: { onBanner?: boo
   );
 }
 
-/** Light text for chrome sitting on the banner (titles outside cards). */
+/** Text for chrome sitting on paper (titles outside cards). */
 export const authChrome = {
   heading: {
     fontSize: fontSize.headingMd,
-    fontWeight: "600" as const,
-    color: color.onPrimary,
+    fontWeight: "700" as const,
+    color: color.ink,
   },
   subheading: {
     fontSize: fontSize.headingSm,
-    fontWeight: "600" as const,
-    color: color.onPrimary,
+    fontWeight: "700" as const,
+    color: color.ink,
   },
   muted: {
     fontSize: fontSize.body,
-    color: "rgba(255,255,255,0.75)",
+    lineHeight: 20,
+    color: color.inkMuted,
   },
   caption: {
     fontSize: fontSize.caption,
-    color: "rgba(255,255,255,0.7)",
+    color: color.inkMuted,
   },
 };

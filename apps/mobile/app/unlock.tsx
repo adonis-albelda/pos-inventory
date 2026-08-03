@@ -144,16 +144,31 @@ export default function UnlockScreen() {
         paddingBottom: space.xl,
       }}
     >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: space.md,
+          padding: space.md,
+          backgroundColor: color.surface,
+          borderWidth: 1,
+          borderColor: color.border,
+          borderLeftWidth: 3,
+          borderLeftColor: color.primary,
+          borderRadius: radius.sm,
+        }}
+      >
         <View
           style={{
             width: 44,
             height: 44,
             borderRadius: radius.sm,
+            borderWidth: 1,
+            borderColor: store.logoUrl ? color.border : color.primary,
             overflow: "hidden",
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: store.logoUrl ? color.paper : color.primary,
+            backgroundColor: store.logoUrl ? color.surface : color.primary,
           }}
         >
           {store.logoUrl ? (
@@ -189,10 +204,7 @@ export default function UnlockScreen() {
           <Text
             style={{
               fontSize: fontSize.caption,
-              color:
-                loadError || syncError
-                  ? color.danger
-                  : "rgba(255,255,255,0.7)",
+              color: loadError || syncError ? color.dangerInk : color.inkMuted,
               marginTop: space.xs,
             }}
           >
@@ -261,13 +273,13 @@ export default function UnlockScreen() {
                     paddingVertical: space.lg,
                     paddingHorizontal: space.md,
                     minHeight: layout.tileMinHeight,
-                    borderColor: active ? color.primary : "rgba(255,255,255,0.45)",
+                    borderColor: active ? color.primary : color.border,
                     borderWidth: active ? 2 : 1,
                     backgroundColor: pressed
-                      ? "rgba(231,239,237,0.85)"
+                      ? color.primarySoft
                       : active
-                        ? "rgba(241,246,244,0.85)"
-                        : "rgba(255,255,255,0.85)",
+                        ? color.primaryTint
+                        : color.surface,
                   },
                 ]}
               >
@@ -453,7 +465,7 @@ export default function UnlockScreen() {
                             ? color.primarySoft
                             : key === "clear"
                               ? color.dangerSoft
-                              : color.surface,
+                              : color.paper,
                     })}
                   >
                     {key === "clear" ? (

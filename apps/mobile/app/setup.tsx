@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { User } from "@double-a/shared-types";
-import { listUsers } from "@double-a/supabase";
+import { currentAppUser } from "@double-a/supabase";
 import { getSyncMeta } from "@/db/meta";
 import { countLocalProducts } from "@/db/products";
 import { getDeviceId, getDeviceLabel, setDeviceLabel } from "@/lib/device";
@@ -18,42 +18,41 @@ import {
   LogIn,
   PlayCircle,
   Smartphone,
-  Users,
 } from "lucide-react-native";
 import {
-  authChrome,
+  AuthBrandMark,
   BrandAuthShell,
   PoweredByLabel,
 } from "@/components/brand-auth-shell";
 import { Button, Card, ErrorNote, SectionTitle } from "@/components/ui";
 import { color, fontSize, radius, space, styles } from "@/theme";
 
-type Step = "admin-login" | "pick-terminal" | "first-pull" | "done";
+type Step = "sign-in" | "first-pull" | "done";
 
 /**
  * One-time terminal setup — enrollment always requires connectivity.
  *
- * Flow is deliberate:
- *   1. Admin signs in against live Auth (never local SQLite).
- *   2. Admin picks a terminal account from the live user list and signs that
- *      terminal in — again live Auth. The persisted session is the terminal's,
- *      so Sync and unlock calls are authenticated as the device.
- *   3. First pull copies products/users into SQLite for offline POS work.
+ * One live sign-in, with whatever credentials the account already has in the
+ * database: an admin's dashboard email and password, or a dedicated Terminal
+ * account's. Either role may push sales and call verify_pin, so a shop with a
+ * single admin login needs nothing extra created before it can sell.
  *
- * Cashier unlock after this also hits live verify_pin — local SQLite is only
- * for selling once the shift has started.
+ * The session signed in here is the one persisted on the device, so later syncs
+ * need no login. Terminals are told apart by their own device id, not by the
+ * account, so two tablets on the same admin login still report separately.
+ *
+ * Cashier unlock after this hits live verify_pin — local SQLite is only for
+ * selling once the shift has started.
  */
 export default function SetupScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const layout = useLayout();
 
-  const [step, setStep] = useState<Step>("admin-login");
-  const [adminEmail, setAdminEmail] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
-  const [terminals, setTerminals] = useState<User[]>([]);
-  const [selectedTerminalId, setSelectedTerminalId] = useState<string | null>(null);
-  const [terminalPassword, setTerminalPassword] = useState("");
+  const [step, setStep] = useState<Step>("sign-in");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [account, setAccount] = useState<User | null>(null);
   const [label, setLabel] = useState("");
   const [deviceId, setDeviceId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -73,109 +72,53 @@ export default function SetupScreen() {
     void prime();
   }, []);
 
-  /** Restore the admin session if a terminal sign-in failed mid-way. */
-  async function restoreAdminSession(): Promise<void> {
-    const supabase = getSupabase();
-    const { error: restoreError } = await supabase.auth.signInWithPassword({
-      email: adminEmail.trim(),
-      password: adminPassword,
-    });
-    if (restoreError) {
-      setStep("admin-login");
-      setError("Admin session lost. Sign in as admin again.");
+  async function connectTerminal() {
+    if (!email.trim() || !password) {
+      setError("Enter the email and password for the account.");
+      return;
     }
-  }
 
-  async function signInAsAdmin() {
     setBusy(true);
     setError(null);
 
     try {
       const supabase = getSupabase();
       const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: adminEmail.trim(),
-        password: adminPassword,
+        email: email.trim(),
+        password,
       });
 
       if (signInError) {
-        setError("That email and password do not match an admin account.");
+        setError("That email and password do not match an account.");
         return;
       }
 
-      // Live role check — never trust a local users row here.
-      const { data: role, error: roleError } = await supabase.rpc("current_app_role");
-      if (roleError || role !== "admin") {
+      // Live role check — never trust a local users row here. Signing out on a
+      // wrong role matters: an unusable session would otherwise persist and
+      // make this device look enrolled on the next cold start.
+      const me = await currentAppUser(supabase);
+
+      if (!me) {
         await supabase.auth.signOut();
-        setError("That account is not an admin. Only an admin can enroll a terminal.");
-        return;
-      }
-
-      const users = await listUsers(supabase, { includeInactive: false });
-      const devices = users.filter((user) => user.role === "device");
-      if (devices.length === 0) {
         setError(
-          "No terminal accounts exist yet. Add one in admin under Cashiers with the Terminal role.",
+          "That login has no staff record in this shop. Ask an admin to add it under Users.",
         );
         return;
       }
 
-      setTerminals(devices);
-      setSelectedTerminalId(devices[0]?.id ?? null);
-      setStep("pick-terminal");
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Could not reach the server — check the connection and try again",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function connectTerminal() {
-    const terminal = terminals.find((entry) => entry.id === selectedTerminalId);
-    if (!terminal) {
-      setError("Pick a terminal to connect.");
-      return;
-    }
-    if (!terminalPassword) {
-      setError("Enter that terminal's password.");
-      return;
-    }
-
-    setBusy(true);
-    setError(null);
-
-    try {
-      const supabase = getSupabase();
-
-      // Live Auth again — this replaces the admin session with the terminal's.
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: terminal.email,
-        password: terminalPassword,
-      });
-
-      if (signInError) {
-        await restoreAdminSession();
-        setError("That terminal password is wrong. Try again.");
-        return;
-      }
-
-      const { data: role, error: roleError } = await supabase.rpc("current_app_role");
-      if (roleError || role !== "device") {
+      if (me.role !== "admin" && me.role !== "device") {
         await supabase.auth.signOut();
-        await restoreAdminSession();
-        setError("That account is not a terminal. Pick a Terminal-role account.");
+        setError(
+          "Cashiers do not sign in here — they unlock with a PIN once setup is done. Use an admin or Terminal account.",
+        );
         return;
       }
 
-      if (label.trim()) await setDeviceLabel(label.trim());
-      else if (terminal.name) await setDeviceLabel(terminal.name);
-
+      setAccount(me);
+      await setDeviceLabel(label.trim() || me.name);
+      setPassword("");
       setStep("first-pull");
     } catch (cause) {
-      await restoreAdminSession();
       setError(
         cause instanceof Error
           ? cause.message
@@ -224,102 +167,33 @@ export default function SetupScreen() {
         style={{
           width: "100%",
           maxWidth: 480,
-          gap: space.lg,
+          gap: space.xl,
         }}
       >
-        <View style={{ alignItems: "center", gap: space.xs }}>
-          <Text style={[authChrome.heading, { textAlign: "center" }]}>
-            Set up this terminal
-          </Text>
-          <Text style={[authChrome.muted, { textAlign: "center" }]}>
-            An admin signs in first, then connects this device to a terminal
-            account. Needs a live connection — not the local copy on this tablet.
-          </Text>
-        </View>
+        <AuthBrandMark
+          title="Set up this terminal"
+          subtitle="Sign in once with an admin or Terminal account, then download the catalog. Needs a live connection — not the local copy on this tablet."
+        />
 
-        {step === "admin-login" ? (
-          <Card style={[formCard, { gap: space.md }]}>
-            <SectionTitle icon={LogIn} title="1. Sign in as admin" />
+        {step === "sign-in" ? (
+          <Card style={{ gap: space.md }}>
+            <SectionTitle icon={LogIn} title="1. Sign in" />
             <Text style={styles.muted}>
-              Use the same email and password as the admin dashboard.
+              The same email and password as the admin dashboard, or a Terminal
+              account&apos;s. Not a cashier PIN — cashiers unlock after setup.
             </Text>
             <LabelledInput
-              label="Admin email"
-              value={adminEmail}
-              onChangeText={setAdminEmail}
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
               autoCapitalize="none"
               keyboardType="email-address"
               autoComplete="email"
             />
             <LabelledInput
               label="Password"
-              value={adminPassword}
-              onChangeText={setAdminPassword}
-              secureTextEntry
-              autoComplete="password"
-            />
-            {error ? <ErrorNote>{error}</ErrorNote> : null}
-            <Button
-              label={busy ? "Signing in..." : "Sign in as admin"}
-              large
-              icon={LogIn}
-              busy={busy}
-              onPress={() => void signInAsAdmin()}
-            />
-          </Card>
-        ) : null}
-
-        {step === "pick-terminal" ? (
-          <Card style={[formCard, { gap: space.md }]}>
-            <SectionTitle icon={Users} title="2. Connect a terminal account" />
-            <Text style={styles.muted}>
-              Pick which terminal this device is, then enter that account's
-              password (set under Admin → Cashiers for a Terminal role — not a
-              cashier PIN). The session kept on this device is the terminal's.
-            </Text>
-
-            <View style={{ gap: space.xs }}>
-              {terminals.map((terminal) => {
-                const selected = terminal.id === selectedTerminalId;
-                return (
-                  <Pressable
-                    key={terminal.id}
-                    onPress={() => setSelectedTerminalId(terminal.id)}
-                    accessibilityState={{ selected }}
-                    style={{
-                      minHeight: 52,
-                      paddingHorizontal: space.md,
-                      paddingVertical: space.sm,
-                      borderRadius: radius.sm,
-                      borderWidth: 1,
-                      borderColor: selected ? color.primary : color.border,
-                      backgroundColor: selected
-                        ? color.primaryTint
-                        : "rgba(255,255,255,0.9)",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: fontSize.body,
-                        fontWeight: "700",
-                        color: selected ? color.primaryDark : color.ink,
-                      }}
-                    >
-                      {terminal.name}
-                    </Text>
-                    <Text style={{ fontSize: fontSize.caption, color: color.inkMuted }}>
-                      {terminal.email}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <LabelledInput
-              label="Terminal password"
-              value={terminalPassword}
-              onChangeText={setTerminalPassword}
+              value={password}
+              onChangeText={setPassword}
               secureTextEntry
               autoComplete="password"
             />
@@ -331,27 +205,23 @@ export default function SetupScreen() {
             />
             {error ? <ErrorNote>{error}</ErrorNote> : null}
             <Button
-              label={busy ? "Connecting..." : "Connect terminal"}
+              label={busy ? "Connecting..." : "Connect this terminal"}
               large
               icon={Smartphone}
               busy={busy}
               onPress={() => void connectTerminal()}
             />
-            <Button
-              label="Back to admin sign-in"
-              variant="secondary"
-              onPress={() => {
-                setStep("admin-login");
-                setError(null);
-                setTerminalPassword("");
-              }}
-            />
           </Card>
         ) : null}
 
         {step === "first-pull" ? (
-          <Card style={[formCard, { gap: space.md }]}>
-            <SectionTitle icon={CloudDownload} title="3. Download products and cashiers" />
+          <Card style={{ gap: space.md }}>
+            <SectionTitle icon={CloudDownload} title="2. Download products and cashiers" />
+            {account ? (
+              <Text style={styles.muted}>
+                Connected as {account.name} ({account.email}).
+              </Text>
+            ) : null}
             <Text style={styles.muted}>
               Everything is copied down once so the POS works with no connection.
             </Text>
@@ -367,7 +237,7 @@ export default function SetupScreen() {
         ) : null}
 
         {step === "done" ? (
-          <Card style={[formCard, { gap: space.md }]}>
+          <Card style={{ gap: space.md }}>
             <SectionTitle icon={CheckCircle2} title="Ready to sell" />
             <Text style={styles.muted}>
               {pulled === null
@@ -391,11 +261,11 @@ export default function SetupScreen() {
             gap: space.xs,
           }}
         >
-          <Smartphone size={13} color="rgba(255,255,255,0.7)" strokeWidth={2} />
+          <Smartphone size={13} color={color.inkMuted} strokeWidth={2} />
           <Text
             style={[
               styles.numeric,
-              { fontSize: fontSize.caption, color: "rgba(255,255,255,0.7)" },
+              { fontSize: fontSize.caption, color: color.inkMuted },
             ]}
           >
             Terminal id {deviceId.slice(0, 8)}
@@ -409,11 +279,6 @@ export default function SetupScreen() {
   );
 }
 
-const formCard = {
-  backgroundColor: "rgba(255,255,255,0.85)",
-  borderColor: "rgba(255,255,255,0.55)",
-} as const;
-
 function LabelledInput({
   label,
   secureTextEntry,
@@ -424,7 +289,14 @@ function LabelledInput({
 
   return (
     <View style={{ gap: space.xs }}>
-      <Text style={{ fontSize: fontSize.caption, color: color.inkMuted, fontWeight: "600" }}>
+      <Text
+        style={{
+          fontSize: fontSize.caption,
+          color: color.inkMuted,
+          fontWeight: "700",
+          letterSpacing: 0.3,
+        }}
+      >
         {label}
       </Text>
       <View
@@ -435,7 +307,7 @@ function LabelledInput({
           borderWidth: 1,
           borderColor: color.border,
           borderRadius: radius.sm,
-          backgroundColor: color.surface,
+          backgroundColor: color.paper,
           paddingLeft: space.md,
           paddingRight: isPassword ? space.xs : space.md,
         }}

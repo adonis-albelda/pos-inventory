@@ -92,7 +92,7 @@ export function CompanyIntro({ onDone }: { onDone: () => void }) {
       accessibilityLabel="Continue"
       style={{
         flex: 1,
-        backgroundColor: color.primaryDark,
+        backgroundColor: color.paper,
         alignItems: "center",
         justifyContent: "center",
         paddingHorizontal: space.xl,
@@ -107,34 +107,39 @@ export function CompanyIntro({ onDone }: { onDone: () => void }) {
       >
         <View
           style={{
-            width: 96,
-            height: 96,
+            width: 112,
+            height: 112,
             borderRadius: 0,
+            borderWidth: 1,
+            borderColor: color.border,
             backgroundColor: color.surface,
             alignItems: "center",
             justifyContent: "center",
-            padding: space.sm,
+            padding: space.md,
           }}
         >
           <Image
             source={LOGO}
-            style={{ width: 72, height: 72 }}
+            style={{ width: 80, height: 80 }}
             resizeMode="contain"
             accessibilityIgnoresInvertColors
           />
         </View>
 
-        <Text
-          style={{
-            fontSize: fontSize.headingSm,
-            fontWeight: "800",
-            letterSpacing: 1.2,
-            color: color.onPrimary,
-            textAlign: "center",
-          }}
-        >
-          {COMPANY_NAME}
-        </Text>
+        <View style={{ alignItems: "center", gap: space.md }}>
+          <Text
+            style={{
+              fontSize: fontSize.headingSm,
+              fontWeight: "800",
+              letterSpacing: 1.4,
+              color: color.ink,
+              textAlign: "center",
+            }}
+          >
+            {COMPANY_NAME}
+          </Text>
+          <View style={{ width: 44, height: 3, backgroundColor: color.primary }} />
+        </View>
       </Animated.View>
 
       <View
@@ -154,7 +159,7 @@ export function CompanyIntro({ onDone }: { onDone: () => void }) {
             fontSize: fontSize.bodyLg,
             fontWeight: "500",
             lineHeight: 24,
-            color: "rgba(255,255,255,0.9)",
+            color: color.inkMuted,
             textAlign: "center",
           }}
         >
@@ -168,7 +173,7 @@ export function CompanyIntro({ onDone }: { onDone: () => void }) {
           bottom: space["3xl"],
           fontSize: fontSize.caption,
           fontWeight: "600",
-          color: "rgba(255,255,255,0.45)",
+          color: color.inkMuted,
           letterSpacing: 0.4,
         }}
       >

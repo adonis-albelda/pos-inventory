@@ -31,9 +31,10 @@ on conflict (email) do update
        is_active    = true;
 
 -- ---------------------------------------------------------------------------
--- 2. Terminal — one row per POS device, role 'device'.
---    RLS only lets 'device' and 'admin' push sales, so a terminal without a
---    row here can authenticate and still have every sync rejected.
+-- 2. Terminal — optional. One row per POS device, role 'device'.
+--    RLS lets 'device' and 'admin' push sales, and POS setup accepts either, so
+--    a shop can enroll a tablet on the admin login above and skip this. Create a
+--    device account when terminals should not hold the admin password.
 -- ---------------------------------------------------------------------------
 insert into public.users (name, email, role, auth_user_id, is_active)
 select 'Counter 1',                            -- EDIT: display name
@@ -60,11 +61,12 @@ begin
       'No admin linked. Create the auth user in Authentication - Users, then set the email in section 1.';
   end if;
 
+  -- Not fatal: POS setup also accepts the admin login.
   if not exists (
     select 1 from public.users where role = 'device' and auth_user_id is not null
   ) then
-    raise exception
-      'No terminal linked. Create the auth user in Authentication - Users, then set the email in section 2.';
+    raise notice
+      'No terminal account linked. Terminals will enroll with the admin login until you create one (section 2).';
   end if;
 end $$;
 

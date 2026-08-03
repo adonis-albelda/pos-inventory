@@ -17,6 +17,11 @@ function needsAuthPassword(role: string): boolean {
   return role === "admin" || role === "device";
 }
 
+/** Roles verify_pin() accepts for a terminal unlock. Admins optionally. */
+function canUnlockWithPin(role: string): boolean {
+  return role === "cashier" || role === "admin";
+}
+
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (
@@ -152,11 +157,12 @@ export async function saveCashier(
   if (!name) return { error: "Name is required.", ok: false };
   if (!email) return { error: "Email is required — it identifies the person.", ok: false };
 
-  if (role === "cashier") {
+  if (canUnlockWithPin(role)) {
     if (pin && !isValidPin(pin)) {
       return { error: "The PIN must be 4 to 6 digits.", ok: false };
     }
-    if (!id && !pin) {
+    // Admins can unlock without one; a cashier with no PIN cannot work at all.
+    if (role === "cashier" && !id && !pin) {
       return { error: "Set a PIN so this cashier can unlock a terminal.", ok: false };
     }
   }
@@ -217,7 +223,7 @@ export async function saveCashier(
         ...(needsAuthPassword(role)
           ? { must_change_password: mustChangePassword }
           : { must_change_password: false }),
-        ...(role === "cashier" && pin ? { pin_hash: hashPin(id, pin) } : {}),
+        ...(canUnlockWithPin(role) && pin ? { pin_hash: hashPin(id, pin) } : {}),
       });
 
       if (needsAuthPassword(role) && password) {
@@ -239,7 +245,7 @@ export async function saveCashier(
           email,
           role,
           auth_user_id: null,
-          pin_hash: null,
+          pin_hash: canUnlockWithPin(role) && pin ? hashPin(newId, pin) : null,
           can_sell: role === "device" ? true : canSell,
           must_change_password: mustChangePassword,
         });
@@ -255,7 +261,7 @@ export async function saveCashier(
           name,
           email,
           role,
-          pin_hash: role === "cashier" && pin ? hashPin(newId, pin) : null,
+          pin_hash: canUnlockWithPin(role) && pin ? hashPin(newId, pin) : null,
           can_sell: canSell,
           must_change_password: false,
         });

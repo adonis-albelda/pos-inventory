@@ -81,9 +81,14 @@ estimated stock = last synced stock - pending local sales
 
 - **Dashboard** — Supabase Auth email and password. The account must map to a `public.users`
   row with role `admin`.
-- **Terminal** — enrolled once during setup with its own account (role `device`). That session
-  persists on device so later syncs need no login.
-- **Cashier** — picks their name and enters a PIN; live `verify_pin()` checks it.
+- **Terminal** — enrolled once during setup with any Auth login whose `public.users` role is
+  `admin` or `device`, since every POS write policy accepts both. A shop with one admin login
+  needs no extra account; a dedicated `device` account is for keeping terminals off the admin
+  password. That session persists on device so later syncs need no login. Sales are attributed
+  by the device's own id, not by the enrolling account.
+- **Cashier** — picks their name and enters a PIN; live `verify_pin()` checks it. Admins may
+  also hold a PIN, set on the same Users form as their password, so an owner can ring up a sale
+  without a second account.
   Needs a connection to unlock. After unlock, selling uses local SQLite. The PIN is a
   shift lock, not a data boundary: the terminal session is what RLS authenticates.
 
