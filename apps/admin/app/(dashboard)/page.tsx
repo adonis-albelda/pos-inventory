@@ -335,6 +335,67 @@ export default async function DashboardPage() {
             </Table>
           )}
         </Card>
+
+        <Card>
+          <CardHeader
+            icon={CalendarClock}
+            title="Upcoming supplier payments"
+            description="Unpaid installment terms due within a week."
+            action={
+              <Link
+                href={"/purchase-orders" as Route}
+                className="inline-flex items-center gap-1 text-body font-medium text-primary hover:underline"
+              >
+                Purchase orders
+                <ArrowRight size={14} />
+              </Link>
+            }
+          />
+          {upcomingPayments === null ? (
+            <EmptyState
+              icon={CalendarClock}
+              title="Sign in as the owner to see this"
+              instruction="Purchasing is an owner-only part of the dashboard."
+            />
+          ) : upcomingPayments.length === 0 ? (
+            <EmptyState
+              icon={CalendarClock}
+              title="Nothing due this week"
+              instruction="Unpaid installment terms due in the next 7 days will show up here."
+            />
+          ) : (
+            <Table>
+              <thead>
+                <tr>
+                  <Th>Supplier</Th>
+                  <Th>Due</Th>
+                  <Th numeric>Amount</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {upcomingPayments.map((payment) => (
+                  <tr key={payment.id}>
+                    <Td>
+                      <Link
+                        href={`/purchase-orders/${payment.purchaseOrderId}` as Route}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {payment.supplierName}
+                      </Link>
+                      <span className="ml-1.5 text-caption text-ink-muted">
+                        #{payment.termNumber}
+                      </span>
+                    </Td>
+                    <Td className="num text-ink-muted">{payment.dueDate ?? "—"}</Td>
+                    <Td numeric>
+                      <Money value={payment.amount} />
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </Card>
       </div>
     </div>
   );
