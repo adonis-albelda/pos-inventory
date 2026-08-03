@@ -1,0 +1,78 @@
+import type { Route } from "next";
+import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
+
+function cx(...parts: (string | false | null | undefined)[]): string {
+  return parts.filter(Boolean).join(" ");
+}
+
+export interface TabItem {
+  key: string;
+  label: string;
+  icon?: LucideIcon;
+  /** Shown beside the label — a page can say how much sits behind a tab. */
+  count?: number;
+  href: string;
+}
+
+/**
+ * Tabs are links, not state: the URL keeps which one is open, so a refresh, a
+ * back button and a shared link all land on the same view. Filters travel in
+ * the same query string, which is why each caller builds its own hrefs.
+ */
+export function TabNav({
+  items,
+  active,
+  className,
+}: {
+  items: TabItem[];
+  active: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cx(
+        "-mx-1 overflow-x-auto overscroll-x-contain px-1 [-webkit-overflow-scrolling:touch]",
+        className,
+      )}
+    >
+      <nav
+        aria-label="Inventory views"
+        className="inline-flex min-w-full gap-1 rounded-md border border-border bg-paper p-1 sm:min-w-0"
+      >
+        {items.map((item) => {
+          const current = item.key === active;
+          const Icon = item.icon;
+
+          return (
+            <Link
+              key={item.key}
+              href={item.href as Route}
+              aria-current={current ? "page" : undefined}
+              className={cx(
+                "inline-flex flex-1 items-center justify-center gap-2 rounded-sm px-3 py-2 text-body font-medium whitespace-nowrap transition-colors sm:flex-none sm:px-4",
+                "focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none",
+                current
+                  ? "bg-surface text-ink shadow-xs"
+                  : "text-ink-muted hover:text-ink",
+              )}
+            >
+              {Icon ? <Icon size={16} strokeWidth={2} /> : null}
+              {item.label}
+              {item.count !== undefined ? (
+                <span
+                  className={cx(
+                    "num rounded-sm px-1.5 py-0.5 text-caption",
+                    current ? "bg-primary/10 text-primary" : "bg-border/60 text-ink-muted",
+                  )}
+                >
+                  {item.count}
+                </span>
+              ) : null}
+            </Link>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}

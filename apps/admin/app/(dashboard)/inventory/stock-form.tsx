@@ -1,18 +1,57 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
-import { ClipboardCheck } from "lucide-react";
-import type { Product } from "@double-a/shared-types";
 import {
+  useActionState,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { ClipboardCheck, ClipboardList, Search, TriangleAlert, X } from "lucide-react";
+import type { Product } from "@double-a/shared-types";
+import { stockLevel } from "@double-a/shared-types";
+import {
+  Badge,
   Button,
   ErrorNote,
   Field,
   Input,
+  Money,
   Select,
   SuccessNote,
 } from "@/components/ui";
 import { EMPTY_FORM_STATE } from "@/lib/form-state";
 import { moveStock } from "./actions";
+
+function cx(...parts: (string | false | null | undefined)[]): string {
+  return parts.filter(Boolean).join(" ");
+}
+
+type Mode = "in" | "out" | "count";
+
+const MODES: { key: Mode; label: string; hint: string; reason: string }[] = [
+  {
+    key: "in",
+    label: "Add stock",
+    hint: "A delivery arrived, or stock came back.",
+    reason: "restock",
+  },
+  {
+    key: "out",
+    label: "Remove stock",
+    hint: "Damaged, expired, or taken out of the shop.",
+    reason: "adjustment",
+  },
+  {
+    key: "count",
+    label: "Set counted total",
+    hint: "After a stock take. The difference is recorded as the movement.",
+    reason: "adjustment",
+  },
+];
+
+const QUICK_STEPS = [1, 5, 10, 50];
 
 export function StockForm({
   products,
@@ -24,39 +63,133 @@ export function StockForm({
   onDone?: () => void;
 }) {
   const [state, action, pending] = useActionState(moveStock, EMPTY_FORM_STATE);
+  const [productId, setProductId] = useState(defaultProductId ?? "");
+  const [mode, setMode] = useState<Mode>("in");
+  const [quantity, setQuantity] = useState("");
+  const [reason, setReason] = useState("restock");
+
+  // The reason follows the mode unless the owner says otherwise, so the common
+  // case is one fewer decision.
+  useEffect(() => {
+    const preset = MODES.find((option) => option.key === mode);
+    if (preset) setReason(preset.reason);
+  }, [mode]);
 
   useEffect(() => {
     if (state.ok) onDone?.();
   }, [state.ok, onDone]);
 
+  const product = products.find((candidate) => candidate.id === productId) ?? null;
+  const typed = Number.parseInt(quantity, 10);
+  const magnitude = Number.isFinite(typed) ? typed : null;
+
+  const current = product?.stockQuantity ?? 0;
+  const delta =
+    magnitude === null
+      ? null
+      : mode === "count"
+        ? magnitude - current
+        : mode === "out"
+          ? -magnitude
+          : magnitude;
+  const projected = delta === null ? null : current + delta;
+  const activeMode = MODES.find((option) => option.key === mode);
+
+  function step(by: number) {
+    const base = magnitude ?? 0;
+    setQuantity(String(Math.max(0, base + by)));
+  }
+
   return (
-    <form action={action} className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Field label="Product">
-          <Select name="product_id" defaultValue={defaultProductId ?? ""} required>
-            <option value="">Pick a product</option>
-            {products.map((product) => (
-              <option key={product.id} value={product.id}>
-                {product.name}
-                {product.sku ? ` (${product.sku})` : ""}
-              </option>
-            ))}
-          </Select>
-        </Field>
+    <form action={action} className="space-y-5">
+      <input type="hidden" name="product_id" value={productId} />
+      <input type="hidden" name="mode" value={mode} />
 
-        <Field label="Direction">
-          <Select name="direction" defaultValue="in">
-            <option value="in">Add stock</option>
-            <option value="out">Remove stock</option>
-          </Select>
-        </Field>
+      <ProductPicker
+        products={products}
+        selected={product}
+        onSelect={(next) => setProductId(next?.id ?? "")}
+      />
 
-        <Field label="Quantity">
-          <Input name="quantity" type="number" min="1" step="1" required />
-        </Field>
+      <fieldset>
+        <legend className="mb-1 block text-caption font-medium text-ink-muted">
+          What happened
+        </legend>
+        <div className="grid gap-1 rounded-sm border border-border bg-paper p-1 sm:grid-cols-3">
+          {MODES.map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => setMode(option.key)}
+              aria-pressed={mode === option.key}
+              className={cx(
+                "cursor-pointer rounded-sm px-3 py-2 text-body font-medium transition-colors",
+                "focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none",
+                mode === option.key
+                  ? "bg-surface text-ink shadow-xs"
+                  : "text-ink-muted hover:text-ink",
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        {activeMode ? (
+          <p className="mt-1 text-caption text-ink-muted">{activeMode.hint}</p>
+        ) : null}
+      </fieldset>
 
-        <Field label="Reason">
-          <Select name="reason" defaultValue="restock">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <Field
+            label={mode === "count" ? "Counted quantity" : "Quantity"}
+            hint={
+              product
+                ? `Counted in ${product.unit}.`
+                : "Pick a product to see how it is sold."
+            }
+          >
+            <Input
+              name="quantity"
+              type="number"
+              inputMode="numeric"
+              min={mode === "count" ? 0 : 1}
+              step="1"
+              required
+              value={quantity}
+              onChange={(event) => setQuantity(event.target.value)}
+              className="num"
+            />
+          </Field>
+          {mode === "count" ? null : (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {QUICK_STEPS.map((amount) => (
+                <button
+                  key={amount}
+                  type="button"
+                  onClick={() => step(amount)}
+                  className="num cursor-pointer rounded-sm bg-paper px-2 py-1 text-caption font-medium text-ink-muted transition-colors hover:bg-border/60 hover:text-ink"
+                >
+                  +{amount}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setQuantity("")}
+                className="cursor-pointer rounded-sm px-2 py-1 text-caption font-medium text-ink-muted transition-colors hover:text-ink"
+              >
+                Clear
+              </button>
+            </div>
+          )}
+        </div>
+
+        <Field label="Reason" hint="Shows in the movement history and on reports.">
+          <Select
+            name="reason"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+          >
             <option value="restock">Restock</option>
             <option value="adjustment">Adjustment</option>
             <option value="oversell_correction">Oversell correction</option>
@@ -64,16 +197,269 @@ export function StockForm({
         </Field>
       </div>
 
-      <Field label="Note" hint="Optional. Shows in the movement history.">
-        <Input name="note" placeholder="Delivery from supplier, recount after audit..." />
+      <Field label="Note" hint="Optional. Delivery receipt number, who counted, why.">
+        <Input
+          name="note"
+          placeholder="Delivery from supplier, recount after audit..."
+        />
       </Field>
+
+      {product ? (
+        <MovementPreview
+          product={product}
+          mode={mode}
+          delta={delta}
+          projected={projected}
+        />
+      ) : null}
 
       {state.error ? <ErrorNote>{state.error}</ErrorNote> : null}
       {state.ok ? <SuccessNote>Movement recorded. Stock updated.</SuccessNote> : null}
 
-      <Button type="submit" loading={pending} icon={ClipboardCheck} className="w-full sm:w-auto">
-        {pending ? "Recording..." : "Record movement"}
-      </Button>
+      <div className="flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
+        <Button
+          type="submit"
+          loading={pending}
+          icon={ClipboardCheck}
+          disabled={!productId}
+        >
+          {pending ? "Recording..." : "Record movement"}
+        </Button>
+      </div>
     </form>
   );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Product picker — a shop with hundreds of lines cannot be scrolled in a      */
+/* <select>, and the person restocking knows the name or the SKU.             */
+/* -------------------------------------------------------------------------- */
+
+function ProductPicker({
+  products,
+  selected,
+  onSelect,
+}: {
+  products: Product[];
+  selected: Product | null;
+  onSelect: (product: Product | null) => void;
+}) {
+  const [term, setTerm] = useState("");
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function onPointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [open]);
+
+  const matches = useMemo(() => {
+    const needle = term.trim().toLowerCase();
+    const pool = needle
+      ? products.filter((product) =>
+          [product.name, product.sku, product.barcode].some((value) =>
+            value?.toLowerCase().includes(needle),
+          ),
+        )
+      : products;
+    return pool.slice(0, 8);
+  }, [products, term]);
+
+  if (selected) {
+    const level = stockLevel(selected.stockQuantity, selected.reorderPoint);
+
+    return (
+      <div className="rounded-sm border border-primary/30 bg-primary-tint px-3 py-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-body-lg font-semibold">{selected.name}</p>
+            <p className="mt-0.5 truncate text-caption text-ink-muted">
+              {selected.sku ? <span className="num">{selected.sku}</span> : "No SKU"}
+              {selected.category ? ` · ${selected.category}` : ""}
+            </p>
+            <p className="mt-2 flex flex-wrap items-center gap-2 text-caption text-ink-muted">
+              <span>
+                On hand{" "}
+                <span className="num font-semibold text-ink">
+                  {selected.stockQuantity}
+                </span>{" "}
+                {selected.unit}
+              </span>
+              <span>·</span>
+              <span>
+                reorder at <span className="num">{selected.reorderPoint}</span>
+              </span>
+              <span>·</span>
+              <span>
+                cost <Money value={selected.costPrice} className="text-ink" />
+              </span>
+              {selected.stockQuantity < 0 ? (
+                <Badge tone="danger">Oversold</Badge>
+              ) : level === "out" ? (
+                <Badge tone="danger">Out of stock</Badge>
+              ) : level === "low" ? (
+                <Badge tone="warning">Low stock</Badge>
+              ) : null}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            icon={X}
+            onClick={() => {
+              onSelect(null);
+              setTerm("");
+              setOpen(true);
+            }}
+          >
+            Change
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={rootRef} className="relative">
+      <Field label="Product" hint="Search by name, SKU or barcode.">
+        <Input
+          icon={Search}
+          value={term}
+          placeholder="Start typing a product…"
+          autoComplete="off"
+          onFocus={() => setOpen(true)}
+          onChange={(event) => {
+            setTerm(event.target.value);
+            setOpen(true);
+          }}
+        />
+      </Field>
+
+      {open ? (
+        <ul className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-sm border border-border bg-surface py-1 shadow-lg">
+          {matches.length === 0 ? (
+            <li className="px-3 py-3 text-body text-ink-muted">
+              Nothing matches that. Products are added on the Products page.
+            </li>
+          ) : (
+            matches.map((product) => (
+              <li key={product.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelect(product);
+                    setOpen(false);
+                  }}
+                  className="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-paper"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-body font-medium">
+                      {product.name}
+                    </span>
+                    <span className="block truncate text-caption text-ink-muted">
+                      {product.sku ? <span className="num">{product.sku}</span> : "No SKU"}
+                      {product.category ? ` · ${product.category}` : ""}
+                    </span>
+                  </span>
+                  <span className="num shrink-0 text-caption text-ink-muted">
+                    {product.stockQuantity} {product.unit}
+                  </span>
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Preview — what the movement will do, before it is recorded                 */
+/* -------------------------------------------------------------------------- */
+
+function MovementPreview({
+  product,
+  mode,
+  delta,
+  projected,
+}: {
+  product: Product;
+  mode: Mode;
+  delta: number | null;
+  projected: number | null;
+}) {
+  if (delta === null || projected === null) {
+    return (
+      <PreviewShell>
+        <p className="flex items-start gap-2 text-caption text-ink-muted">
+          <ClipboardList size={14} className="mt-0.5 shrink-0" />
+          <span>
+            Stock is never edited directly — type a quantity and the movement is
+            worked out here first.
+          </span>
+        </p>
+      </PreviewShell>
+    );
+  }
+
+  const worth = Math.abs(delta) * product.costPrice;
+
+  return (
+    <PreviewShell>
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="text-caption text-ink-muted">On hand</span>
+        <span className="num text-heading-sm font-semibold">{product.stockQuantity}</span>
+        <span
+          className={cx(
+            "num rounded-sm px-2 py-0.5 text-caption font-semibold",
+            delta < 0 ? "bg-danger/12 text-danger" : "bg-success/12 text-success",
+          )}
+        >
+          {delta > 0 ? "+" : ""}
+          {delta}
+        </span>
+        <span className="text-caption text-ink-muted">becomes</span>
+        <span
+          className={cx(
+            "num text-heading-sm font-semibold",
+            projected < 0 && "text-danger",
+          )}
+        >
+          {projected}
+        </span>
+        <span className="text-caption text-ink-muted">{product.unit}</span>
+      </div>
+
+      <p className="mt-2 text-caption text-ink-muted">
+        {mode === "count" ? (
+          "Recorded as the difference, so the history still explains the change."
+        ) : (
+          <>
+            Worth <Money value={worth} className="text-ink" /> at supplier cost.
+          </>
+        )}
+      </p>
+
+      {projected < 0 ? (
+        <p className="mt-2 flex items-start gap-2 text-caption font-medium text-danger">
+          <TriangleAlert size={14} className="mt-0.5 shrink-0" />
+          <span>
+            This leaves stock negative. Record it only if the shelf really is
+            short — an oversell correction is the way back to zero.
+          </span>
+        </p>
+      ) : null}
+    </PreviewShell>
+  );
+}
+
+function PreviewShell({ children }: { children: ReactNode }) {
+  return <div className="rounded-sm border border-border bg-paper px-3 py-3">{children}</div>;
 }

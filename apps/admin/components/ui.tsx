@@ -1,4 +1,6 @@
 import type { ComponentProps, ReactNode } from "react";
+import type { Route } from "next";
+import Link from "next/link";
 import {
   AlertTriangle,
   Check,
@@ -106,6 +108,24 @@ export function ButtonLink({
   );
 }
 
+type IconActionTone = "neutral" | "primary" | "danger";
+
+const ICON_ACTION_TONES: Record<IconActionTone, string> = {
+  neutral: "text-ink-muted hover:bg-border/60 hover:text-ink",
+  primary: "text-ink-muted hover:bg-primary/10 hover:text-primary",
+  danger: "text-ink-muted hover:bg-danger/10 hover:text-danger",
+};
+
+function iconActionClass(tone: IconActionTone, className?: string): string {
+  return cx(
+    "inline-flex size-10 cursor-pointer items-center justify-center rounded-sm transition-colors sm:size-8",
+    "focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none",
+    "disabled:pointer-events-none disabled:opacity-50",
+    ICON_ACTION_TONES[tone],
+    className,
+  );
+}
+
 /** Square, icon-only action for table rows, where a labelled button would crowd. */
 export function IconButton({
   icon: Icon,
@@ -117,7 +137,7 @@ export function IconButton({
 }: Omit<ComponentProps<"button">, "children"> & {
   icon: LucideIcon;
   label: string;
-  tone?: "neutral" | "danger";
+  tone?: IconActionTone;
 }) {
   return (
     <button
@@ -125,18 +145,36 @@ export function IconButton({
       type={type}
       title={label}
       aria-label={label}
-      className={cx(
-        "inline-flex size-10 cursor-pointer items-center justify-center rounded-sm transition-colors sm:size-8",
-        "focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none",
-        "disabled:pointer-events-none disabled:opacity-50",
-        tone === "danger"
-          ? "text-ink-muted hover:bg-danger/10 hover:text-danger"
-          : "text-ink-muted hover:bg-border/60 hover:text-ink",
-        className,
-      )}
+      className={iconActionClass(tone, className)}
     >
       <Icon size={16} strokeWidth={2} />
     </button>
+  );
+}
+
+/** The same row action, where the action is going somewhere rather than doing something. */
+export function IconLink({
+  icon: Icon,
+  label,
+  href,
+  tone = "neutral",
+  className,
+}: {
+  icon: LucideIcon;
+  label: string;
+  href: string;
+  tone?: IconActionTone;
+  className?: string;
+}) {
+  return (
+    <Link
+      href={href as Route}
+      title={label}
+      aria-label={label}
+      className={iconActionClass(tone, className)}
+    >
+      <Icon size={16} strokeWidth={2} />
+    </Link>
   );
 }
 

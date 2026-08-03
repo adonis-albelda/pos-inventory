@@ -163,6 +163,7 @@ export function toInventoryMovement(
     reason: row.reason as InventoryReason,
     referenceId: row.reference_id,
     note: row.note,
+    createdBy: row.created_by,
     createdAt: row.created_at,
   };
 }

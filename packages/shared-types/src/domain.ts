@@ -362,6 +362,8 @@ export interface InventoryMovement {
   /** Points at a sale for `reason: "sale"`, at nothing for adjustments. */
   referenceId: string | null;
   note: string | null;
+  /** The user who recorded it. Null for anything the POS pushed. */
+  createdBy: string | null;
   createdAt: string;
 }
 

@@ -29,24 +29,29 @@ export default async function MenuPage() {
 
   return (
     <div className="space-y-3">
-      <Card className="px-4 py-5 sm:px-6 sm:py-6">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-5">
+      <Card className="px-2 py-4 sm:px-6 sm:py-6">
+        <div className="grid grid-cols-3 gap-x-2 gap-y-4 sm:grid-cols-4 sm:gap-x-4 sm:gap-y-6 lg:grid-cols-5">
           {NAV_ITEMS.map(({ href, label, icon: Icon, blurb, tone }) => (
             <Link
               key={href}
               href={href}
-              className="group flex flex-col items-center gap-2 rounded-sm px-2 py-3 text-center transition-colors hover:bg-primary-tint focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none"
+              className="group flex flex-col items-center gap-1.5 rounded-sm px-1 py-2 text-center transition-colors hover:bg-primary-tint focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none sm:gap-2 sm:px-2 sm:py-3"
             >
               <span
                 className={[
-                  "flex size-14 items-center justify-center rounded-md transition-transform group-hover:-translate-y-0.5",
+                  "flex size-12 items-center justify-center rounded-md transition-transform group-hover:-translate-y-0.5 sm:size-14",
                   TILE_STYLES[tone] ?? TILE_STYLES.neutral,
                 ].join(" ")}
               >
-                <Icon size={28} strokeWidth={1.75} />
+                <Icon size={24} strokeWidth={1.75} className="sm:hidden" />
+                <Icon size={28} strokeWidth={1.75} className="hidden sm:block" />
               </span>
-              <span className="text-body font-semibold text-ink">{label}</span>
-              <span className="text-caption leading-snug text-ink-muted">{blurb}</span>
+              <span className="text-caption font-semibold text-ink sm:text-body">
+                {label}
+              </span>
+              <span className="hidden text-caption leading-snug text-ink-muted sm:block">
+                {blurb}
+              </span>
             </Link>
           ))}
         </div>

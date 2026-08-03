@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, LayoutGrid, LogOut } from "lucide-react";
+import { ChevronDown, LayoutGrid, LogOut, Menu, X } from "lucide-react";
 import { storeInitial } from "@double-a/shared-types";
 import { signOut } from "@/app/login/actions";
 import { UiModeToggle } from "@/components/ui-mode-toggle";
@@ -13,7 +13,7 @@ import type { UiMode } from "@/lib/ui-mode";
 /**
  * The desktop-launcher chrome: a title bar, a menu bar of dropdowns, and a
  * status strip — the shape of the till software many owners ran before this.
- * Pages inside are unchanged; only navigation looks different.
+ * On a phone the menu bar collapses into one drawer; pages are unchanged.
  */
 export function ClassicShell({
   storeName,
@@ -32,6 +32,12 @@ export function ClassicShell({
 }) {
   const pathname = usePathname();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    setOpenGroup(null);
+    setDrawerOpen(false);
+  }, [pathname]);
 
   const brandMark = storeLogoUrl ? (
     <img
@@ -45,32 +51,49 @@ export function ClassicShell({
     </span>
   );
 
+  function isActive(href: string): boolean {
+    return href === "/" ? pathname === "/" : pathname.startsWith(href);
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-paper">
       {/* Title bar */}
-      <div className="flex items-center gap-3 bg-primary px-3 py-2 text-white">
-        {brandMark}
-        <span className="min-w-0 truncate text-body font-semibold tracking-tight">
-          {storeName} — Back Office
+      <div className="flex items-center gap-2 bg-primary px-2 py-2 pt-[calc(0.5rem+env(safe-area-inset-top))] text-white sm:gap-3 sm:px-3">
+        <button
+          type="button"
+          aria-label={drawerOpen ? "Close menu" : "Open menu"}
+          aria-expanded={drawerOpen}
+          onClick={() => setDrawerOpen((value) => !value)}
+          className="inline-flex size-9 shrink-0 items-center justify-center rounded-sm transition-colors hover:bg-white/10 md:hidden"
+        >
+          {drawerOpen ? <X size={18} strokeWidth={2} /> : <Menu size={18} strokeWidth={2} />}
+        </button>
+
+        <span className="hidden sm:block">{brandMark}</span>
+        <span className="min-w-0 flex-1 truncate text-body font-semibold tracking-tight">
+          <span className="sm:hidden">{storeName}</span>
+          <span className="hidden sm:inline">{storeName} — Back Office</span>
         </span>
-        <span className="ml-auto hidden truncate text-caption text-white/75 sm:block">
+
+        <span className="hidden truncate text-caption text-white/75 lg:block">
           {userName ?? "Signed in"}
           {userEmail ? ` · ${userEmail}` : ""}
         </span>
+
         <form action={signOut}>
           <button
             type="submit"
-            className="inline-flex items-center gap-1.5 rounded-sm border border-white/25 px-2 py-1 text-caption transition-colors hover:bg-white/10"
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-sm border border-white/25 px-2 py-1 text-caption transition-colors hover:bg-white/10"
           >
             <LogOut size={13} strokeWidth={2} />
-            Exit
+            <span className="hidden sm:inline">Exit</span>
           </button>
         </form>
       </div>
 
-      {/* Menu bar */}
+      {/* Menu bar — desktop */}
       <div
-        className="flex flex-wrap items-center gap-0.5 border-b border-border bg-surface px-2 py-1"
+        className="hidden flex-wrap items-center gap-0.5 border-b border-border bg-surface px-2 py-1 md:flex"
         onMouseLeave={() => setOpenGroup(null)}
       >
         <Link
@@ -89,9 +112,7 @@ export function ClassicShell({
         {NAV_GROUPS.filter((group) => group.label).map((group) => {
           const label = group.label as string;
           const open = openGroup === label;
-          const active = group.items.some((item) =>
-            item.href === "/" ? pathname === "/" : pathname.startsWith(item.href),
-          );
+          const active = group.items.some((item) => isActive(item.href));
 
           return (
             <div key={label} className="relative">
@@ -132,16 +153,96 @@ export function ClassicShell({
         <UiModeToggle mode={mode} className="ml-auto w-auto [&_button]:w-auto" />
       </div>
 
-      <main className="flex-1 px-3 py-3">
+      {/* Menu bar — phone: one shortcut row, full list behind the drawer */}
+      <div className="flex items-center gap-2 border-b border-border bg-surface px-2 py-1.5 md:hidden">
+        <Link
+          href="/menu"
+          className={[
+            "inline-flex min-h-9 items-center gap-1.5 rounded-sm px-2.5 text-caption font-medium transition-colors",
+            pathname === "/menu"
+              ? "bg-primary text-white"
+              : "text-ink hover:bg-border/60",
+          ].join(" ")}
+        >
+          <LayoutGrid size={14} strokeWidth={2} />
+          Main menu
+        </Link>
+        <span className="truncate text-caption text-ink-muted">
+          {userName ?? "Signed in"}
+        </span>
+      </div>
+
+      {drawerOpen ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close menu"
+            className="fixed inset-0 z-40 bg-ink/40 md:hidden"
+            onClick={() => setDrawerOpen(false)}
+          />
+          <nav
+            aria-label="Main menu"
+            className="fixed inset-x-0 top-0 z-50 max-h-[85vh] overflow-y-auto border-b border-border bg-surface pt-[env(safe-area-inset-top)] shadow-md md:hidden"
+          >
+            <div className="flex items-center justify-between border-b border-border px-3 py-3">
+              <p className="truncate text-body font-semibold">{storeName}</p>
+              <button
+                type="button"
+                aria-label="Close menu"
+                onClick={() => setDrawerOpen(false)}
+                className="inline-flex size-9 items-center justify-center rounded-sm text-ink-muted hover:bg-border/60 hover:text-ink"
+              >
+                <X size={18} strokeWidth={2} />
+              </button>
+            </div>
+
+            <div className="space-y-3 px-3 py-3">
+              {NAV_GROUPS.map((group) => (
+                <div key={group.label ?? "top"} className="space-y-1">
+                  {group.label ? (
+                    <p className="px-1 text-[0.6875rem] font-medium tracking-wide text-ink-muted/80 uppercase">
+                      {group.label}
+                    </p>
+                  ) : null}
+                  {group.items.map(({ href, label, icon: Icon }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      onClick={() => setDrawerOpen(false)}
+                      className={[
+                        "flex min-h-11 items-center gap-3 rounded-sm px-3 text-body transition-colors",
+                        isActive(href)
+                          ? "bg-primary font-medium text-white"
+                          : "text-ink hover:bg-border/50",
+                      ].join(" ")}
+                    >
+                      <Icon
+                        size={17}
+                        strokeWidth={2}
+                        className={isActive(href) ? "text-white" : "text-ink-muted"}
+                      />
+                      {label}
+                    </Link>
+                  ))}
+                </div>
+              ))}
+
+              <UiModeToggle mode={mode} className="pt-1" />
+            </div>
+          </nav>
+        </>
+      ) : null}
+
+      <main className="flex-1 px-2 py-2 sm:px-3 sm:py-3">
         <div className="mx-auto max-w-6xl">{children}</div>
       </main>
 
       {/* Status strip */}
-      <footer className="border-t border-border bg-surface px-3 py-1.5">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-1 text-caption text-ink-muted">
+      <footer className="border-t border-border bg-surface px-3 py-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))]">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-4 gap-y-1 text-caption text-ink-muted sm:justify-start">
           <span>{storeName}</span>
           <span className="hidden sm:inline">{userEmail}</span>
-          <span className="ml-auto">
+          <span className="sm:ml-auto">
             Powered by:{" "}
             <a
               href="mailto:doubleadigitalsolutions@gmail.com"

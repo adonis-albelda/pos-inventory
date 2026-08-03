@@ -42,9 +42,7 @@ export default async function SaleDetailPage({
   const sale = await getSale(supabase, id);
   if (!sale) notFound();
 
-  const movements = (await listMovements(supabase, { limit: 400 })).filter(
-    (movement) => movement.referenceId === id,
-  );
+  const movements = await listMovements(supabase, { referenceId: id, limit: 400 });
 
   const customer = saleCustomer(sale);
 
