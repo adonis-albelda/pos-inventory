@@ -8,6 +8,8 @@ import { storeInitial } from "@double-a/shared-types";
 import { signOut } from "@/app/login/actions";
 import { Button } from "@/components/ui";
 import { SidebarNav } from "@/components/sidebar-nav";
+import { UiModeToggle } from "@/components/ui-mode-toggle";
+import type { UiMode } from "@/lib/ui-mode";
 
 /**
  * Desktop: sticky left rail. Phone/tablet: top bar + off-canvas drawer.
@@ -19,6 +21,7 @@ export function DashboardShell({
   userName,
   userEmail,
   initials,
+  mode,
   children,
 }: {
   storeName: string;
@@ -26,6 +29,7 @@ export function DashboardShell({
   userName: string | null;
   userEmail: string | null;
   initials: string;
+  mode: UiMode;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -147,7 +151,8 @@ export function DashboardShell({
               <p className="truncate text-caption text-ink-muted">{userEmail}</p>
             </div>
           </div>
-          <form action={signOut} className="mt-3">
+          <UiModeToggle mode={mode} className="mt-3" />
+          <form action={signOut} className="mt-2">
             <Button variant="secondary" size="sm" icon={LogOut} type="submit" className="w-full">
               Sign out
             </Button>
@@ -156,11 +161,11 @@ export function DashboardShell({
       </aside>
 
       <main className="flex min-w-0 min-h-screen flex-1 flex-col pt-[calc(3.5rem+env(safe-area-inset-top))] lg:pt-0">
-        <div className="flex-1 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <div className="flex-1 px-3 py-3 sm:px-4 sm:py-4 lg:px-5 lg:py-5">
           <div className="mx-auto max-w-6xl">{children}</div>
         </div>
 
-        <footer className="mt-auto border-t border-border px-4 py-4 sm:px-6 lg:px-8">
+        <footer className="mt-auto border-t border-border px-3 py-3 sm:px-4 lg:px-5">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-2 text-caption text-ink-muted">
             <img
               src="/logo.png"

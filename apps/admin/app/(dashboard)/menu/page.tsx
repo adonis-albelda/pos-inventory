@@ -1,0 +1,91 @@
+import Link from "next/link";
+import { fetchStoreSettings, listProducts, listUsers } from "@double-a/supabase";
+import { getServerClient } from "@/lib/supabase/server";
+import { NAV_ITEMS } from "@/lib/nav";
+import { Card } from "@/components/ui";
+
+const TILE_STYLES: Record<string, string> = {
+  primary: "bg-primary/10 text-primary",
+  accent: "bg-accent/20 text-[#8a6516]",
+  success: "bg-success/12 text-success",
+  warning: "bg-warning/18 text-[#8a6516]",
+  danger: "bg-danger/12 text-danger",
+  neutral: "bg-border/70 text-ink-muted",
+};
+
+/**
+ * The classic launcher: one screen of labelled icons, the way back-office till
+ * software has always opened. Same routes as the sidebar, different doorway.
+ */
+export default async function MenuPage() {
+  const supabase = await getServerClient();
+  const [store, products, users] = await Promise.all([
+    fetchStoreSettings(supabase),
+    listProducts(supabase, { includeInactive: true }),
+    listUsers(supabase, { includeInactive: true }),
+  ]);
+
+  const now = new Date();
+
+  return (
+    <div className="space-y-3">
+      <Card className="px-4 py-5 sm:px-6 sm:py-6">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-5">
+          {NAV_ITEMS.map(({ href, label, icon: Icon, blurb, tone }) => (
+            <Link
+              key={href}
+              href={href}
+              className="group flex flex-col items-center gap-2 rounded-sm px-2 py-3 text-center transition-colors hover:bg-primary-tint focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none"
+            >
+              <span
+                className={[
+                  "flex size-14 items-center justify-center rounded-md transition-transform group-hover:-translate-y-0.5",
+                  TILE_STYLES[tone] ?? TILE_STYLES.neutral,
+                ].join(" ")}
+              >
+                <Icon size={28} strokeWidth={1.75} />
+              </span>
+              <span className="text-body font-semibold text-ink">{label}</span>
+              <span className="text-caption leading-snug text-ink-muted">{blurb}</span>
+            </Link>
+          ))}
+        </div>
+      </Card>
+
+      <Card className="px-4 py-4 sm:px-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h2 className="font-display text-heading-sm font-semibold">
+            System Information
+          </h2>
+          <p className="text-caption text-ink-muted">
+            {now.toLocaleDateString(undefined, {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
+          </p>
+        </div>
+
+        <dl className="mt-3 grid gap-x-6 gap-y-2 text-caption sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <dt className="text-ink-muted">Shop</dt>
+            <dd className="font-medium text-ink">{store.name}</dd>
+          </div>
+          <div>
+            <dt className="text-ink-muted">Products on file</dt>
+            <dd className="num font-medium text-ink">{products.length}</dd>
+          </div>
+          <div>
+            <dt className="text-ink-muted">Users on file</dt>
+            <dd className="num font-medium text-ink">{users.length}</dd>
+          </div>
+          <div>
+            <dt className="text-ink-muted">Data</dt>
+            <dd className="font-medium text-ink">Supabase (online)</dd>
+          </div>
+        </dl>
+      </Card>
+    </div>
+  );
+}
