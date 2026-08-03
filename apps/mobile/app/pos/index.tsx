@@ -405,6 +405,14 @@ export default function SellScreen() {
   async function finishSale() {
     if (!cashier || lines.length === 0) return;
 
+    if (!cashier.canSell) {
+      Alert.alert(
+        "Sales disabled",
+        "Your account cannot complete sales. Ask an admin to turn sales back on.",
+      );
+      return;
+    }
+
     setSaving(true);
     try {
       let saleCustomer = normaliseCustomerDetails(customer);
@@ -890,7 +898,16 @@ export default function SellScreen() {
               icon={CheckCircle2}
               disabled={lines.length === 0 || saving}
               style={{ marginTop: space.md }}
-              onPress={() => setConfirmOpen(true)}
+              onPress={() => {
+                if (!cashier?.canSell) {
+                  Alert.alert(
+                    "Sales disabled",
+                    "Your account cannot complete sales. Ask an admin to turn sales back on.",
+                  );
+                  return;
+                }
+                setConfirmOpen(true);
+              }}
             />
           </View>
         </View>

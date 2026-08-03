@@ -121,6 +121,10 @@ export interface User {
   email: string;
   role: UserRole;
   isActive: boolean;
+  /** Floor staff may unlock when false, but cannot complete a sale. */
+  canSell: boolean;
+  /** Dashboard admin must set a new password before using the app. */
+  mustChangePassword: boolean;
   updatedAt: string;
 }
 

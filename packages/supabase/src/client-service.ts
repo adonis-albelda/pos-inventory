@@ -13,7 +13,7 @@ export function createServiceRoleClient(): DoubleAClient {
 
   if (!url || !key) {
     throw new Error(
-      "SUPABASE_SERVICE_ROLE_KEY is missing. Add it to apps/admin/.env.local (Project Settings → API → service_role). Needed to set terminal Auth passwords from the dashboard.",
+      "SUPABASE_SERVICE_ROLE_KEY is missing. Add it to apps/admin/.env.local (Project Settings → API → service_role / secret). Needed to create admin and terminal Auth logins from the dashboard.",
     );
   }
 

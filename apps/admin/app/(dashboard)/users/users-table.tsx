@@ -1,19 +1,33 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import {
+  Ban,
+  CircleCheck,
+  KeyRound,
+  Lock,
   Pencil,
   Shield,
   Smartphone,
-  UserCheck,
   UserRound,
-  UserX,
   type LucideIcon,
 } from "lucide-react";
 import type { User } from "@double-a/shared-types";
-import { Badge, IconButton, Table, Td, Th } from "@/components/ui";
-import { ConfirmDialog, Sheet } from "@/components/overlay";
-import { toggleCashierActive } from "./actions";
+import {
+  Badge,
+  Button,
+  ErrorNote,
+  Field,
+  IconButton,
+  Input,
+  SuccessNote,
+  Table,
+  Td,
+  Th,
+} from "@/components/ui";
+import { ConfirmDialog, Dialog, Sheet } from "@/components/overlay";
+import { EMPTY_FORM_STATE } from "@/lib/form-state";
+import { resetUserPassword, toggleUserCanSell } from "./actions";
 import { UserForm } from "./user-form";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -28,18 +42,73 @@ const ROLE_ICONS: Record<string, LucideIcon> = {
   device: Smartphone,
 };
 
+function ResetPasswordForm({
+  user,
+  onDone,
+}: {
+  user: User;
+  onDone: () => void;
+}) {
+  const [state, action, pending] = useActionState(resetUserPassword, EMPTY_FORM_STATE);
+
+  useEffect(() => {
+    if (state.ok) onDone();
+  }, [state.ok, onDone]);
+
+  return (
+    <form action={action} className="space-y-4">
+      <input type="hidden" name="id" value={user.id} />
+      <p className="text-caption text-ink-muted">
+        Sets a new Auth password for <span className="font-medium text-ink">{user.email}</span>.
+        Cashiers use a PIN — reset that from Edit instead.
+      </p>
+      <Field label="New password">
+        <Input
+          icon={Lock}
+          name="password"
+          type="password"
+          autoComplete="new-password"
+          minLength={6}
+          required
+        />
+      </Field>
+      <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-sm border border-border bg-surface px-3 text-body">
+        <input
+          type="checkbox"
+          name="must_change_password"
+          value="true"
+          defaultChecked
+          className="size-4 accent-primary"
+        />
+        Require password change after next login
+      </label>
+      {state.error ? <ErrorNote>{state.error}</ErrorNote> : null}
+      {state.ok ? <SuccessNote>Password updated.</SuccessNote> : null}
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button type="button" variant="secondary" onClick={onDone} disabled={pending}>
+          Cancel
+        </Button>
+        <Button type="submit" loading={pending} icon={KeyRound}>
+          Reset password
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 export function UsersTable({ users }: { users: User[] }) {
   const [editing, setEditing] = useState<User | null>(null);
+  const [resetting, setResetting] = useState<User | null>(null);
   const [toggling, setToggling] = useState<User | null>(null);
   const [pending, startTransition] = useTransition();
 
-  function confirmToggle() {
+  function confirmToggleSell() {
     if (!toggling) return;
     const form = new FormData();
     form.set("id", toggling.id);
-    form.set("is_active", String(!toggling.isActive));
+    form.set("can_sell", String(!toggling.canSell));
     startTransition(async () => {
-      await toggleCashierActive(form);
+      await toggleUserCanSell(form);
       setToggling(null);
     });
   }
@@ -59,9 +128,14 @@ export function UsersTable({ users }: { users: User[] }) {
         <tbody>
           {users.map((user) => {
             const RoleIcon = ROLE_ICONS[user.role] ?? UserRound;
+            const canResetPassword = user.role === "admin" || user.role === "device";
+            const showSellToggle = user.role !== "device";
 
             return (
-              <tr key={user.id} className={user.isActive ? "" : "opacity-60"}>
+              <tr
+                key={user.id}
+                className={user.canSell && user.isActive ? "" : "opacity-60"}
+              >
                 <Td>
                   <span className="flex items-center gap-2.5">
                     <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -73,25 +147,41 @@ export function UsersTable({ users }: { users: User[] }) {
                 <Td className="text-ink-muted">{user.email}</Td>
                 <Td>{ROLE_LABELS[user.role] ?? user.role}</Td>
                 <Td>
-                  {user.isActive ? (
-                    <Badge tone="success">Active</Badge>
-                  ) : (
-                    <Badge tone="neutral">Inactive</Badge>
-                  )}
+                  <span className="flex flex-wrap gap-1.5">
+                    {!user.isActive ? (
+                      <Badge tone="neutral">Inactive</Badge>
+                    ) : !user.canSell && user.role !== "device" ? (
+                      <Badge tone="warning">Sales off</Badge>
+                    ) : (
+                      <Badge tone="success">Active</Badge>
+                    )}
+                    {user.mustChangePassword && canResetPassword ? (
+                      <Badge tone="warning">Must change password</Badge>
+                    ) : null}
+                  </span>
                 </Td>
                 <Td>
                   <div className="flex justify-end gap-1">
                     <IconButton
                       icon={Pencil}
-                      label="Edit person"
+                      label="Edit user"
                       onClick={() => setEditing(user)}
                     />
-                    <IconButton
-                      icon={user.isActive ? UserX : UserCheck}
-                      label={user.isActive ? "Deactivate" : "Reactivate"}
-                      tone={user.isActive ? "danger" : "neutral"}
-                      onClick={() => setToggling(user)}
-                    />
+                    {canResetPassword ? (
+                      <IconButton
+                        icon={KeyRound}
+                        label="Reset password"
+                        onClick={() => setResetting(user)}
+                      />
+                    ) : null}
+                    {showSellToggle ? (
+                      <IconButton
+                        icon={user.canSell ? Ban : CircleCheck}
+                        label={user.canSell ? "Disable sales" : "Enable sales"}
+                        tone={user.canSell ? "danger" : "neutral"}
+                        onClick={() => setToggling(user)}
+                      />
+                    ) : null}
                   </div>
                 </Td>
               </tr>
@@ -103,7 +193,7 @@ export function UsersTable({ users }: { users: User[] }) {
       <Sheet
         open={editing !== null}
         onClose={() => setEditing(null)}
-        title={editing ? `Edit ${editing.name}` : "Edit person"}
+        title={editing ? `Edit ${editing.name}` : "Edit user"}
         description="Changes reach terminals on their next sync."
         wide
       >
@@ -112,18 +202,37 @@ export function UsersTable({ users }: { users: User[] }) {
         ) : null}
       </Sheet>
 
+      <Dialog
+        open={resetting !== null}
+        onClose={() => setResetting(null)}
+        title="Reset password"
+        description={
+          resetting
+            ? `New Auth password for ${resetting.name}.`
+            : "New Auth password."
+        }
+      >
+        {resetting ? (
+          <ResetPasswordForm
+            key={resetting.id}
+            user={resetting}
+            onDone={() => setResetting(null)}
+          />
+        ) : null}
+      </Dialog>
+
       <ConfirmDialog
         open={toggling !== null}
         onClose={() => setToggling(null)}
-        onConfirm={confirmToggle}
+        onConfirm={confirmToggleSell}
         pending={pending}
-        title={toggling?.isActive ? "Deactivate person?" : "Reactivate person?"}
+        title={toggling?.canSell ? "Disable sales?" : "Enable sales?"}
         description={
-          toggling?.isActive
-            ? `${toggling.name} will no longer unlock a terminal or sign in (live check).`
-            : `${toggling?.name ?? "This person"} will be able to sign in again.`
+          toggling?.canSell
+            ? `${toggling.name} can still unlock a terminal, but cannot complete a sale until you turn sales back on.`
+            : `${toggling?.name ?? "This person"} can complete sales again after the next unlock or refresh.`
         }
-        confirmLabel={toggling?.isActive ? "Deactivate" : "Reactivate"}
+        confirmLabel={toggling?.canSell ? "Disable sales" : "Enable sales"}
       />
     </>
   );

@@ -28,16 +28,19 @@ export async function signIn(
   }
 
   // auth_user_id is revoked from authenticated clients — never filter on it.
-  // current_app_role() is security definer (same as mobile enrollment).
-  const { data: role, error: roleError } = await supabase.rpc("current_app_role");
-  if (roleError || role !== "admin") {
+  const { data: appRows, error: appError } = await supabase.rpc("current_app_user");
+  const appUser = Array.isArray(appRows) ? appRows[0] : appRows;
+  if (appError || !appUser || appUser.role !== "admin") {
     await supabase.auth.signOut();
     return {
       error: "This account is not an active admin. Ask an owner to grant access.",
     };
   }
 
-  // Only ever an in-app path, so an open redirect is not possible here.
+  if (appUser.must_change_password) {
+    redirect("/change-password");
+  }
+
   redirect(next.startsWith("/") ? (next as Route) : "/");
 }
 

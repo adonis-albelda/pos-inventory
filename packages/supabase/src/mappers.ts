@@ -85,7 +85,14 @@ export function toExpense(row: Tables<"expenses">): Expense {
  */
 export type UserRowSubset = Pick<
   Tables<"users">,
-  "id" | "name" | "email" | "role" | "is_active" | "updated_at"
+  | "id"
+  | "name"
+  | "email"
+  | "role"
+  | "is_active"
+  | "can_sell"
+  | "must_change_password"
+  | "updated_at"
 >;
 
 export function toUser(row: UserRowSubset): User {
@@ -95,6 +102,8 @@ export function toUser(row: UserRowSubset): User {
     email: row.email,
     role: row.role as UserRole,
     isActive: row.is_active,
+    canSell: row.can_sell,
+    mustChangePassword: row.must_change_password,
     updatedAt: row.updated_at,
   };
 }

@@ -28,22 +28,44 @@ export default async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isPublic = PUBLIC_PATHS.some((path) =>
-    request.nextUrl.pathname.startsWith(path),
-  );
+  const path = request.nextUrl.pathname;
+  const isPublic = PUBLIC_PATHS.some((publicPath) => path.startsWith(publicPath));
+  const isChangePassword = path.startsWith("/change-password");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    url.searchParams.set("next", request.nextUrl.pathname);
+    url.searchParams.set("next", path);
     return NextResponse.redirect(url);
   }
 
-  if (user && request.nextUrl.pathname === "/login") {
+  if (user && path === "/login") {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     url.search = "";
     return NextResponse.redirect(url);
+  }
+
+  if (user && !isPublic) {
+    const { data: rows, error: appError } = await supabase.rpc("current_app_user");
+    if (!appError) {
+      const appUser = Array.isArray(rows) ? rows[0] : rows;
+      const mustChange = Boolean(appUser?.must_change_password);
+
+      if (mustChange && !isChangePassword) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/change-password";
+        url.search = "";
+        return NextResponse.redirect(url);
+      }
+
+      if (!mustChange && isChangePassword) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/";
+        url.search = "";
+        return NextResponse.redirect(url);
+      }
+    }
   }
 
   return response;

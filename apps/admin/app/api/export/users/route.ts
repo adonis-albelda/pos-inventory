@@ -6,8 +6,15 @@ export async function GET(): Promise<Response> {
     const users = await listUsers(supabase, { includeInactive: true });
 
     return {
-      headers: ["name", "email", "role", "is_active"],
-      rows: users.map((user) => [user.name, user.email, user.role, user.isActive]),
+      headers: ["name", "email", "role", "is_active", "can_sell", "must_change_password"],
+      rows: users.map((user) => [
+        user.name,
+        user.email,
+        user.role,
+        user.isActive,
+        user.canSell,
+        user.mustChangePassword,
+      ]),
     };
   });
 }

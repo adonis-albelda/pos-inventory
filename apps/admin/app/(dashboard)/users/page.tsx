@@ -25,8 +25,8 @@ export default async function UsersPage({
     <div className="space-y-6">
       <PageHeader
         icon={Users}
-        title="Cashiers"
-        description="Who can ring up a sale, and on which terminals."
+        title="Users"
+        description="Cashiers, admins, and terminal logins — who can sell, and who can sign in here."
       />
 
       <UsersPanel

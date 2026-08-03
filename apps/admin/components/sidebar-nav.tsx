@@ -31,7 +31,7 @@ const NAV: { href: Route; label: string; icon: LucideIcon }[] = [
   { href: "/customers" as Route, label: "Customers", icon: ContactRound },
   { href: "/expenses" as Route, label: "Expenses", icon: Wallet },
   { href: "/reports", label: "Reports", icon: ChartColumn },
-  { href: "/users", label: "Cashiers", icon: Users },
+  { href: "/users", label: "Users", icon: Users },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

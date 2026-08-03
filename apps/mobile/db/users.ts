@@ -12,19 +12,21 @@ export async function upsertUsers(users: User[]): Promise<void> {
   await db.withTransactionAsync(async () => {
     for (const user of users) {
       await db.runAsync(
-        `INSERT INTO users (id, name, email, role, pin_hash, is_active, updated_at)
-         VALUES (?, ?, ?, ?, NULL, ?, ?)
+        `INSERT INTO users (id, name, email, role, pin_hash, is_active, can_sell, updated_at)
+         VALUES (?, ?, ?, ?, NULL, ?, ?, ?)
          ON CONFLICT (id) DO UPDATE SET
            name = excluded.name,
            email = excluded.email,
            role = excluded.role,
            is_active = excluded.is_active,
+           can_sell = excluded.can_sell,
            updated_at = excluded.updated_at`,
         user.id,
         user.name,
         user.email,
         user.role,
         user.isActive ? 1 : 0,
+        user.canSell ? 1 : 0,
         user.updatedAt,
       );
     }

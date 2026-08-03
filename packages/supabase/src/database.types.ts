@@ -19,6 +19,8 @@ export interface Database {
           auth_user_id: string | null;
           pin_hash: string | null;
           is_active: boolean;
+          can_sell: boolean;
+          must_change_password: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -30,6 +32,8 @@ export interface Database {
           auth_user_id?: string | null;
           pin_hash?: string | null;
           is_active?: boolean;
+          can_sell?: boolean;
+          must_change_password?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -41,6 +45,8 @@ export interface Database {
           auth_user_id?: string | null;
           pin_hash?: string | null;
           is_active?: boolean;
+          can_sell?: boolean;
+          must_change_password?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -572,9 +578,15 @@ export interface Database {
           email: string;
           role: string;
           is_active: boolean;
+          can_sell: boolean;
+          must_change_password: boolean;
           created_at: string;
           updated_at: string;
         }[];
+      };
+      clear_must_change_password: {
+        Args: Record<string, never>;
+        Returns: undefined;
       };
       is_admin: {
         Args: Record<string, never>;

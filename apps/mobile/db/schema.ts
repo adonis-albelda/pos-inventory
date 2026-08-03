@@ -211,6 +211,11 @@ ALTER TABLE categories ADD COLUMN markup_percent REAL NOT NULL DEFAULT 0;
 ALTER TABLE categories ADD COLUMN markup_applied INTEGER NOT NULL DEFAULT 0;
 `;
 
+/** Floor staff may unlock with sales disabled; POS blocks completeSale. */
+const V7_USER_CAN_SELL = `
+ALTER TABLE users ADD COLUMN can_sell INTEGER NOT NULL DEFAULT 1;
+`;
+
 /** Ordered, append-only. Never edit a step that has shipped. */
 export const MIGRATIONS: Migration[] = [
   { version: 1, sql: V1_INITIAL },
@@ -219,6 +224,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 4, sql: V4_SALE_CUSTOMER },
   { version: 5, sql: V5_STORE_SETTINGS },
   { version: 6, sql: V6_CUSTOMERS_PAID_DELIVERY },
+  { version: 7, sql: V7_USER_CAN_SELL },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.reduce(

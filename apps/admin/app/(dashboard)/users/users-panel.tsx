@@ -32,7 +32,7 @@ export function UsersPanel({
         <RecordToolbar
           searchPlaceholder="Search name or email…"
           query={query}
-          addLabel="Add person"
+          addLabel="Add user"
           onAdd={() => setCreating(true)}
           exportHref="/api/export/users"
         />
@@ -40,11 +40,11 @@ export function UsersPanel({
         {total === 0 ? (
           <EmptyState
             icon={UserPlus}
-            title={query ? "Nothing matches that search" : "No one added yet"}
+            title={query ? "Nothing matches that search" : "No users yet"}
             instruction={
               query
                 ? "Try a different name or email."
-                : "Add a cashier with a PIN, an admin with a dashboard password, or a terminal login."
+                : "Add cashiers (PIN), admins (dashboard password), or terminal logins."
             }
           />
         ) : (
@@ -64,8 +64,8 @@ export function UsersPanel({
       <Sheet
         open={creating}
         onClose={() => setCreating(false)}
-        title="Add a person"
-        description="Cashiers unlock with a PIN. Admins sign in here with email and password."
+        title="Add user"
+        description="Pick a role — the form explains what that person can do."
         wide
       >
         <UserForm onDone={() => setCreating(false)} />
