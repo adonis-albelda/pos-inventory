@@ -564,6 +564,18 @@ export interface Database {
         Args: Record<string, never>;
         Returns: string | null;
       };
+      current_app_user: {
+        Args: Record<string, never>;
+        Returns: {
+          id: string;
+          name: string;
+          email: string;
+          role: string;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        }[];
+      };
       is_admin: {
         Args: Record<string, never>;
         Returns: boolean;

@@ -27,13 +27,10 @@ export async function signIn(
     return { error: "That email and password do not match an account." };
   }
 
-  const { data: appUser } = await supabase
-    .from("users")
-    .select("role, is_active")
-    .eq("auth_user_id", (await supabase.auth.getUser()).data.user?.id ?? "")
-    .maybeSingle();
-
-  if (!appUser || !appUser.is_active || appUser.role !== "admin") {
+  // auth_user_id is revoked from authenticated clients — never filter on it.
+  // current_app_role() is security definer (same as mobile enrollment).
+  const { data: role, error: roleError } = await supabase.rpc("current_app_role");
+  if (roleError || role !== "admin") {
     await supabase.auth.signOut();
     return {
       error: "This account is not an active admin. Ask an owner to grant access.",

@@ -95,12 +95,10 @@ export async function currentAppUser(
   } = await client.auth.getUser();
   if (!user) return null;
 
-  const { data, error } = await client
-    .from("users")
-    .select(USER_COLUMNS)
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
-
+  // auth_user_id is not selectable by authenticated clients. This RPC resolves
+  // the row as security definer, same idea as current_app_role().
+  const { data, error } = await client.rpc("current_app_user");
   if (error) throw error;
-  return data ? toUser(data) : null;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? toUser(row) : null;
 }
