@@ -8,10 +8,15 @@ import type {
   PaymentMethod,
   Product,
   ProductUnit,
+  PurchaseOrder,
+  PurchaseOrderItem,
+  PurchaseOrderPayment,
+  PurchaseOrderStatus,
   Sale,
   SaleItem,
   SaleStatus,
   StoreSettings,
+  Supplier,
   User,
   UserRole,
 } from "@double-a/shared-types";
@@ -150,6 +155,70 @@ export function toSaleItem(row: Tables<"sale_items">): SaleItem {
     listPrice: Number(row.list_price ?? row.unit_price),
     unitCost: Number(row.unit_cost ?? 0),
     subtotal: Number(row.subtotal),
+  };
+}
+
+export function toSupplier(row: Tables<"suppliers">): Supplier {
+  return {
+    id: row.id,
+    name: row.name,
+    contactPerson: row.contact_person,
+    phone: row.phone,
+    email: row.email,
+    address: row.address,
+    isActive: row.is_active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toPurchaseOrder(row: Tables<"purchase_orders">): PurchaseOrder {
+  return {
+    id: row.id,
+    supplierId: row.supplier_id,
+    status: row.status as PurchaseOrderStatus,
+    orderDate: row.order_date,
+    expectedDate: row.expected_date,
+    referenceNo: row.reference_no,
+    notes: row.notes,
+    totalAmount: Number(row.total_amount),
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toPurchaseOrderItem(
+  row: Tables<"purchase_order_items">,
+): PurchaseOrderItem {
+  return {
+    id: row.id,
+    purchaseOrderId: row.purchase_order_id,
+    productId: row.product_id,
+    productName: row.product_name,
+    quantityOrdered: row.quantity_ordered,
+    quantityReceived: row.quantity_received,
+    unitCost: Number(row.unit_cost),
+    lineTotal: Number(row.line_total),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toPurchaseOrderPayment(
+  row: Tables<"purchase_order_payments">,
+): PurchaseOrderPayment {
+  return {
+    id: row.id,
+    purchaseOrderId: row.purchase_order_id,
+    termNumber: row.term_number,
+    dueDate: row.due_date,
+    amount: Number(row.amount),
+    isPaid: row.is_paid,
+    paidDate: row.paid_date,
+    note: row.note,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 

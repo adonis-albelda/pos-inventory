@@ -1,4 +1,5 @@
-import { Modal, Pressable, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Animated, Modal, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePathname, useRouter } from "expo-router";
 import {
@@ -25,6 +26,10 @@ const TABS = [
   { href: "/pos/sync", label: "Sync", icon: CloudUpload },
 ] as const;
 
+const DRAWER_WIDTH_RATIO = 0.82;
+const DRAWER_MAX_WIDTH = 360;
+const ANIM_MS = 220;
+
 /**
  * Account panel opened from the store logo. Nav tabs, shift identity, and
  * end-shift live here so the top chrome stays one quiet line.
@@ -41,27 +46,57 @@ export function AccountDrawer({
   const pathname = usePathname();
   const { cashier, lock } = useSession();
   const store = useStoreSettings();
+  const { width } = useWindowDimensions();
+  const panelWidth = Math.min(width * DRAWER_WIDTH_RATIO, DRAWER_MAX_WIDTH);
 
-  if (!cashier) return null;
+  // Stays mounted through the close animation so it slides fully off-screen
+  // instead of just popping away mid-motion.
+  const [mounted, setMounted] = useState(open);
+  const translateX = useRef(new Animated.Value(open ? 0 : -panelWidth)).current;
+  const scrim = useRef(new Animated.Value(open ? 1 : 0)).current;
 
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      Animated.parallel([
+        Animated.timing(translateX, { toValue: 0, duration: ANIM_MS, useNativeDriver: true }),
+        Animated.timing(scrim, { toValue: 1, duration: ANIM_MS, useNativeDriver: true }),
+      ]).start();
+      return;
+    }
+
+    Animated.parallel([
+      Animated.timing(translateX, { toValue: -panelWidth, duration: ANIM_MS, useNativeDriver: true }),
+      Animated.timing(scrim, { toValue: 0, duration: ANIM_MS, useNativeDriver: true }),
+    ]).start(({ finished }) => {
+      if (finished) setMounted(false);
+    });
+  }, [open, panelWidth, scrim, translateX]);
+
+  if (!cashier || !mounted) return null;
+
+  // Close the drawer first and let its slide-out finish before the screen
+  // underneath changes — running both animations at once is what reads as
+  // the previous and next screen "mixing up".
   function go(href: (typeof TABS)[number]["href"]) {
     onClose();
-    router.replace(href);
+    setTimeout(() => router.replace(href), ANIM_MS);
   }
 
   function endShift() {
-    lock();
     onClose();
-    router.replace("/unlock");
+    setTimeout(() => {
+      lock();
+      router.replace("/unlock");
+    }, ANIM_MS);
   }
 
   return (
-    <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible transparent animationType="none" onRequestClose={onClose}>
       <View style={{ flex: 1, flexDirection: "row" }}>
-        <View
+        <Animated.View
           style={{
-            width: "82%",
-            maxWidth: 360,
+            width: panelWidth,
             backgroundColor: color.surface,
             paddingTop: insets.top + space.md,
             paddingBottom: insets.bottom + space.lg,
@@ -69,6 +104,7 @@ export function AccountDrawer({
             gap: space.lg,
             borderRightWidth: 1,
             borderRightColor: color.border,
+            transform: [{ translateX }],
           }}
         >
           <View
@@ -215,14 +251,16 @@ export function AccountDrawer({
             large
             onPress={endShift}
           />
-        </View>
+        </Animated.View>
 
-        <Pressable
-          onPress={onClose}
-          accessibilityRole="button"
-          accessibilityLabel="Dismiss"
-          style={{ flex: 1, backgroundColor: "rgba(27, 31, 29, 0.35)" }}
-        />
+        <Animated.View style={{ flex: 1, opacity: scrim }}>
+          <Pressable
+            onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss"
+            style={{ flex: 1, backgroundColor: "rgba(27, 31, 29, 0.35)" }}
+          />
+        </Animated.View>
       </View>
     </Modal>
   );

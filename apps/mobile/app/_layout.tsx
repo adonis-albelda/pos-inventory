@@ -52,6 +52,10 @@ export default function RootLayout() {
               screenOptions={{
                 headerShown: false,
                 contentStyle: { flex: 1, backgroundColor: "transparent" },
+                // Boot/unlock/setup swap via router.replace(), same reasoning as
+                // the POS tab stack: fade instead of a directional slide.
+                animation: "fade",
+                animationDuration: 180,
               }}
             />
           </View>

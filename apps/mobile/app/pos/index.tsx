@@ -89,6 +89,11 @@ import { color, fontSize, radius, space, styles } from "@/theme";
 /** What a cart with no customer attached looks like. Also the state after a sale. */
 const NO_CUSTOMER: CustomerDetails = { customerId: null, name: null, address: null, contact: null };
 
+// RN's Modal "slide" animation runs ~300ms. Pushing the next screen before the
+// confirm sheet and cart modal finish closing is what makes the sale screen
+// look like it "mixes up" with the cart underneath it.
+const MODAL_CLOSE_MS = 300;
+
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; icon: LucideIcon }[] = [
   { value: "cash", label: "Cash", icon: Banknote },
   { value: "gcash", label: "GCash", icon: Smartphone },
@@ -459,7 +464,7 @@ export default function SellScreen() {
         console.warn("Receipt did not print", error);
       });
 
-      router.push(`/pos/sale/${sale.id}`);
+      setTimeout(() => router.push(`/pos/sale/${sale.id}`), MODAL_CLOSE_MS);
     } finally {
       setSaving(false);
     }

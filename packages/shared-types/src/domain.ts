@@ -5,6 +5,8 @@
  * reporting, so these live here rather than being declared twice.
  */
 
+import { roundMoney } from "./money";
+
 export type UserRole = "cashier" | "admin" | "device";
 export type PaymentMethod = "cash" | "gcash" | "card" | "other";
 export type SaleStatus = "completed" | "voided" | "refunded";
@@ -365,6 +367,127 @@ export interface InventoryMovement {
   /** The user who recorded it. Null for anything the POS pushed. */
   createdBy: string | null;
   createdAt: string;
+}
+
+/**
+ * Who the shop buys stock from. Admin-only, same tier as Expense — never
+ * synced to a POS terminal.
+ */
+export interface Supplier {
+  id: string;
+  name: string;
+  contactPerson: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * A product a supplier is known to carry. A convenience link for building a
+ * PO faster — a PO is never restricted to only these products.
+ */
+export interface SupplierProduct {
+  productId: string;
+  productName: string;
+}
+
+export const SUPPLIER_NAME_MAX = 200;
+export const SUPPLIER_CONTACT_PERSON_MAX = 120;
+export const SUPPLIER_PHONE_MAX = 40;
+export const SUPPLIER_EMAIL_MAX = 200;
+export const SUPPLIER_ADDRESS_MAX = 300;
+
+/**
+ * draft: still being put together, freely editable.
+ * ordered: sent to the supplier — receiving can now begin.
+ * partially_received / received: set automatically as lines come in.
+ * cancelled: an explicit owner action, same as draft/ordered transitions.
+ */
+export type PurchaseOrderStatus =
+  | "draft"
+  | "ordered"
+  | "partially_received"
+  | "received"
+  | "cancelled";
+
+export const PURCHASE_ORDER_STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
+  draft: "Draft",
+  ordered: "Ordered",
+  partially_received: "Partially received",
+  received: "Received",
+  cancelled: "Cancelled",
+};
+
+export interface PurchaseOrder {
+  id: string;
+  supplierId: string;
+  status: PurchaseOrderStatus;
+  /** Shop calendar day (yyyy-mm-dd), Asia/Manila. */
+  orderDate: string;
+  expectedDate: string | null;
+  referenceNo: string | null;
+  notes: string | null;
+  /** Kept in sync by a Postgres trigger — never hand-edited. */
+  totalAmount: number;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PurchaseOrderItem {
+  id: string;
+  purchaseOrderId: string;
+  productId: string | null;
+  /** Snapshotted so renaming a product later cannot rewrite an old PO. */
+  productName: string;
+  quantityOrdered: number;
+  quantityReceived: number;
+  /** Snapshot of what the supplier charged at order time. */
+  unitCost: number;
+  lineTotal: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PurchaseOrderItemReceiveState = "pending" | "partial" | "received";
+
+/** Derived, never stored — matches the `quantity_received` check on the row. */
+export function poItemReceiveState(
+  item: Pick<PurchaseOrderItem, "quantityOrdered" | "quantityReceived">,
+): PurchaseOrderItemReceiveState {
+  if (item.quantityReceived <= 0) return "pending";
+  if (item.quantityReceived >= item.quantityOrdered) return "received";
+  return "partial";
+}
+
+/** An installment on a PO: how many terms, and whether each has been paid. */
+export interface PurchaseOrderPayment {
+  id: string;
+  purchaseOrderId: string;
+  termNumber: number;
+  dueDate: string | null;
+  amount: number;
+  isPaid: boolean;
+  paidDate: string | null;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** What is still owed across a set of installment terms — never a stored column. */
+export function purchaseOrderBalance(payments: { amount: number; isPaid: boolean }[]): number {
+  return roundMoney(
+    payments.reduce((sum, term) => sum + (term.isPaid ? 0 : term.amount), 0),
+  );
+}
+
+export function purchaseOrderPaidTotal(payments: { amount: number; isPaid: boolean }[]): number {
+  return roundMoney(
+    payments.reduce((sum, term) => sum + (term.isPaid ? term.amount : 0), 0),
+  );
 }
 
 /** An in-progress cart, held in memory on a device only. */

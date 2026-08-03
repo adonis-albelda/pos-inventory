@@ -3,7 +3,9 @@ import Link from "next/link";
 import {
   AlertTriangle,
   ArrowRight,
+  CalendarClock,
   ChevronRight,
+  ClipboardList,
   Coins,
   PackageSearch,
   Percent,
@@ -17,13 +19,17 @@ import {
 } from "lucide-react";
 import { formatMoney, formatPercent, stockLevel } from "@double-a/shared-types";
 import {
+  countOpenPurchaseOrders,
   listOversold,
   listProducts,
   listSales,
+  listUpcomingSupplierPayments,
   reportProfit,
   sumExpenses,
+  sumSupplierBalance,
   summariseProfit,
   type ProfitRow,
+  type UpcomingSupplierPayment,
 } from "@double-a/supabase";
 import { getServerClient } from "@/lib/supabase/server";
 import { resolveRange } from "@/lib/date-range";
@@ -44,16 +50,29 @@ export default async function DashboardPage() {
   const supabase = await getServerClient();
   const { range, fromDay, toDay } = resolveRange({ preset: "today" });
 
-  const [todaysSales, products, oversold, profitRows, expensesTotal] =
-    await Promise.all([
-      listSales(supabase, { from: range.from, limit: 500 }),
-      listProducts(supabase, { includeInactive: true }),
-      listOversold(supabase),
-      // Profit is admin-only in the database. A manager signed in as a cashier
-      // still gets the rest of the dashboard rather than an error page.
-      reportProfit(supabase, range).catch((): ProfitRow[] | null => null),
-      sumExpenses(supabase, { fromDay, toDay }).catch((): number | null => null),
-    ]);
+  const [
+    todaysSales,
+    products,
+    oversold,
+    profitRows,
+    expensesTotal,
+    openPurchaseOrders,
+    supplierBalanceTotal,
+    upcomingPayments,
+  ] = await Promise.all([
+    listSales(supabase, { from: range.from, limit: 500 }),
+    listProducts(supabase, { includeInactive: true }),
+    listOversold(supabase),
+    // Profit is admin-only in the database. A manager signed in as a cashier
+    // still gets the rest of the dashboard rather than an error page.
+    reportProfit(supabase, range).catch((): ProfitRow[] | null => null),
+    sumExpenses(supabase, { fromDay, toDay }).catch((): number | null => null),
+    countOpenPurchaseOrders(supabase).catch((): number | null => null),
+    sumSupplierBalance(supabase).catch((): number | null => null),
+    listUpcomingSupplierPayments(supabase, 7).catch(
+      (): UpcomingSupplierPayment[] | null => null,
+    ),
+  ]);
 
   const profit = profitRows ? summariseProfit(profitRows) : null;
 
@@ -139,6 +158,28 @@ export default async function DashboardPage() {
           value={String(oversold.length)}
           hint={oversold.length > 0 ? "Needs a stock correction" : "Nothing to correct"}
           tone={oversold.length > 0 ? "danger" : "neutral"}
+        />
+        <StatCard
+          icon={ClipboardList}
+          label="Open purchase orders"
+          value={openPurchaseOrders === null ? "—" : String(openPurchaseOrders)}
+          hint={
+            openPurchaseOrders === null
+              ? "Sign in as the owner to see purchasing"
+              : "Ordered or partially received"
+          }
+          tone={openPurchaseOrders && openPurchaseOrders > 0 ? "warning" : "neutral"}
+        />
+        <StatCard
+          icon={Wallet}
+          label="Supplier balance"
+          value={supplierBalanceTotal === null ? "—" : formatMoney(supplierBalanceTotal)}
+          hint={
+            supplierBalanceTotal === null
+              ? "Sign in as the owner to see purchasing"
+              : "Unpaid across open purchase orders"
+          }
+          tone={supplierBalanceTotal && supplierBalanceTotal > 0 ? "warning" : "neutral"}
         />
       </div>
 

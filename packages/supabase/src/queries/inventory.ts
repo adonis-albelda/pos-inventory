@@ -17,6 +17,8 @@ export async function adjustStock(
     reason: AdjustReason;
     note?: string;
     createdBy?: string;
+    /** A purchase order for a receiving-driven restock; null for hand entries. */
+    referenceId?: string;
   },
 ): Promise<void> {
   const { error } = await client.rpc("adjust_stock", {
@@ -25,6 +27,7 @@ export async function adjustStock(
     p_reason: input.reason,
     p_note: input.note ?? null,
     p_created_by: input.createdBy ?? null,
+    p_reference_id: input.referenceId ?? null,
   });
 
   if (error) throw error;

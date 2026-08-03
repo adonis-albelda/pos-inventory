@@ -409,6 +409,204 @@ export interface Database {
           },
         ];
       };
+      suppliers: {
+        Row: {
+          id: string;
+          name: string;
+          contact_person: string | null;
+          phone: string | null;
+          email: string | null;
+          address: string | null;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          contact_person?: string | null;
+          phone?: string | null;
+          email?: string | null;
+          address?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          contact_person?: string | null;
+          phone?: string | null;
+          email?: string | null;
+          address?: string | null;
+          is_active?: boolean;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      supplier_products: {
+        Row: {
+          id: string;
+          supplier_id: string;
+          product_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          supplier_id: string;
+          product_id: string;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [
+          {
+            foreignKeyName: "supplier_products_supplier_id_fkey";
+            columns: ["supplier_id"];
+            referencedRelation: "suppliers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "supplier_products_product_id_fkey";
+            columns: ["product_id"];
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      purchase_orders: {
+        Row: {
+          id: string;
+          supplier_id: string;
+          status: string;
+          order_date: string;
+          expected_date: string | null;
+          reference_no: string | null;
+          notes: string | null;
+          /** Maintained by a trigger from purchase_order_items.line_total. */
+          total_amount: number;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          supplier_id: string;
+          status?: string;
+          order_date?: string;
+          expected_date?: string | null;
+          reference_no?: string | null;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          supplier_id?: string;
+          status?: string;
+          order_date?: string;
+          expected_date?: string | null;
+          reference_no?: string | null;
+          notes?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "purchase_orders_supplier_id_fkey";
+            columns: ["supplier_id"];
+            referencedRelation: "suppliers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      purchase_order_items: {
+        Row: {
+          id: string;
+          purchase_order_id: string;
+          product_id: string | null;
+          product_name: string;
+          quantity_ordered: number;
+          quantity_received: number;
+          unit_cost: number;
+          /** Generated column: quantity_ordered * unit_cost. */
+          line_total: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          purchase_order_id: string;
+          product_id?: string | null;
+          product_name: string;
+          quantity_ordered: number;
+          quantity_received?: number;
+          unit_cost: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          product_id?: string | null;
+          product_name?: string;
+          quantity_ordered?: number;
+          quantity_received?: number;
+          unit_cost?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "purchase_order_items_purchase_order_id_fkey";
+            columns: ["purchase_order_id"];
+            referencedRelation: "purchase_orders";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "purchase_order_items_product_id_fkey";
+            columns: ["product_id"];
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      purchase_order_payments: {
+        Row: {
+          id: string;
+          purchase_order_id: string;
+          term_number: number;
+          due_date: string | null;
+          amount: number;
+          is_paid: boolean;
+          paid_date: string | null;
+          note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          purchase_order_id: string;
+          term_number: number;
+          due_date?: string | null;
+          amount: number;
+          is_paid?: boolean;
+          paid_date?: string | null;
+          note?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          due_date?: string | null;
+          amount?: number;
+          is_paid?: boolean;
+          paid_date?: string | null;
+          note?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "purchase_order_payments_purchase_order_id_fkey";
+            columns: ["purchase_order_id"];
+            referencedRelation: "purchase_orders";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       oversold_products: {
@@ -552,6 +750,8 @@ export interface Database {
           p_reason: string;
           p_note?: string | null;
           p_created_by?: string | null;
+          /** Points at the purchase order for a receiving-driven restock. */
+          p_reference_id?: string | null;
         };
         Returns: Database["public"]["Tables"]["products"]["Row"];
       };
