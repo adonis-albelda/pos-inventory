@@ -44,6 +44,20 @@ export async function listCashiers(
 }
 
 /**
+ * What the server thinks this session is: 'admin', 'device', 'cashier', or null
+ * when the Auth user has no active `public.users` row. Null is the case worth
+ * naming — reads still work under `using (true)` policies, so a terminal can
+ * look enrolled while every write and every `verify_pin()` silently fails.
+ */
+export async function currentAppRole(
+  client: DoubleAClient,
+): Promise<string | null> {
+  const { data, error } = await client.rpc("current_app_role");
+  if (error) throw error;
+  return data ?? null;
+}
+
+/**
  * Live PIN check. pin_hash stays on the server; the device only learns ok/fail.
  */
 export async function verifyCashierPin(

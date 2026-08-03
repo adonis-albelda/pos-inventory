@@ -2,23 +2,23 @@ import type { ReactNode } from "react";
 import { Image, Linking, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { PaperBackdrop } from "@/components/paper-backdrop";
-import { color, fontSize, radius, space } from "@/theme";
+import { SageBackdrop } from "@/components/sage-backdrop";
+import { color, fontSize, space } from "@/theme";
 
 const LOGO = require("../assets/logo.png");
 const POWERED_BY_EMAIL = "doubleadigitalsolutions@gmail.com";
 const POWERED_BY_MAILTO = `mailto:${POWERED_BY_EMAIL}`;
 
 /**
- * Chrome behind unlock / setup: flat off-white paper, no photograph. Cards and
- * the teal brand marks are the only things carrying contrast, so a form stays
- * readable in bright shop light where a washed photo did not.
+ * Chrome behind unlock / setup: a sage gradient, no photograph. White cards and
+ * the teal brand marks carry the contrast, so a form stays readable in bright
+ * shop light where a washed photo did not.
  */
 export function BrandAuthShell({ children }: { children: ReactNode }) {
   return (
-    <View style={{ flex: 1, backgroundColor: color.paper }}>
+    <View style={{ flex: 1, backgroundColor: color.sage }}>
       <StatusBar style="dark" />
-      <PaperBackdrop />
+      <SageBackdrop />
       {children}
     </View>
   );
@@ -40,27 +40,13 @@ export function AuthBrandMark({
 }) {
   return (
     <View style={{ alignItems: "center", gap: space.md }}>
-      <View
-        style={{
-          width: 76,
-          height: 76,
-          borderRadius: radius.sm,
-          borderWidth: 1,
-          borderColor: color.border,
-          backgroundColor: color.surface,
-          alignItems: "center",
-          justifyContent: "center",
-          overflow: "hidden",
-          padding: space.sm,
-        }}
-      >
-        <Image
-          source={logoUrl ? { uri: logoUrl } : LOGO}
-          style={{ width: "100%", height: "100%" }}
-          resizeMode="contain"
-          accessibilityIgnoresInvertColors
-        />
-      </View>
+      {/* No tile behind the mark — the logo sits straight on the sage wash. */}
+      <Image
+        source={logoUrl ? { uri: logoUrl } : LOGO}
+        style={{ width: 88, height: 88 }}
+        resizeMode="contain"
+        accessibilityIgnoresInvertColors
+      />
 
       <View style={{ alignItems: "center", gap: space.xs }}>
         <Text style={[authChrome.heading, { textAlign: "center" }]}>{title}</Text>

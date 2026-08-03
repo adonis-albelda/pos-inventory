@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { Image, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -105,12 +112,26 @@ export default function UnlockScreen() {
     setError(null);
 
     try {
-      const ok = await unlock(selected, pin);
-      if (!ok) {
+      const result = await unlock(selected, pin);
+
+      if (result === "terminal-not-authorized") {
         setPin("");
-        setError("That PIN does not match. Try again, or ask an admin to reset it.");
+        // Not the cashier's fault and not fixable at the keypad: the server does
+        // not recognise this terminal's sign-in, so no PIN can ever pass.
+        setError(
+          "This terminal's sign-in is not accepted by the server, so no PIN will work. Set the terminal up again from the admin account.",
+        );
         return;
       }
+
+      if (result === "wrong-pin") {
+        setPin("");
+        setError(
+          "That PIN does not match. Try again, or ask an admin to set a PIN for this person.",
+        );
+        return;
+      }
+
       router.replace("/pos");
     } catch (err) {
       const message =
@@ -122,7 +143,10 @@ export default function UnlockScreen() {
     }
   }
 
-  const listWidth = Math.min(layout.width - layout.gutter * 2, 520);
+  // The gutter is tuned for POS product grids, which is too tight for a single
+  // column of cards — this screen buys back side air.
+  const dialogPadding = Math.max(layout.gutter, space.lg);
+  const listWidth = Math.min(layout.width - dialogPadding * 2, 520);
   const cashierCols = listWidth < 400 ? 2 : 3;
   const cashierTileWidth = (listWidth - space.sm * (cashierCols - 1)) / cashierCols;
 
@@ -132,7 +156,7 @@ export default function UnlockScreen() {
     <ScrollView
       style={styles.screen}
       contentContainerStyle={{
-        padding: layout.gutter,
+        paddingHorizontal: dialogPadding,
         paddingTop: insets.top + space.xl,
         gap: space.lg,
         // The keypad is thumb-sized, not screen-sized: on a tablet it keeps a
@@ -271,7 +295,7 @@ export default function UnlockScreen() {
                     justifyContent: "center",
                     gap: space.sm,
                     paddingVertical: space.lg,
-                    paddingHorizontal: space.md,
+                    paddingHorizontal: space.lg,
                     minHeight: layout.tileMinHeight,
                     borderColor: active ? color.primary : color.border,
                     borderWidth: active ? 2 : 1,
@@ -353,27 +377,29 @@ export default function UnlockScreen() {
 
     <PoweredByLabel />
 
-    <Modal
-      visible={selected !== null}
-      transparent
-      animationType="fade"
-      onRequestClose={closePinDialog}
-    >
+    {/*
+      An in-tree overlay, not a native Modal. The keypad is the only way into a
+      shift, so it cannot depend on a second native window being presented over
+      this route — that is what stopped appearing.
+    */}
+    {selected !== null ? (
       <View
-        style={{
-          flex: 1,
-          justifyContent: "center",
-          padding: layout.gutter,
-          paddingTop: insets.top + space.md,
-          paddingBottom: insets.bottom + space.md,
-          backgroundColor: `${color.ink}99`,
-        }}
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            justifyContent: "center",
+            paddingHorizontal: dialogPadding,
+            paddingTop: insets.top + space.md,
+            paddingBottom: insets.bottom + space.md,
+            backgroundColor: `${color.ink}99`,
+          },
+        ]}
       >
         <Pressable
           onPress={closePinDialog}
           accessibilityRole="button"
           accessibilityLabel="Dismiss"
-          style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
+          style={StyleSheet.absoluteFill}
         />
 
         <View
@@ -505,7 +531,7 @@ export default function UnlockScreen() {
           />
         </View>
       </View>
-    </Modal>
+    ) : null}
     </View>
     </BrandAuthShell>
   );

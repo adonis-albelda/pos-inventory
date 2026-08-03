@@ -36,6 +36,15 @@ export const color = {
   border: "#E4E0D8",
   /** For a divider that must be present but not read as a boundary in the data. */
   borderSoft: "#EFEBE4",
+  /**
+   * Sage wash behind splash and login only — never behind data. The ramp stays
+   * light on purpose: cards are white and every label on it is `ink`, so the
+   * darkest stop still clears 4.5:1. A darker sage would force white text and
+   * leave the two screens reading differently from the rest of the POS.
+   */
+  sageLight: "#E9F1EC",
+  sage: "#C6DACF",
+  sageDeep: "#9DBCAC",
 } as const;
 
 /** 4, 8, 12, 16, 24, 32, 48, 64 — no arbitrary one-off values. */

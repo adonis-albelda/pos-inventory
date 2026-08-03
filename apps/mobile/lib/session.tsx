@@ -7,11 +7,11 @@ import {
   type ReactNode,
 } from "react";
 import type { User } from "@double-a/shared-types";
-import { verifyPin } from "@/lib/pin";
+import { verifyPin, type PinResult } from "@/lib/pin";
 
 interface SessionValue {
   cashier: User | null;
-  unlock: (user: User, pin: string) => Promise<boolean>;
+  unlock: (user: User, pin: string) => Promise<PinResult>;
   lock: () => void;
 }
 
@@ -25,11 +25,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [cashier, setCashier] = useState<User | null>(null);
 
   const unlock = useCallback(async (user: User, pin: string) => {
-    const ok = await verifyPin(user.id, pin);
-    if (!ok) return false;
-
-    setCashier(user);
-    return true;
+    const result = await verifyPin(user.id, pin);
+    if (result === "ok") setCashier(user);
+    return result;
   }, []);
 
   const lock = useCallback(() => setCashier(null), []);

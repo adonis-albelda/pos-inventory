@@ -47,6 +47,12 @@ ink: `primary-soft` `#E7EFED` / `primary-tint` `#F1F6F4` / `on-primary` `#FFFFFF
 colour reaches a surface (badge, chip, icon well, status band) while text and icons stay at
 contrast.
 
+One exception to the flat off-white field: the POS splash and login sit on a sage gradient,
+`sage-light` `#E9F1EC` to `sage` `#C6DACF` to `sage-deep` `#9DBCAC`. It is chrome for the two
+screens with no data on them and never runs behind products, a cart, or a report. The ramp stays
+light so every label on it is still `color-ink`; going darker would force white text and make
+those screens read as a different product.
+
 Do not substitute a generic Tailwind default palette (`slate`, `zinc`, `blue-500`, etc.)
 for these — the warm-neutral base (`color-paper`, `color-ink`) is deliberate and should
 carry through every screen, not just marketing surfaces.
@@ -73,8 +79,9 @@ these quickly, under variable lighting; err large.
 ## Spacing & shape
 
 - Spacing scale: `4, 8, 12, 16, 24, 32, 48, 64` (px) — no arbitrary one-off values.
-- Border radius: mobile POS uses **0** (hard corners). Admin keeps `radius-sm: 6px`
-  (inputs, small buttons), `radius-md: 12px` (cards), `radius-lg: 20px` (modals, sheets).
+- Border radius: one scale for both apps — `radius-sm: 6px` (inputs, small buttons, badges),
+  `radius-md: 12px` (cards, tiles), `radius-lg: 20px` (modals, sheets). Mobile used to square
+  every corner to 0; it read as unfinished beside admin, so the POS shares these values.
 - Shadows: keep flat/minimal on mobile (performance + battery), slightly more elevation on
   admin cards to establish hierarchy in a denser dashboard layout.
 

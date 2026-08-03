@@ -8,10 +8,13 @@ import {
   View,
 } from "react-native";
 import {
-  COMPANY_NAME,
+  COMPANY_LEAD,
   COMPANY_TAGLINE_MS,
   COMPANY_TAGLINES,
+  COMPANY_TRADE,
+  COMPANY_TYPE_MS,
 } from "@double-a/ui";
+import { SageBackdrop } from "@/components/sage-backdrop";
 import { color, fontSize, space } from "@/theme";
 
 const LOGO = require("../assets/logo.png");
@@ -22,10 +25,13 @@ const LOGO = require("../assets/logo.png");
  */
 export function CompanyIntro({ onDone }: { onDone: () => void }) {
   const [index, setIndex] = useState(0);
+  const [typed, setTyped] = useState(0);
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(12)).current;
   const logoScale = useRef(new Animated.Value(0.92)).current;
+  const caret = useRef(new Animated.Value(1)).current;
   const finished = useRef(false);
+  const typing = typed < COMPANY_TRADE.length;
 
   function finish() {
     if (finished.current) return;
@@ -41,6 +47,52 @@ export function CompanyIntro({ onDone }: { onDone: () => void }) {
       useNativeDriver: true,
     }).start();
   }, [logoScale]);
+
+  /** Trade name types itself in, one character per tick. */
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTyped((count) => {
+        if (count >= COMPANY_TRADE.length) {
+          clearInterval(timer);
+          return count;
+        }
+        return count + 1;
+      });
+    }, COMPANY_TYPE_MS);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  /** Caret blinks while typing, then rests lit for a beat and goes. */
+  useEffect(() => {
+    if (!typing) {
+      Animated.timing(caret, {
+        toValue: 0,
+        duration: 400,
+        delay: 600,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
+
+    const blink = Animated.loop(
+      Animated.sequence([
+        Animated.timing(caret, {
+          toValue: 0.15,
+          duration: 260,
+          useNativeDriver: true,
+        }),
+        Animated.timing(caret, {
+          toValue: 1,
+          duration: 260,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    blink.start();
+    return () => blink.stop();
+  }, [caret, typing]);
 
   useEffect(() => {
     opacity.setValue(0);
@@ -92,12 +144,14 @@ export function CompanyIntro({ onDone }: { onDone: () => void }) {
       accessibilityLabel="Continue"
       style={{
         flex: 1,
-        backgroundColor: color.paper,
+        backgroundColor: color.sage,
         alignItems: "center",
         justifyContent: "center",
         paddingHorizontal: space.xl,
       }}
     >
+      <SageBackdrop />
+
       <Animated.View
         style={{
           alignItems: "center",
@@ -105,26 +159,13 @@ export function CompanyIntro({ onDone }: { onDone: () => void }) {
           transform: [{ scale: logoScale }],
         }}
       >
-        <View
-          style={{
-            width: 112,
-            height: 112,
-            borderRadius: 0,
-            borderWidth: 1,
-            borderColor: color.border,
-            backgroundColor: color.surface,
-            alignItems: "center",
-            justifyContent: "center",
-            padding: space.md,
-          }}
-        >
-          <Image
-            source={LOGO}
-            style={{ width: 80, height: 80 }}
-            resizeMode="contain"
-            accessibilityIgnoresInvertColors
-          />
-        </View>
+        {/* No tile, no border: the mark sits straight on the sage wash. */}
+        <Image
+          source={LOGO}
+          style={{ width: 128, height: 128 }}
+          resizeMode="contain"
+          accessibilityIgnoresInvertColors
+        />
 
         <View style={{ alignItems: "center", gap: space.md }}>
           <Text
@@ -136,8 +177,30 @@ export function CompanyIntro({ onDone }: { onDone: () => void }) {
               textAlign: "center",
             }}
           >
-            {COMPANY_NAME}
+            {COMPANY_LEAD}
           </Text>
+
+          {/*
+            One Text, so the caret sits against the last typed character and the
+            line does not reflow as it grows. The full string is the label for a
+            screen reader, which must not hear it a letter at a time.
+          */}
+          <Text
+            accessibilityLabel={COMPANY_TRADE}
+            style={{
+              fontSize: fontSize.bodyLg,
+              fontWeight: "700",
+              letterSpacing: 3,
+              color: color.primaryDark,
+              textAlign: "center",
+            }}
+          >
+            {COMPANY_TRADE.slice(0, typed)}
+            <Animated.Text style={{ opacity: caret, color: color.primary }}>
+              |
+            </Animated.Text>
+          </Text>
+
           <View style={{ width: 44, height: 3, backgroundColor: color.primary }} />
         </View>
       </Animated.View>
@@ -157,9 +220,11 @@ export function CompanyIntro({ onDone }: { onDone: () => void }) {
             opacity,
             transform: [{ translateY }],
             fontSize: fontSize.bodyLg,
-            fontWeight: "500",
+            fontWeight: "600",
             lineHeight: 24,
-            color: color.inkMuted,
+            // Sage is mid-tone by the time the tagline sits on it, so muted ink
+            // would drop under 4.5:1.
+            color: color.ink,
             textAlign: "center",
           }}
         >
@@ -172,8 +237,8 @@ export function CompanyIntro({ onDone }: { onDone: () => void }) {
           position: "absolute",
           bottom: space["3xl"],
           fontSize: fontSize.caption,
-          fontWeight: "600",
-          color: color.inkMuted,
+          fontWeight: "700",
+          color: color.primaryDark,
           letterSpacing: 0.4,
         }}
       >

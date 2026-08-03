@@ -3,20 +3,15 @@ import {
   MIN_TAP_TARGET,
   color,
   fontSize,
+  radius,
   space,
 } from "@double-a/ui";
 
-export { MIN_TAP_TARGET, color, fontSize, space };
-
 /**
- * POS wants hard corners — shop-floor chrome reads cleaner squared than pill.
- * Admin keeps the shared token radii; mobile overrides here.
+ * Mobile used to flatten every corner to 0. It reads as unfinished next to the
+ * admin dashboard, so the POS now shares the one radius scale.
  */
-export const radius = {
-  sm: 0,
-  md: 0,
-  lg: 0,
-} as const;
+export { MIN_TAP_TARGET, color, fontSize, radius, space };
 
 /**
  * Shop-floor rules from design-system.md: big tap targets, high contrast, flat
