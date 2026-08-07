@@ -1,6 +1,7 @@
 import type { PullResult } from "@double-a/shared-types";
 import {
   fetchProductsChangedSince,
+  fetchReceiptLayout,
   fetchStoreSettings,
   fetchUsersChangedSince,
   listCategories,
@@ -10,6 +11,7 @@ import { replaceCategories } from "@/db/categories";
 import { replaceSyncedCustomers } from "@/db/customers";
 import { getSyncMeta, recordSyncSuccess } from "@/db/meta";
 import { upsertProducts } from "@/db/products";
+import { saveLocalReceiptLayout } from "@/db/receipt-layout";
 import { saveLocalStoreSettings } from "@/db/store";
 import { upsertUsers } from "@/db/users";
 import { getSupabase } from "@/lib/supabase";
@@ -32,15 +34,17 @@ export async function pull(options: { full?: boolean } = {}): Promise<PullResult
   // deleted row leaves this device — a "changed since" query returns nothing at
   // all for a row that no longer exists.
   //
-  // The store settings row comes down whole for the same reason: it is one row,
-  // and the header has to show the name the office is using today.
-  const [products, users, categories, customers, store] = await Promise.all([
-    fetchProductsChangedSince(supabase, since),
-    fetchUsersChangedSince(supabase, since),
-    listCategories(supabase),
-    listCustomers(supabase),
-    fetchStoreSettings(supabase),
-  ]);
+  // The store settings and receipt layout rows come down whole for the same
+  // reason: one row each, and the device must match what the office set today.
+  const [products, users, categories, customers, store, receiptLayout] =
+    await Promise.all([
+      fetchProductsChangedSince(supabase, since),
+      fetchUsersChangedSince(supabase, since),
+      listCategories(supabase),
+      listCustomers(supabase),
+      fetchStoreSettings(supabase),
+      fetchReceiptLayout(supabase),
+    ]);
 
   // PIN hashes stay on the server — unlock calls verify_pin live. Local users
   // rows are for sale attribution after the shift starts, not credentials.
@@ -49,6 +53,7 @@ export async function pull(options: { full?: boolean } = {}): Promise<PullResult
   await replaceCategories(categories);
   await replaceSyncedCustomers(customers);
   await saveLocalStoreSettings(store);
+  await saveLocalReceiptLayout(receiptLayout);
 
   // Categories, customers and the store row are deliberately absent from the
   // mark: they are fetched whole regardless, and letting a rename push the mark

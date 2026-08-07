@@ -1,6 +1,7 @@
 // React Native has no global Buffer, and react-native-tcp-socket writes Buffers.
 import { Buffer } from "buffer";
 import type { LocalSaleWithItems } from "@double-a/shared-types";
+import { RECEIPT_COLUMNS } from "@double-a/shared-types";
 
 import type TcpSocketDefault from "react-native-tcp-socket";
 
@@ -12,22 +13,25 @@ export interface PrinterTransport {
 }
 
 export interface PrinterSettings {
-  /** "none" prints to the log, which keeps the sale flow testable in Expo Go. */
-  kind: "none" | "network";
+  /** "none" prints to the log — useful before hardware arrives or in Expo Go. */
+  kind: "none" | "network" | "bluetooth";
   host?: string;
   port?: number;
-  /** Characters per line: 32 for 58mm paper, 48 for 80mm. */
+  /** Bluetooth MAC of the paired PT-210. */
+  bluetoothAddress?: string;
+  bluetoothName?: string;
+  /** Always 32 for this shop's 58mm PT-210. */
   columns: number;
 }
 
 export const DEFAULT_PRINTER_SETTINGS: PrinterSettings = {
   kind: "none",
-  columns: 32,
+  columns: RECEIPT_COLUMNS,
 };
 
 /**
  * Preview transport. Used when no printer is configured, and on any build where
- * the native TCP module is unavailable (Expo Go).
+ * the native module is unavailable (Expo Go).
  */
 export function previewTransport(): PrinterTransport {
   return {
@@ -55,8 +59,6 @@ export function networkTransport(host: string, port = 9100): PrinterTransport {
     async send(payload) {
       let TcpSocket: TcpSocketModule;
       try {
-        // Lazy and guarded: on a build without the native module (Expo Go) this
-        // has to degrade to a preview, never throw inside a sale.
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         TcpSocket = (require("react-native-tcp-socket") as { default: TcpSocketModule })
           .default;
@@ -78,7 +80,45 @@ export function networkTransport(host: string, port = 9100): PrinterTransport {
   };
 }
 
+type BluetoothPrinterModule = {
+  connectDevice: (deviceId: string) => Promise<boolean>;
+  printRaw: (base64Data: string) => Promise<boolean>;
+  getConnectedDevice: () => { id: string; name: string } | null;
+};
+
+/**
+ * Bluetooth Classic PT-210 via rn-bluetooth-classic-printer.
+ * Sends the same ESC/POS bytes the network path uses — layout stays one builder.
+ */
+export function bluetoothTransport(address: string): PrinterTransport {
+  return {
+    name: `bluetooth:${address}`,
+    async send(payload) {
+      let Bluetooth: BluetoothPrinterModule;
+      try {
+        // Lazy: Expo Go / a build without the native module must not crash a sale.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        Bluetooth = require("rn-bluetooth-classic-printer") as BluetoothPrinterModule;
+      } catch {
+        await previewTransport().send(payload);
+        return;
+      }
+
+      const connected = Bluetooth.getConnectedDevice();
+      if (!connected || connected.id !== address) {
+        await Bluetooth.connectDevice(address);
+      }
+
+      const base64 = Buffer.from(payload).toString("base64");
+      await Bluetooth.printRaw(base64);
+    },
+  };
+}
+
 export function transportFor(settings: PrinterSettings): PrinterTransport {
+  if (settings.kind === "bluetooth" && settings.bluetoothAddress) {
+    return bluetoothTransport(settings.bluetoothAddress);
+  }
   if (settings.kind === "network" && settings.host) {
     return networkTransport(settings.host, settings.port ?? 9100);
   }

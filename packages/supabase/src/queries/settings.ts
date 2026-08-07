@@ -1,7 +1,12 @@
-import { DEFAULT_STORE_SETTINGS, type StoreSettings } from "@double-a/shared-types";
+import {
+  DEFAULT_RECEIPT_LAYOUT,
+  DEFAULT_STORE_SETTINGS,
+  type ReceiptLayout,
+  type StoreSettings,
+} from "@double-a/shared-types";
 import type { DoubleAClient } from "../client-browser";
 import type { TablesUpdate } from "../database.types";
-import { toStoreSettings } from "../mappers";
+import { toReceiptLayout, toStoreSettings } from "../mappers";
 
 /** Where an uploaded logo lives. Public, so a POS header can fetch it. */
 export const STORE_LOGO_BUCKET = "store-logos";
@@ -63,4 +68,36 @@ export async function uploadStoreLogo(
 
   const { data } = client.storage.from(STORE_LOGO_BUCKET).getPublicUrl(path);
   return data.publicUrl;
+}
+
+/**
+ * The one receipt-layout row. Seeded by migration; a miss means migrate first.
+ * Devices pull this whole so offline printing matches the office toggles.
+ */
+export async function fetchReceiptLayout(
+  client: DoubleAClient,
+): Promise<ReceiptLayout> {
+  const { data, error } = await client
+    .from("receipt_layout")
+    .select("*")
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ? toReceiptLayout(data) : DEFAULT_RECEIPT_LAYOUT;
+}
+
+export async function updateReceiptLayout(
+  client: DoubleAClient,
+  patch: TablesUpdate<"receipt_layout">,
+): Promise<ReceiptLayout> {
+  const { data, error } = await client
+    .from("receipt_layout")
+    .update(patch)
+    .eq("id", true)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return toReceiptLayout(data);
 }

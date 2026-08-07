@@ -12,6 +12,7 @@ import type {
   PurchaseOrderItem,
   PurchaseOrderPayment,
   PurchaseOrderStatus,
+  ReceiptLayout,
   Sale,
   SaleItem,
   SaleStatus,
@@ -120,6 +121,25 @@ export function toStoreSettings(row: Tables<"store_settings">): StoreSettings {
     address: row.address,
     phone: row.phone,
     receiptFooter: row.receipt_footer,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toReceiptLayout(row: Tables<"receipt_layout">): ReceiptLayout {
+  return {
+    showShopName: row.show_shop_name,
+    showAddress: row.show_address,
+    showPhone: row.show_phone,
+    showLogoLine: row.show_logo_line,
+    showCashier: row.show_cashier,
+    showTerminal: row.show_terminal,
+    showCustomer: row.show_customer,
+    showDiscounts: row.show_discounts,
+    showPayment: row.show_payment,
+    showFooter: row.show_footer,
+    paperWidthMm: 58,
+    columns: 32,
+    printerModel: "PT-210",
     updatedAt: row.updated_at,
   };
 }

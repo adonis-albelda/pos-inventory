@@ -216,6 +216,32 @@ const V7_USER_CAN_SELL = `
 ALTER TABLE users ADD COLUMN can_sell INTEGER NOT NULL DEFAULT 1;
 `;
 
+/**
+ * v8: receipt layout from admin. One row, pulled whole every sync. Bluetooth
+ * pairing stays in AsyncStorage on this device — never this table.
+ */
+const V8_RECEIPT_LAYOUT = `
+CREATE TABLE IF NOT EXISTS receipt_layout (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  show_shop_name INTEGER NOT NULL DEFAULT 1,
+  show_address INTEGER NOT NULL DEFAULT 1,
+  show_phone INTEGER NOT NULL DEFAULT 1,
+  show_logo_line INTEGER NOT NULL DEFAULT 0,
+  show_cashier INTEGER NOT NULL DEFAULT 1,
+  show_terminal INTEGER NOT NULL DEFAULT 1,
+  show_customer INTEGER NOT NULL DEFAULT 1,
+  show_discounts INTEGER NOT NULL DEFAULT 1,
+  show_payment INTEGER NOT NULL DEFAULT 1,
+  show_footer INTEGER NOT NULL DEFAULT 1,
+  paper_width_mm INTEGER NOT NULL DEFAULT 58,
+  columns INTEGER NOT NULL DEFAULT 32,
+  printer_model TEXT NOT NULL DEFAULT 'PT-210',
+  updated_at TEXT
+);
+
+INSERT OR IGNORE INTO receipt_layout (id) VALUES (1);
+`;
+
 /** Ordered, append-only. Never edit a step that has shipped. */
 export const MIGRATIONS: Migration[] = [
   { version: 1, sql: V1_INITIAL },
@@ -225,6 +251,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 5, sql: V5_STORE_SETTINGS },
   { version: 6, sql: V6_CUSTOMERS_PAID_DELIVERY },
   { version: 7, sql: V7_USER_CAN_SELL },
+  { version: 8, sql: V8_RECEIPT_LAYOUT },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.reduce(

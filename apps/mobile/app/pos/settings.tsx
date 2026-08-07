@@ -1,7 +1,21 @@
-import { useEffect, useState } from "react";
-import { ScrollView, Text, TextInput, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  PermissionsAndroid,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
-import { timeAgo } from "@double-a/shared-types";
+import {
+  RECEIPT_COLUMNS,
+  RECEIPT_PAPER_WIDTH_MM,
+  RECEIPT_PRINTER_MODEL,
+  timeAgo,
+} from "@double-a/shared-types";
 import { getSyncMeta } from "@/db/meta";
 import { countLocalProducts } from "@/db/products";
 import { countPendingSales } from "@/db/sales";
@@ -14,16 +28,23 @@ import { useSync } from "@/sync/sync-provider";
 import { buildReceipt, getPrinterSettings, savePrinterSettings } from "@/printing/receipt";
 import { transportFor, type PrinterSettings } from "@/printing/transport";
 import {
+  Bluetooth,
   Check,
   FileText,
   LogOut,
   Printer,
+  RefreshCw,
   Send,
   Smartphone,
   Store,
 } from "lucide-react-native";
 import { Badge, Button, Card, ErrorNote, SectionTitle, SuccessNote } from "@/components/ui";
 import { color, fontSize, radius, space, styles } from "@/theme";
+
+interface BtDevice {
+  id: string;
+  name: string;
+}
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -35,7 +56,8 @@ export default function SettingsScreen() {
   const [settings, setSettings] = useState<PrinterSettings | null>(null);
   const [host, setHost] = useState("");
   const [port, setPort] = useState("9100");
-  const [columns, setColumns] = useState("32");
+  const [devices, setDevices] = useState<BtDevice[]>([]);
+  const [scanning, setScanning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,7 +76,6 @@ export default function SettingsScreen() {
       setSettings(stored);
       setHost(stored.host ?? "");
       setPort(String(stored.port ?? 9100));
-      setColumns(String(stored.columns));
 
       const [deviceId, label, products, users, pending, meta] = await Promise.all([
         getDeviceId(),
@@ -76,27 +97,118 @@ export default function SettingsScreen() {
     }
 
     void load();
-    // Counts and "last synced" are stale the moment a pull finishes, and the
-    // sync bar sits at the top of this screen too.
   }, [dataVersion]);
 
-  async function save(kind: PrinterSettings["kind"]) {
+  const requestBluetoothPermissions = useCallback(async (): Promise<boolean> => {
+    if (Platform.OS !== "android") return true;
+    const result = await PermissionsAndroid.requestMultiple([
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+    ]);
+    return Object.values(result).every(
+      (status) => status === PermissionsAndroid.RESULTS.GRANTED,
+    );
+  }, []);
+
+  async function loadBluetoothDevices() {
+    setError(null);
+    setMessage(null);
+    setScanning(true);
+
+    try {
+      const allowed = await requestBluetoothPermissions();
+      if (!allowed) {
+        setError("Bluetooth permission denied. Allow it in system settings.");
+        return;
+      }
+
+      // Lazy require — Expo Go / missing native module degrades cleanly.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Bluetooth = require("rn-bluetooth-classic-printer") as {
+        isBluetoothEnabled: () => boolean;
+        requestEnableBluetooth: () => Promise<boolean>;
+        getPairedDevices: () => Promise<BtDevice[]>;
+        startScanning: (listener: (device: BtDevice) => void) => { remove: () => void };
+        stopScanning: () => boolean;
+      };
+
+      if (!Bluetooth.isBluetoothEnabled()) {
+        await Bluetooth.requestEnableBluetooth();
+      }
+
+      const paired = await Bluetooth.getPairedDevices();
+      const found = new Map<string, BtDevice>();
+      for (const device of paired) found.set(device.id, device);
+
+      setDevices(Array.from(found.values()));
+
+      const subscription = Bluetooth.startScanning((device) => {
+        setDevices((previous) => {
+          if (previous.some((row) => row.id === device.id)) return previous;
+          return [...previous, device];
+        });
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 8000));
+      subscription.remove();
+      Bluetooth.stopScanning();
+      setMessage("Scan finished. Tap a PT-210 to pair for receipts.");
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? `Bluetooth unavailable: ${cause.message}`
+          : "Bluetooth unavailable on this build. Use a dev client.",
+      );
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  async function save(kind: PrinterSettings["kind"], device?: BtDevice) {
     const next: PrinterSettings = {
       kind,
       host: host.trim() || undefined,
       port: Number(port) || 9100,
-      columns: Number(columns) === 48 ? 48 : 32,
+      columns: RECEIPT_COLUMNS,
+      bluetoothAddress: device?.id ?? settings?.bluetoothAddress,
+      bluetoothName: device?.name ?? settings?.bluetoothName,
     };
 
     if (kind === "network" && !next.host) {
       setError("Enter the printer's address on the shop network.");
       return;
     }
+    if (kind === "bluetooth" && !next.bluetoothAddress) {
+      setError("Scan and pick a Bluetooth printer first.");
+      return;
+    }
+
+    if (kind === "bluetooth" && next.bluetoothAddress) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const Bluetooth = require("rn-bluetooth-classic-printer") as {
+          connectDevice: (id: string) => Promise<boolean>;
+        };
+        await Bluetooth.connectDevice(next.bluetoothAddress);
+      } catch (cause) {
+        setError(
+          cause instanceof Error
+            ? `Could not connect: ${cause.message}`
+            : "Could not connect to the printer.",
+        );
+        return;
+      }
+    }
 
     await savePrinterSettings(next);
     setSettings(next);
     setError(null);
-    setMessage("Printer saved.");
+    setMessage(
+      kind === "bluetooth"
+        ? `Paired ${next.bluetoothName || next.bluetoothAddress}.`
+        : "Printer saved.",
+    );
   }
 
   async function testPrint() {
@@ -114,8 +226,6 @@ export default function SettingsScreen() {
           status: "completed",
           deviceId: info.deviceId,
           createdAt: new Date().toISOString(),
-          // A test print checks the paper and the alignment, not the customer
-          // block — nothing here is a real sale to anybody.
           customerName: null,
           customerAddress: null,
           customerContact: null,
@@ -139,7 +249,7 @@ export default function SettingsScreen() {
             },
           ],
         },
-        { columns: settings.columns },
+        { columns: RECEIPT_COLUMNS, cashierName: "Test" },
       );
 
       await transportFor(settings).send(payload);
@@ -158,8 +268,6 @@ export default function SettingsScreen() {
       contentContainerStyle={{
         padding: layout.gutter,
         gap: space.lg,
-        // A settings form stretched across a tablet is unreadable, so it keeps a
-        // column width and centres.
         width: "100%",
         maxWidth: layout.readableMaxWidth,
         alignSelf: "center",
@@ -191,10 +299,72 @@ export default function SettingsScreen() {
       </Card>
 
       <Card style={{ gap: space.md }}>
-        <SectionTitle icon={Printer} title="Receipt printer" />
+        <SectionTitle
+          icon={Bluetooth}
+          title="Bluetooth printer"
+          hint={`${RECEIPT_PRINTER_MODEL} · ${RECEIPT_PAPER_WIDTH_MM}mm · ${RECEIPT_COLUMNS} cols`}
+        />
         <Text style={styles.muted}>
-          A network ESC/POS printer on the shop wifi. Leave it off to print receipts to
-          the log instead, which is useful before the hardware arrives.
+          Pair the PT-210 here. Receipt layout (which blocks print) comes from admin on
+          sync — this terminal only stores the Bluetooth device.
+        </Text>
+
+        {settings?.kind === "bluetooth" && settings.bluetoothAddress ? (
+          <Badge
+            tone="success"
+            label={`Using ${settings.bluetoothName || settings.bluetoothAddress}`}
+          />
+        ) : (
+          <Badge tone="neutral" label="No Bluetooth printer paired" />
+        )}
+
+        <Button
+          label={scanning ? "Scanning…" : "Scan / refresh devices"}
+          icon={scanning ? undefined : RefreshCw}
+          variant="secondary"
+          onPress={() => void loadBluetoothDevices()}
+          disabled={scanning}
+        />
+        {scanning ? <ActivityIndicator color={color.primary} /> : null}
+
+        {devices.length > 0 ? (
+          <View style={{ gap: space.xs }}>
+            {devices.map((device) => {
+              const active =
+                settings?.kind === "bluetooth" &&
+                settings.bluetoothAddress === device.id;
+              return (
+                <Pressable
+                  key={device.id}
+                  onPress={() => void save("bluetooth", device)}
+                  style={{
+                    minHeight: 48,
+                    borderWidth: 1,
+                    borderColor: active ? color.primary : color.border,
+                    borderRadius: radius.sm,
+                    backgroundColor: active ? color.primarySoft : color.surface,
+                    paddingHorizontal: space.md,
+                    paddingVertical: space.sm,
+                    justifyContent: "center",
+                  }}
+                >
+                  <Text style={{ fontSize: fontSize.bodyLg, fontWeight: "600", color: color.ink }}>
+                    {device.name || "Unknown device"}
+                  </Text>
+                  <Text style={{ fontSize: fontSize.caption, color: color.inkMuted }}>
+                    {device.id}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+      </Card>
+
+      <Card style={{ gap: space.md }}>
+        <SectionTitle icon={Printer} title="Network printer (optional)" />
+        <Text style={styles.muted}>
+          LAN ESC/POS on wifi. Prefer Bluetooth for the PT-210 on the counter.
         </Text>
 
         <Labelled label="Address">
@@ -209,40 +379,28 @@ export default function SettingsScreen() {
           />
         </Labelled>
 
-        <View style={{ flexDirection: "row", gap: space.md }}>
-          <View style={{ flex: 1 }}>
-            <Labelled label="Port">
-              <TextInput
-                value={port}
-                onChangeText={setPort}
-                keyboardType="number-pad"
-                style={inputStyle}
-              />
-            </Labelled>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Labelled label="Paper width">
-              <TextInput
-                value={columns}
-                onChangeText={setColumns}
-                keyboardType="number-pad"
-                style={inputStyle}
-              />
-            </Labelled>
-          </View>
-        </View>
-        <Text style={{ fontSize: fontSize.caption, color: color.inkMuted }}>
-          32 characters for 58mm paper, 48 for 80mm.
-        </Text>
+        <Labelled label="Port">
+          <TextInput
+            value={port}
+            onChangeText={setPort}
+            keyboardType="number-pad"
+            style={inputStyle}
+          />
+        </Labelled>
 
+        <Button
+          label="Use network printer"
+          icon={Check}
+          variant="secondary"
+          onPress={() => void save("network")}
+        />
+      </Card>
+
+      <Card style={{ gap: space.md }}>
+        <SectionTitle icon={Printer} title="Print test" />
         {error ? <ErrorNote>{error}</ErrorNote> : null}
         {message ? <SuccessNote>{message}</SuccessNote> : null}
 
-        <Button
-          label="Use this printer"
-          icon={Check}
-          onPress={() => void save("network")}
-        />
         <Button
           label="Print to log instead"
           variant="secondary"

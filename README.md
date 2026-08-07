@@ -94,10 +94,13 @@ estimated stock = last synced stock - pending local sales
 
 ## Receipt printing
 
-`printing/escpos.ts` builds the bytes in plain TypeScript; `printing/transport.ts` carries
-them. A network ESC/POS printer needs `react-native-tcp-socket`, which is native — so the POS
-runs on an **Expo dev client, not Expo Go**. With no printer configured, receipts render to
-the log so the sale flow stays testable.
+Shop printer is a **PT-210** (58mm / 32 columns). Admin **Receipt layout** toggles which
+blocks print; terminals pull that row on sync. Each terminal pairs its own Bluetooth
+printer in POS Settings (`rn-bluetooth-classic-printer` + raw ESC/POS).
+
+`printing/escpos.ts` builds the bytes; `printing/transport.ts` sends them over Bluetooth
+Classic or optional LAN TCP. Native modules need an **Expo dev client, not Expo Go**.
+With no printer configured, receipts render to the log so the sale flow stays testable.
 
 Printing is fired from the local sale row and never awaited by the sale itself. A printer that
 is switched off cannot fail a completed sale.

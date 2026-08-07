@@ -84,6 +84,59 @@ export interface Database {
         };
         Relationships: [];
       };
+      receipt_layout: {
+        Row: {
+          /** Always true. One layout row for the whole shop. */
+          id: boolean;
+          show_shop_name: boolean;
+          show_address: boolean;
+          show_phone: boolean;
+          show_logo_line: boolean;
+          show_cashier: boolean;
+          show_terminal: boolean;
+          show_customer: boolean;
+          show_discounts: boolean;
+          show_payment: boolean;
+          show_footer: boolean;
+          paper_width_mm: number;
+          columns: number;
+          printer_model: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: boolean;
+          show_shop_name?: boolean;
+          show_address?: boolean;
+          show_phone?: boolean;
+          show_logo_line?: boolean;
+          show_cashier?: boolean;
+          show_terminal?: boolean;
+          show_customer?: boolean;
+          show_discounts?: boolean;
+          show_payment?: boolean;
+          show_footer?: boolean;
+          paper_width_mm?: number;
+          columns?: number;
+          printer_model?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          show_shop_name?: boolean;
+          show_address?: boolean;
+          show_phone?: boolean;
+          show_logo_line?: boolean;
+          show_cashier?: boolean;
+          show_terminal?: boolean;
+          show_customer?: boolean;
+          show_discounts?: boolean;
+          show_payment?: boolean;
+          show_footer?: boolean;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       categories: {
         Row: {
           id: string;

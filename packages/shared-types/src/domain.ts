@@ -117,6 +117,51 @@ export function storeInitial(name: string): string {
   return (name.trim()[0] ?? "A").toUpperCase();
 }
 
+/**
+ * Which blocks print on a thermal receipt. Admin owns this row; terminals pull
+ * it and never write it. Bluetooth pairing is per-device, not part of this.
+ *
+ * Paper is locked to PT-210 / 58mm / 32 columns — the shop's printer.
+ */
+export interface ReceiptLayout {
+  showShopName: boolean;
+  showAddress: boolean;
+  showPhone: boolean;
+  showLogoLine: boolean;
+  showCashier: boolean;
+  showTerminal: boolean;
+  showCustomer: boolean;
+  showDiscounts: boolean;
+  showPayment: boolean;
+  showFooter: boolean;
+  paperWidthMm: 58;
+  columns: 32;
+  printerModel: "PT-210";
+  updatedAt: string;
+}
+
+export const DEFAULT_RECEIPT_LAYOUT: ReceiptLayout = {
+  showShopName: true,
+  showAddress: true,
+  showPhone: true,
+  showLogoLine: false,
+  showCashier: true,
+  showTerminal: true,
+  showCustomer: true,
+  showDiscounts: true,
+  showPayment: true,
+  showFooter: true,
+  paperWidthMm: 58,
+  columns: 32,
+  printerModel: "PT-210",
+  updatedAt: "",
+};
+
+/** PT-210 character budget. Never invent a different width for this shop. */
+export const RECEIPT_COLUMNS = 32;
+export const RECEIPT_PAPER_WIDTH_MM = 58;
+export const RECEIPT_PRINTER_MODEL = "PT-210" as const;
+
 export interface User {
   id: string;
   name: string;
