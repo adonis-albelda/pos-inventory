@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  PermissionsAndroid,
-  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -25,6 +23,7 @@ import { useLayout } from "@/lib/layout";
 import { useSession } from "@/lib/session";
 import { useStoreSettings } from "@/lib/store";
 import { useSync } from "@/sync/sync-provider";
+import { ensureBluetoothPermissions } from "@/printing/bluetooth-permissions";
 import { buildReceipt, getPrinterSettings, savePrinterSettings } from "@/printing/receipt";
 import { transportFor, type PrinterSettings } from "@/printing/transport";
 import {
@@ -99,27 +98,15 @@ export default function SettingsScreen() {
     void load();
   }, [dataVersion]);
 
-  const requestBluetoothPermissions = useCallback(async (): Promise<boolean> => {
-    if (Platform.OS !== "android") return true;
-    const result = await PermissionsAndroid.requestMultiple([
-      PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-      PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-    ]);
-    return Object.values(result).every(
-      (status) => status === PermissionsAndroid.RESULTS.GRANTED,
-    );
-  }, []);
-
   async function loadBluetoothDevices() {
     setError(null);
     setMessage(null);
     setScanning(true);
 
     try {
-      const allowed = await requestBluetoothPermissions();
+      const allowed = await ensureBluetoothPermissions();
       if (!allowed) {
-        setError("Bluetooth permission denied. Allow it in system settings.");
+        setError("Bluetooth permission not granted. Allow it to scan for the PT-210.");
         return;
       }
 
@@ -185,6 +172,12 @@ export default function SettingsScreen() {
     }
 
     if (kind === "bluetooth" && next.bluetoothAddress) {
+      const allowed = await ensureBluetoothPermissions();
+      if (!allowed) {
+        setError("Bluetooth permission not granted. Allow it to connect to the PT-210.");
+        return;
+      }
+
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const Bluetooth = require("rn-bluetooth-classic-printer") as {

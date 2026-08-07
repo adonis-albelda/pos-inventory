@@ -2,6 +2,7 @@
 import { Buffer } from "buffer";
 import type { LocalSaleWithItems } from "@double-a/shared-types";
 import { RECEIPT_COLUMNS } from "@double-a/shared-types";
+import { ensureBluetoothPermissions } from "./bluetooth-permissions";
 
 import type TcpSocketDefault from "react-native-tcp-socket";
 
@@ -94,6 +95,11 @@ export function bluetoothTransport(address: string): PrinterTransport {
   return {
     name: `bluetooth:${address}`,
     async send(payload) {
+      const allowed = await ensureBluetoothPermissions();
+      if (!allowed) {
+        throw new Error("Bluetooth permission not granted");
+      }
+
       let Bluetooth: BluetoothPrinterModule;
       try {
         // Lazy: Expo Go / a build without the native module must not crash a sale.

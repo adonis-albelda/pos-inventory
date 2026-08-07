@@ -89,7 +89,9 @@ SELECT p.id,
 
 const LIST_SQL = `${SELECT_SQL} WHERE p.is_active = 1 ORDER BY p.name`;
 
-const BY_BARCODE_SQL = `${SELECT_SQL} WHERE p.is_active = 1 AND p.barcode = ? LIMIT 1`;
+const BY_BARCODE_SQL = `${SELECT_SQL}
+  WHERE p.is_active = 1 AND (p.barcode = ? OR p.sku = ?)
+  LIMIT 1`;
 
 export async function listLocalProducts(): Promise<ProductWithEstimatedStock[]> {
   const rows = await getDb().getAllAsync<ProductRow>(LIST_SQL);
@@ -97,9 +99,8 @@ export async function listLocalProducts(): Promise<ProductWithEstimatedStock[]> 
 }
 
 /**
- * Exact barcode match, for a scanner. A scanner types the code and submits, so
- * this has to be an equality lookup — a partial match would put the wrong
- * product in the cart.
+ * Exact barcode or SKU match, for a scanner (or a QR printed from the SKU).
+ * Equality only — a partial match would put the wrong product in the cart.
  */
 export async function findLocalProductByBarcode(
   code: string,
@@ -107,7 +108,7 @@ export async function findLocalProductByBarcode(
   const needle = code.trim();
   if (!needle) return null;
 
-  const row = await getDb().getFirstAsync<ProductRow>(BY_BARCODE_SQL, needle);
+  const row = await getDb().getFirstAsync<ProductRow>(BY_BARCODE_SQL, needle, needle);
   return row ? toProductWithEstimate(row) : null;
 }
 
