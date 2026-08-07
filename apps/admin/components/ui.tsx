@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from "react";
+import { forwardRef, type ComponentProps, type ReactNode } from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import {
@@ -491,21 +491,24 @@ export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
   );
 }
 
-export function FileInput({ className, ...props }: ComponentProps<"input">) {
-  return (
-    <input
-      {...props}
-      type="file"
-      className={cx(
-        CONTROL_STYLES,
-        "cursor-pointer py-2",
-        "file:mr-3 file:cursor-pointer file:rounded-sm file:border-0 file:bg-primary/10",
-        "file:px-3 file:py-1 file:text-body file:font-medium file:text-primary",
-        className,
-      )}
-    />
-  );
-}
+export const FileInput = forwardRef<HTMLInputElement, ComponentProps<"input">>(
+  function FileInput({ className, ...props }, ref) {
+    return (
+      <input
+        {...props}
+        ref={ref}
+        type="file"
+        className={cx(
+          CONTROL_STYLES,
+          "cursor-pointer py-2",
+          "file:mr-3 file:cursor-pointer file:rounded-sm file:border-0 file:bg-primary/10",
+          "file:px-3 file:py-1 file:text-body file:font-medium file:text-primary",
+          className,
+        )}
+      />
+    );
+  },
+);
 
 /* -------------------------------------------------------------------------- */
 /* Empty state — always says what to do next                                  */

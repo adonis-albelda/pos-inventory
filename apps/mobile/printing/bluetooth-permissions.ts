@@ -1,10 +1,11 @@
-import { Alert, Linking, PermissionsAndroid, Platform } from "react-native";
+import { Alert, AppState, Linking, PermissionsAndroid, Platform } from "react-native";
 import type { Permission } from "react-native";
 
 /**
  * Ask Android for the Bluetooth permissions the PT-210 scan/connect needs.
- * Shows a short reason first, then the system dialog. If the cashier previously
- * tapped "Don't ask again", offers to open system Settings.
+ * If the cashier previously tapped "Don't ask again", opens system Settings
+ * and re-checks when they return — so a grant in Settings is picked up
+ * without a second deny loop.
  *
  * API 31+ needs BLUETOOTH_SCAN + BLUETOOTH_CONNECT at runtime.
  * Older APIs need fine location to discover Classic devices.
@@ -15,35 +16,36 @@ export async function ensureBluetoothPermissions(): Promise<boolean> {
   const permissions = runtimeBluetoothPermissions();
   if (permissions.length === 0) return true;
 
-  const already = await Promise.all(
-    permissions.map((permission) => PermissionsAndroid.check(permission)),
-  );
-  if (already.every(Boolean)) return true;
+  if (await allGranted(permissions)) return true;
 
   const proceed = await confirmPrompt();
   if (!proceed) return false;
 
   const result = await PermissionsAndroid.requestMultiple(permissions);
 
-  const denied = permissions.filter(
-    (permission) => result[permission] !== PermissionsAndroid.RESULTS.GRANTED,
-  );
-  if (denied.length === 0) return true;
+  if (permissions.every((permission) => result[permission] === PermissionsAndroid.RESULTS.GRANTED)) {
+    return true;
+  }
 
-  const blocked = denied.some(
+  // Already granted in Settings between check and request (or OEM quirk).
+  if (await allGranted(permissions)) return true;
+
+  const blocked = permissions.some(
     (permission) => result[permission] === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN,
   );
 
-  if (blocked) {
-    await offerSettings();
-  } else {
+  if (!blocked) {
     Alert.alert(
       "Bluetooth needed",
       "Allow Bluetooth so this terminal can find and print to the PT-210.",
     );
+    return false;
   }
 
-  return false;
+  const opened = await offerSettings();
+  if (!opened) return false;
+
+  return allGranted(permissions);
 }
 
 function runtimeBluetoothPermissions(): Permission[] {
@@ -62,6 +64,13 @@ function runtimeBluetoothPermissions(): Permission[] {
   );
 }
 
+async function allGranted(permissions: Permission[]): Promise<boolean> {
+  const checks = await Promise.all(
+    permissions.map((permission) => PermissionsAndroid.check(permission)),
+  );
+  return checks.every(Boolean);
+}
+
 function confirmPrompt(): Promise<boolean> {
   return new Promise((resolve) => {
     Alert.alert(
@@ -76,21 +85,48 @@ function confirmPrompt(): Promise<boolean> {
   });
 }
 
-function offerSettings(): Promise<void> {
+/** true if cashier opened Settings (and we waited for return). */
+function offerSettings(): Promise<boolean> {
   return new Promise((resolve) => {
     Alert.alert(
       "Bluetooth blocked",
       "Permission was denied earlier. Open Settings and allow Bluetooth (and nearby devices) for DOUBLE A POS.",
       [
-        { text: "Cancel", style: "cancel", onPress: () => resolve() },
+        { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
         {
           text: "Open Settings",
           onPress: () => {
-            void Linking.openSettings().finally(() => resolve());
+            void (async () => {
+              const returned = waitForReturnFromBackground();
+              await Linking.openSettings();
+              await returned;
+              resolve(true);
+            })();
           },
         },
       ],
-      { cancelable: true, onDismiss: () => resolve() },
+      { cancelable: true, onDismiss: () => resolve(false) },
     );
+  });
+}
+
+/**
+ * Linking.openSettings resolves as soon as Settings opens — not when the
+ * cashier comes back. Wait for background → active so a grant is visible
+ * to PermissionsAndroid.check.
+ */
+function waitForReturnFromBackground(): Promise<void> {
+  return new Promise((resolve) => {
+    let sawBackground = AppState.currentState !== "active";
+
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next !== "active") {
+        sawBackground = true;
+        return;
+      }
+      if (!sawBackground) return;
+      sub.remove();
+      resolve();
+    });
   });
 }

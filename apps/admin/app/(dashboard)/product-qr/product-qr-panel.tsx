@@ -13,7 +13,7 @@ import {
   Select,
 } from "@/components/ui";
 
-export type QrProduct = { id: string; name: string; sku: string };
+export type QrProduct = { id: string; sku: string };
 
 type PaperSize = "a4" | "legal";
 
@@ -42,6 +42,53 @@ function gridFor(count: number): { cols: number; rows: number } {
   return { cols: 6, rows: Math.ceil(count / 6) };
 }
 
+/**
+ * Cell type and QR share shrink as more products crowd the page, and again
+ * when the longest SKU on the sheet is long — full string stays readable,
+ * never truncated.
+ */
+function cellScale(count: number, maxSkuLen: number): {
+  skuPx: number;
+  qrMax: string;
+  qrWidth: number;
+} {
+  let skuPx: number;
+  let qrMax: string;
+  let qrWidth: number;
+
+  if (count <= 4) {
+    skuPx = 15;
+    qrMax = "74%";
+    qrWidth = 320;
+  } else if (count <= 8) {
+    skuPx = 13;
+    qrMax = "70%";
+    qrWidth = 288;
+  } else if (count <= 12) {
+    skuPx = 12;
+    qrMax = "66%";
+    qrWidth = 256;
+  } else if (count <= 20) {
+    skuPx = 11;
+    qrMax = "62%";
+    qrWidth = 224;
+  } else if (count <= 30) {
+    skuPx = 10;
+    qrMax = "58%";
+    qrWidth = 192;
+  } else {
+    skuPx = 9;
+    qrMax = "54%";
+    qrWidth = 160;
+  }
+
+  if (maxSkuLen > 28) skuPx = Math.max(7, skuPx - 3);
+  else if (maxSkuLen > 20) skuPx = Math.max(7, skuPx - 2);
+  else if (maxSkuLen > 14) skuPx = Math.max(8, skuPx - 1);
+
+  return { skuPx, qrMax, qrWidth };
+}
+
 export function ProductQrPanel({ products }: { products: QrProduct[] }) {
   const [count, setCount] = useState(DEFAULT_COUNT);
   const [start, setStart] = useState(0);
@@ -60,6 +107,11 @@ export function ProductQrPanel({ products }: { products: QrProduct[] }) {
 
   const { cols, rows } = gridFor(selected.length);
   const paperSpec = PAPER[paper];
+  const maxSkuLen = useMemo(
+    () => selected.reduce((max, product) => Math.max(max, product.sku.length), 0),
+    [selected],
+  );
+  const scale = cellScale(selected.length || 1, maxSkuLen);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +124,7 @@ export function ProductQrPanel({ products }: { products: QrProduct[] }) {
           next[product.id] = await QRCode.toDataURL(product.sku, {
             errorCorrectionLevel: "M",
             margin: 1,
-            width: 256,
+            width: scale.qrWidth,
             color: { dark: "#1a1a1a", light: "#ffffff" },
           });
         }),
@@ -87,7 +139,7 @@ export function ProductQrPanel({ products }: { products: QrProduct[] }) {
     return () => {
       cancelled = true;
     };
-  }, [selected]);
+  }, [selected, scale.qrWidth]);
 
   function printSheet() {
     window.print();
@@ -175,8 +227,8 @@ export function ProductQrPanel({ products }: { products: QrProduct[] }) {
         </div>
         <p className="border-t border-border px-4 py-3 text-caption text-ink-muted sm:px-6">
           Showing {selected.length} of {products.length} products with SKUs
-          {busy ? " · generating QR…" : ""}. Grid {cols}×{rows}. QR encodes the SKU
-          string for the POS scanner.
+          {busy ? " · generating QR…" : ""}. Grid {cols}×{rows}. Label shows SKU
+          only — type scales with how many fit on the page.
         </p>
       </Card>
 
@@ -218,24 +270,32 @@ export function ProductQrPanel({ products }: { products: QrProduct[] }) {
                 {selected.map((product) => (
                   <div
                     key={product.id}
-                    className="flex min-h-0 flex-col items-center justify-center gap-0.5 overflow-hidden border border-border/70 px-1 py-1 text-center"
+                    className="flex min-h-0 flex-col items-center justify-center gap-1 overflow-hidden border border-border/70 px-1 py-1 text-center"
                   >
                     {codes[product.id] ? (
                       <img
                         src={codes[product.id]}
                         alt={`QR for ${product.sku}`}
-                        className="h-auto max-h-[70%] w-[78%] object-contain"
+                        className="h-auto w-[78%] object-contain"
+                        style={{ maxHeight: scale.qrMax }}
                       />
                     ) : (
-                      <div className="flex aspect-square w-[78%] items-center justify-center bg-paper text-[10px] text-ink-muted">
+                      <div
+                        className="flex aspect-square w-[78%] items-center justify-center bg-paper text-[10px] text-ink-muted"
+                        style={{ maxHeight: scale.qrMax }}
+                      >
                         …
                       </div>
                     )}
-                    <span className="num w-full truncate text-[9px] font-semibold leading-tight sm:text-[10px]">
+                    <span
+                      className="num w-full px-0.5 font-semibold leading-tight"
+                      style={{
+                        fontSize: `${scale.skuPx}px`,
+                        overflowWrap: "anywhere",
+                        wordBreak: "break-word",
+                      }}
+                    >
                       {product.sku}
-                    </span>
-                    <span className="w-full truncate text-[8px] leading-tight text-ink-muted sm:text-[9px]">
-                      {product.name}
                     </span>
                   </div>
                 ))}

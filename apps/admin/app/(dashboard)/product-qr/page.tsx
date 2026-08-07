@@ -28,7 +28,6 @@ export default async function ProductQrPage() {
     .filter((product) => product.sku?.trim())
     .map((product) => ({
       id: product.id,
-      name: product.name,
       sku: product.sku!.trim(),
     }));
 

@@ -2,20 +2,32 @@
 export const COMPANY_NAME = "DOUBLE A DIGITAL SOLUTIONS";
 
 /**
- * The name split for the intro lockup: the mark lands at once, the trade is
- * typed out after it. Kept here so admin and POS type the same words.
+ * The name split for the intro lockup. Kept here so admin and POS show the
+ * same words.
  */
 export const COMPANY_LEAD = "DOUBLE A";
 export const COMPANY_TRADE = "DIGITAL SOLUTIONS";
 
-/** Per-character delay while COMPANY_TRADE types itself in (ms). */
+/** Short product line under the mark — not a slogan. */
+export const COMPANY_PRODUCT = "POS & Inventory";
+
+/**
+ * The one sentence on the cold-start splash. Quiet credit, not a pitch deck.
+ */
+export const COMPANY_POWERED_BY =
+  "This software is powered by Double A Digital Solutions.";
+
+/** How long the splash holds before continuing on its own (ms). */
+export const COMPANY_INTRO_HOLD_MS = 3600;
+
+/**
+ * @deprecated Prefer COMPANY_POWERED_BY. Kept as a one-item list so older
+ * intro loops that index taglines still compile.
+ */
+export const COMPANY_TAGLINES = [COMPANY_POWERED_BY] as const;
+
+/** @deprecated Prefer COMPANY_INTRO_HOLD_MS. */
+export const COMPANY_TAGLINE_MS = COMPANY_INTRO_HOLD_MS;
+
+/** Unused by the minimal intro; left for any typewriter callers. */
 export const COMPANY_TYPE_MS = 90;
-
-export const COMPANY_TAGLINES = [
-  "Great ideas deserve great software — no tech background required.",
-  "You bring the idea. We bring the code.",
-  "Great ideas deserve great software.",
-] as const;
-
-/** How long each tagline stays on screen before the next (ms). */
-export const COMPANY_TAGLINE_MS = 2800;

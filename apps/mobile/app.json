@@ -10,7 +10,8 @@
     "newArchEnabled": true,
     "backgroundColor": "#F5F5F3",
     "splash": {
-      "backgroundColor": "#C6DACF",
+      "image": "./assets/splash-icon.png",
+      "backgroundColor": "#F5F5F3",
       "resizeMode": "contain"
     },
     "ios": {
@@ -20,8 +21,8 @@
     "android": {
       "package": "com.doublea.pos",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#000000"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F5F5F3"
       },
       "permissions": [
         "android.permission.BLUETOOTH",
@@ -34,8 +35,7 @@
     "plugins": [
       "expo-router",
       "expo-sqlite",
-      "expo-secure-store",
-      "rn-bluetooth-classic-printer"
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true

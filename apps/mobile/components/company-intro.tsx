@@ -8,11 +8,10 @@ import {
   View,
 } from "react-native";
 import {
+  COMPANY_INTRO_HOLD_MS,
   COMPANY_LEAD,
-  COMPANY_TAGLINE_MS,
-  COMPANY_TAGLINES,
-  COMPANY_TRADE,
-  COMPANY_TYPE_MS,
+  COMPANY_POWERED_BY,
+  COMPANY_PRODUCT,
 } from "@double-a/ui";
 import { SageBackdrop } from "@/components/sage-backdrop";
 import { color, fontSize, space } from "@/theme";
@@ -20,18 +19,15 @@ import { color, fontSize, space } from "@/theme";
 const LOGO = require("../assets/logo.png");
 
 /**
- * Cold-start marketing screen for DOUBLE A Digital Solutions. Cycles taglines
- * one at a time, then yields to the real boot route. Tap skips ahead.
+ * Cold-start splash: mark, product line, powered-by credit. Tap skips.
+ * No rotating slogans — one calm composition.
  */
 export function CompanyIntro({ onDone }: { onDone: () => void }) {
-  const [index, setIndex] = useState(0);
-  const [typed, setTyped] = useState(0);
   const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(12)).current;
-  const logoScale = useRef(new Animated.Value(0.92)).current;
-  const caret = useRef(new Animated.Value(1)).current;
+  const translateY = useRef(new Animated.Value(10)).current;
+  const logoScale = useRef(new Animated.Value(0.94)).current;
   const finished = useRef(false);
-  const typing = typed < COMPANY_TRADE.length;
+  const [ready, setReady] = useState(false);
 
   function finish() {
     if (finished.current) return;
@@ -40,102 +36,35 @@ export function CompanyIntro({ onDone }: { onDone: () => void }) {
   }
 
   useEffect(() => {
-    Animated.spring(logoScale, {
-      toValue: 1,
-      friction: 7,
-      tension: 60,
-      useNativeDriver: true,
-    }).start();
-  }, [logoScale]);
-
-  /** Trade name types itself in, one character per tick. */
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTyped((count) => {
-        if (count >= COMPANY_TRADE.length) {
-          clearInterval(timer);
-          return count;
-        }
-        return count + 1;
-      });
-    }, COMPANY_TYPE_MS);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  /** Caret blinks while typing, then rests lit for a beat and goes. */
-  useEffect(() => {
-    if (!typing) {
-      Animated.timing(caret, {
-        toValue: 0,
-        duration: 400,
-        delay: 600,
+    Animated.parallel([
+      Animated.spring(logoScale, {
+        toValue: 1,
+        friction: 8,
+        tension: 55,
         useNativeDriver: true,
-      }).start();
-      return;
-    }
-
-    const blink = Animated.loop(
-      Animated.sequence([
-        Animated.timing(caret, {
-          toValue: 0.15,
-          duration: 260,
-          useNativeDriver: true,
-        }),
-        Animated.timing(caret, {
-          toValue: 1,
-          duration: 260,
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-
-    blink.start();
-    return () => blink.stop();
-  }, [caret, typing]);
-
-  useEffect(() => {
-    opacity.setValue(0);
-    translateY.setValue(12);
-
-    const fadeIn = Animated.parallel([
+      }),
       Animated.timing(opacity, {
         toValue: 1,
-        duration: 420,
+        duration: 520,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(translateY, {
         toValue: 0,
-        duration: 420,
+        duration: 520,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
-    ]);
+    ]).start(() => setReady(true));
+  }, [logoScale, opacity, translateY]);
 
-    const hold = Animated.delay(COMPANY_TAGLINE_MS);
-
-    const fadeOut = Animated.timing(opacity, {
-      toValue: 0,
-      duration: 320,
-      easing: Easing.in(Easing.cubic),
-      useNativeDriver: true,
-    });
-
-    const sequence = Animated.sequence([fadeIn, hold, fadeOut]);
-    sequence.start(({ finished: ok }) => {
-      if (!ok || finished.current) return;
-      if (index >= COMPANY_TAGLINES.length - 1) {
-        finish();
-        return;
-      }
-      setIndex((current) => current + 1);
-    });
-
-    return () => sequence.stop();
-    // finish closes over onDone; index drives the cycle.
+  useEffect(() => {
+    if (!ready) return;
+    const timer = setTimeout(finish, COMPANY_INTRO_HOLD_MS);
+    return () => clearTimeout(timer);
+    // finish closes over onDone once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, opacity, translateY]);
+  }, [ready]);
 
   return (
     <Pressable
@@ -155,91 +84,78 @@ export function CompanyIntro({ onDone }: { onDone: () => void }) {
       <Animated.View
         style={{
           alignItems: "center",
-          gap: space.lg,
-          transform: [{ scale: logoScale }],
+          maxWidth: 340,
+          opacity,
+          transform: [{ translateY }, { scale: logoScale }],
         }}
       >
-        {/* No tile, no border: the mark sits straight on the sage wash. */}
         <Image
           source={LOGO}
-          style={{ width: 128, height: 128 }}
+          style={{ width: 112, height: 112 }}
           resizeMode="contain"
           accessibilityIgnoresInvertColors
         />
 
-        <View style={{ alignItems: "center", gap: space.md }}>
-          <Text
-            style={{
-              fontSize: fontSize.headingSm,
-              fontWeight: "800",
-              letterSpacing: 1.4,
-              color: color.ink,
-              textAlign: "center",
-            }}
-          >
-            {COMPANY_LEAD}
-          </Text>
-
-          {/*
-            One Text, so the caret sits against the last typed character and the
-            line does not reflow as it grows. The full string is the label for a
-            screen reader, which must not hear it a letter at a time.
-          */}
-          <Text
-            accessibilityLabel={COMPANY_TRADE}
-            style={{
-              fontSize: fontSize.bodyLg,
-              fontWeight: "700",
-              letterSpacing: 3,
-              color: color.primaryDark,
-              textAlign: "center",
-            }}
-          >
-            {COMPANY_TRADE.slice(0, typed)}
-            <Animated.Text style={{ opacity: caret, color: color.primary }}>
-              |
-            </Animated.Text>
-          </Text>
-
-          <View style={{ width: 44, height: 3, backgroundColor: color.primary }} />
-        </View>
-      </Animated.View>
-
-      <View
-        style={{
-          marginTop: space["2xl"],
-          minHeight: 72,
-          width: "100%",
-          maxWidth: 360,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Animated.Text
+        <Text
           style={{
-            opacity,
-            transform: [{ translateY }],
-            fontSize: fontSize.bodyLg,
-            fontWeight: "600",
-            lineHeight: 24,
-            // Sage is mid-tone by the time the tagline sits on it, so muted ink
-            // would drop under 4.5:1.
+            marginTop: space.xl,
+            fontSize: fontSize.headingSm,
+            fontWeight: "800",
+            letterSpacing: 2.4,
             color: color.ink,
             textAlign: "center",
           }}
         >
-          {COMPANY_TAGLINES[index]}
-        </Animated.Text>
-      </View>
+          {COMPANY_LEAD}
+        </Text>
+
+        <View
+          style={{
+            marginTop: space.md,
+            width: 40,
+            height: 2,
+            borderRadius: 1,
+            backgroundColor: color.primary,
+          }}
+        />
+
+        <Text
+          style={{
+            marginTop: space.md,
+            fontSize: fontSize.caption,
+            fontWeight: "600",
+            letterSpacing: 1.2,
+            color: color.inkMuted,
+            textTransform: "uppercase",
+            textAlign: "center",
+          }}
+        >
+          {COMPANY_PRODUCT}
+        </Text>
+
+        <Text
+          style={{
+            marginTop: space["2xl"],
+            fontSize: fontSize.bodyLg,
+            fontWeight: "500",
+            lineHeight: 26,
+            color: color.ink,
+            textAlign: "center",
+          }}
+        >
+          {COMPANY_POWERED_BY}
+        </Text>
+      </Animated.View>
 
       <Text
         style={{
           position: "absolute",
           bottom: space["3xl"],
           fontSize: fontSize.caption,
-          fontWeight: "700",
+          fontWeight: "600",
           color: color.primaryDark,
-          letterSpacing: 0.4,
+          letterSpacing: 0.3,
+          opacity: 0.75,
         }}
       >
         Tap to continue

@@ -44,16 +44,17 @@ export default async function LoginPage({
           Cashiers sign in on a terminal with a PIN, not here.
         </p>
 
-        <p className="mt-8 text-center text-caption text-white/55">
-          Powered by{" "}
+        <p className="mt-8 text-center text-caption text-white/60">
+          This software is powered by{" "}
           <a
             href="https://doubleadigitalsolutions.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="underline decoration-white/30 underline-offset-2 transition-colors hover:text-white hover:decoration-white/60"
+            className="text-white/80 underline decoration-white/25 underline-offset-2 transition-colors hover:text-white hover:decoration-white/50"
           >
-            doubleadigitalsolutions.com
+            Double A Digital Solutions
           </a>
+          .
         </p>
       </div>
     </main>
