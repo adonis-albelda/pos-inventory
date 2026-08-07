@@ -1,15 +1,12 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
 import { revalidatePath } from "next/cache";
-import {
-  isProductUnit,
-  PRODUCT_UNITS,
-  validateProductInput,
-} from "@double-a/shared-types";
+import { validateProductInput } from "@double-a/shared-types";
 import { createProduct, listCategories } from "@double-a/supabase";
 import { toCategoryOptions } from "@/lib/category-options";
 import { getServerClient } from "@/lib/supabase/server";
+import { parseOcrProductLines } from "./parse-ocr-lines";
 import type {
   ExtractProductsResult,
   SaveAllScannedResult,
@@ -17,75 +14,40 @@ import type {
   ScannedProductDraft,
 } from "./types";
 
-const OPENAI_MODEL = "gpt-4o-mini";
+const require = createRequire(import.meta.url);
 
-interface VisionProduct {
-  name?: unknown;
-  sku?: unknown;
-  barcode?: unknown;
-  price?: unknown;
-  cost_price?: unknown;
-  unit?: unknown;
-  reorder_point?: unknown;
-  bulk_price?: unknown;
-  bulk_min_quantity?: unknown;
-  category?: unknown;
-}
+type TextractConfig = {
+  preserveLineBreaks?: boolean;
+  tesseract?: { lang?: string; cmd?: string };
+};
 
-function asTrimmedString(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  return String(value).trim();
-}
+type TextractModule = {
+  fromBufferWithMime: (
+    type: string,
+    buffer: Buffer,
+    config: TextractConfig,
+    callback: (error: Error | null, text?: string) => void,
+  ) => void;
+};
 
-function asOptionalNumberString(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "";
-  const n = typeof value === "number" ? value : Number(String(value).replace(/,/g, ""));
-  return Number.isFinite(n) ? String(n) : "";
-}
+const textract = require("textract") as TextractModule;
 
-function matchCategoryId(
-  categoryText: string,
-  options: { id: string; name: string; path: string }[],
-): string {
-  const needle = categoryText.trim().toLowerCase();
-  if (!needle) return "";
-
-  const byPath = options.find((o) => o.path.toLowerCase() === needle);
-  if (byPath) return byPath.id;
-
-  const byName = options.find((o) => o.name.toLowerCase() === needle);
-  if (byName) return byName.id;
-
-  const pathContains = options.find(
-    (o) =>
-      o.path.toLowerCase().includes(needle) || needle.includes(o.path.toLowerCase()),
-  );
-  if (pathContains) return pathContains.id;
-
-  return "";
-}
-
-function toDraft(
-  raw: VisionProduct,
-  options: { id: string; name: string; path: string }[],
-): ScannedProductDraft {
-  const unitRaw = asTrimmedString(raw.unit).toLowerCase();
-  const unit = isProductUnit(unitRaw) ? unitRaw : "pc";
-  const categoryText = asTrimmedString(raw.category);
-
-  return {
-    clientId: randomUUID(),
-    name: asTrimmedString(raw.name),
-    sku: asTrimmedString(raw.sku),
-    barcode: asTrimmedString(raw.barcode),
-    price: asOptionalNumberString(raw.price),
-    costPrice: asOptionalNumberString(raw.cost_price),
-    categoryId: matchCategoryId(categoryText, options),
-    unit,
-    reorderPoint: asOptionalNumberString(raw.reorder_point) || "5",
-    bulkPrice: asOptionalNumberString(raw.bulk_price),
-    bulkMinQuantity: asOptionalNumberString(raw.bulk_min_quantity),
-  };
+function extractTextFromImage(mime: string, buffer: Buffer): Promise<string> {
+  return new Promise((resolve, reject) => {
+    textract.fromBufferWithMime(
+      mime,
+      buffer,
+      {
+        preserveLineBreaks: true,
+        // Sparse notebook lines — one product per row.
+        tesseract: { cmd: "-l eng --psm 6" },
+      },
+      (error, text) => {
+        if (error) reject(error);
+        else resolve(text ?? "");
+      },
+    );
+  });
 }
 
 function describeSaveError(message: string): string {
@@ -99,6 +61,19 @@ function describeSaveError(message: string): string {
     return "Bulk pricing needs both a bulk price and a minimum quantity.";
   }
   return `Could not save the product: ${message}`;
+}
+
+function describeOcrError(message: string): string {
+  const lower = message.toLowerCase();
+  if (
+    lower.includes("tesseract") ||
+    lower.includes("enoent") ||
+    lower.includes("not found") ||
+    lower.includes("spawn")
+  ) {
+    return "Tesseract OCR is not installed. Install it (e.g. `brew install tesseract`), then restart admin.";
+  }
+  return `Could not read the photo: ${message}`;
 }
 
 function draftToInput(draft: ScannedProductDraft) {
@@ -147,21 +122,12 @@ async function insertDraft(draft: ScannedProductDraft): Promise<string | null> {
 }
 
 /**
- * Reads product lines from a notebook photo via OpenAI vision.
+ * Reads product lines from a notebook photo via textract (Tesseract OCR).
  * Stock is never extracted — opening stock belongs on Inventory.
  */
 export async function extractProductsFromImage(
   formData: FormData,
 ): Promise<ExtractProductsResult> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    return {
-      error:
-        "Server is missing OPENAI_API_KEY. Add it to apps/admin/.env.local, then restart admin.",
-      drafts: [],
-    };
-  }
-
   const file = formData.get("image");
   if (!(file instanceof File) || file.size === 0) {
     return { error: "Choose a photo, or take one with the camera.", drafts: [] };
@@ -180,96 +146,34 @@ export async function extractProductsFromImage(
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const dataUrl = `data:${file.type};base64,${buffer.toString("base64")}`;
+  const mime = file.type || "image/jpeg";
+
+  let text: string;
+  try {
+    text = await extractTextFromImage(mime, buffer);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return { error: describeOcrError(message), drafts: [] };
+  }
+
+  if (!text.trim()) {
+    return {
+      error:
+        "No text found in the photo. Use a clearer shot with one product per line.",
+      drafts: [],
+    };
+  }
 
   const supabase = await getServerClient();
   const categories = await listCategories(supabase, { includeInactive: true });
   const options = toCategoryOptions(categories);
-  const categoryPaths = options.map((o) => o.path).slice(0, 80);
 
-  const systemPrompt = [
-    "You extract product catalogue rows from photos of handwritten or printed lists.",
-    "Return JSON only: { \"products\": [ ... ] }.",
-    "Each product object may include: name, sku, barcode, price, cost_price, unit, reorder_point, bulk_price, bulk_min_quantity, category.",
-    "One object per product line on the page. Skip headers, totals, and doodles.",
-    "name is required when a line is a product. Prices are numbers (no currency symbols).",
-    `unit must be one of: ${PRODUCT_UNITS.join(", ")}. Default to "pc" if unclear.`,
-    "category is free text matching a path when readable (e.g. Plumbing / Pipes).",
-    "Leave unknown fields null. Never invent stock quantities.",
-    categoryPaths.length > 0
-      ? `Known category paths (prefer these spellings when close): ${categoryPaths.join("; ")}.`
-      : "No categories exist yet; leave category null.",
-  ].join(" ");
-
-  let response: Response;
-  try {
-    response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: OPENAI_MODEL,
-        temperature: 0.1,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Extract every product line from this photo into the products array.",
-              },
-              { type: "image_url", image_url: { url: dataUrl } },
-            ],
-          },
-        ],
-      }),
-    });
-  } catch {
-    return {
-      error: "Could not reach OpenAI. Check the network and try again.",
-      drafts: [],
-    };
-  }
-
-  if (!response.ok) {
-    const body = await response.text();
-    if (response.status === 401) {
-      return { error: "OpenAI rejected the API key. Check OPENAI_API_KEY.", drafts: [] };
-    }
-    return {
-      error: `OpenAI could not read the photo (${response.status}). ${body.slice(0, 180)}`,
-      drafts: [],
-    };
-  }
-
-  const payload = (await response.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  const content = payload.choices?.[0]?.message?.content;
-  if (!content) {
-    return { error: "OpenAI returned an empty answer. Try a clearer photo.", drafts: [] };
-  }
-
-  let parsed: { products?: VisionProduct[] };
-  try {
-    parsed = JSON.parse(content) as { products?: VisionProduct[] };
-  } catch {
-    return { error: "Could not parse the product list from the photo.", drafts: [] };
-  }
-
-  const products = Array.isArray(parsed.products) ? parsed.products : [];
-  const drafts = products
-    .map((row) => toDraft(row, options))
-    .filter((draft) => draft.name.length > 0);
+  const drafts = parseOcrProductLines(text, options);
 
   if (drafts.length === 0) {
     return {
       error:
-        "No product lines found. Use a clearer photo with one product per row.",
+        "No product lines found. Use a clearer photo with one product per row (name and price).",
       drafts: [],
     };
   }

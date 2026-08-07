@@ -348,12 +348,12 @@ export function FromPhotoPanel({ categories }: { categories: CategoryOption[] })
         <CardHeader
           icon={Camera}
           title="Photo of the list"
-          description="One product per line on the page. Handwriting and print both work when the shot is clear."
+          description="One product per line. Clear print works best — handwriting needs a sharp photo."
         />
         <div className="space-y-4 px-4 py-5 sm:px-6">
           <Field
             label="Notebook photo"
-            hint="Phone camera or an existing picture. Stock is never read from the photo."
+            hint="Phone camera or an existing picture. Uses Tesseract OCR on the server. Stock is never read from the photo."
           >
             <FileInput
               ref={inputRef}

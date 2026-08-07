@@ -4,6 +4,8 @@ const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript source, not built output.
   transpilePackages: ["@double-a/shared-types", "@double-a/supabase", "@double-a/ui"],
   typedRoutes: true,
+  // textract shells out to tesseract — keep it external so Next does not bundle it.
+  serverExternalPackages: ["textract"],
   experimental: {
     // CSV import and notebook photo OCR both post larger payloads than the
     // 1MB default (supplier lists, phone camera JPEGs).
