@@ -39,6 +39,22 @@ const PAPER: Record<
 /** One page holds this many labels; extra copies past it are dropped with a warning. */
 const MAX_LABELS = 48;
 
+type SizeMode = "auto" | "sm" | "md" | "lg";
+
+/**
+ * Fixed label sizes hold the same physical cell no matter how many print —
+ * 5 codes come out the same size as 40. `auto` keeps the old fit-to-page
+ * behaviour. `cellAspect` is width / height of one cell.
+ */
+const LABEL_SIZE: Record<
+  Exclude<SizeMode, "auto">,
+  { label: string; cols: number; qrWidth: number; skuPx: number; cellAspect: number }
+> = {
+  sm: { label: "Small", cols: 6, qrWidth: 160, skuPx: 9, cellAspect: 0.82 },
+  md: { label: "Medium", cols: 4, qrWidth: 224, skuPx: 11, cellAspect: 0.85 },
+  lg: { label: "Large", cols: 3, qrWidth: 288, skuPx: 13, cellAspect: 0.88 },
+};
+
 /** Columns that fit cleanly on band/label paper for the chosen count. */
 function gridFor(count: number): { cols: number; rows: number } {
   if (count <= 8) return { cols: 2, rows: Math.ceil(count / 2) };
@@ -99,6 +115,7 @@ const MAX_COPIES = 48;
 
 export function ProductQrPanel({ products }: { products: QrProduct[] }) {
   const [paper, setPaper] = useState<PaperSize>("a4");
+  const [sizeMode, setSizeMode] = useState<SizeMode>("md");
   const [query, setQuery] = useState("");
   const [categoryId, setCategoryId] = useState<string>("all");
   // id -> number of copies. Presence of a key means the product is selected.
@@ -151,13 +168,27 @@ export function ProductQrPanel({ products }: { products: QrProduct[] }) {
   const overflow = labels.length > MAX_LABELS;
   const pageLabels = overflow ? labels.slice(0, MAX_LABELS) : labels;
 
-  const { cols, rows } = gridFor(pageLabels.length);
   const paperSpec = PAPER[paper];
+  const fixed = sizeMode === "auto" ? null : LABEL_SIZE[sizeMode];
   const maxSkuLen = useMemo(
     () => pageLabels.reduce((max, label) => Math.max(max, label.sku.length), 0),
     [pageLabels],
   );
-  const scale = cellScale(pageLabels.length || 1, maxSkuLen);
+
+  const autoGrid = gridFor(pageLabels.length);
+  const autoScale = cellScale(pageLabels.length || 1, maxSkuLen);
+
+  const cols = fixed ? fixed.cols : autoGrid.cols;
+  const rows = Math.max(1, Math.ceil(pageLabels.length / cols));
+  // Long SKUs still shrink type in fixed mode so nothing truncates.
+  const skuShrink = maxSkuLen > 28 ? 3 : maxSkuLen > 20 ? 2 : maxSkuLen > 14 ? 1 : 0;
+  const scale = fixed
+    ? {
+        skuPx: Math.max(7, fixed.skuPx - skuShrink),
+        qrMax: "82%",
+        qrWidth: fixed.qrWidth,
+      }
+    : autoScale;
 
   useEffect(() => {
     let cancelled = false;
@@ -255,7 +286,7 @@ export function ProductQrPanel({ products }: { products: QrProduct[] }) {
           title="Pick products"
           description="Search by name or SKU, filter by category, then choose how many labels of each."
         />
-        <div className="grid gap-4 px-4 py-5 sm:grid-cols-2 lg:grid-cols-3 sm:px-6">
+        <div className="grid gap-4 px-4 py-5 sm:grid-cols-2 lg:grid-cols-4 sm:px-6">
           <Field label="Search" hint="Matches product name or SKU.">
             <Input
               icon={Search}
@@ -276,6 +307,17 @@ export function ProductQrPanel({ products }: { products: QrProduct[] }) {
                   {category.label}
                 </option>
               ))}
+            </Select>
+          </Field>
+          <Field label="Label size" hint="Fixed = same size at any count.">
+            <Select
+              value={sizeMode}
+              onChange={(event) => setSizeMode(event.target.value as SizeMode)}
+            >
+              <option value="sm">{LABEL_SIZE.sm.label}</option>
+              <option value="md">{LABEL_SIZE.md.label}</option>
+              <option value="lg">{LABEL_SIZE.lg.label}</option>
+              <option value="auto">Auto (fit page)</option>
             </Select>
           </Field>
           <Field label="Paper size">
@@ -422,7 +464,10 @@ export function ProductQrPanel({ products }: { products: QrProduct[] }) {
                   padding: "3%",
                   display: "grid",
                   gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-                  gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+                  // Fixed sizes flow from the top with same-size cells; auto fills the page.
+                  ...(fixed
+                    ? { gridAutoRows: "min-content", alignContent: "start" }
+                    : { gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }),
                   gap: "1.5%",
                   border: "1px dashed #c4c0b5",
                 }}
@@ -431,6 +476,7 @@ export function ProductQrPanel({ products }: { products: QrProduct[] }) {
                   <div
                     key={label.key}
                     className="flex min-h-0 flex-col items-center justify-center gap-1 overflow-hidden border border-border/70 px-1 py-1 text-center"
+                    style={fixed ? { aspectRatio: fixed.cellAspect } : undefined}
                   >
                     {codes[label.id] ? (
                       <img
