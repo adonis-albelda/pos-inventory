@@ -29,6 +29,9 @@ export default async function ProductQrPage() {
     .map((product) => ({
       id: product.id,
       sku: product.sku!.trim(),
+      name: product.name,
+      category: product.category,
+      categoryId: product.categoryId,
     }));
 
   return (

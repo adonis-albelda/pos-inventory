@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode";
-import { Printer, QrCode } from "lucide-react";
+import { CheckSquare, Printer, QrCode, Search, Square, X } from "lucide-react";
 import {
   Button,
   Card,
@@ -13,7 +13,13 @@ import {
   Select,
 } from "@/components/ui";
 
-export type QrProduct = { id: string; sku: string };
+export type QrProduct = {
+  id: string;
+  sku: string;
+  name: string;
+  category: string | null;
+  categoryId: string | null;
+};
 
 type PaperSize = "a4" | "legal";
 
@@ -30,8 +36,8 @@ const PAPER: Record<
   },
 };
 
-const DEFAULT_COUNT = 20;
-const MAX_COUNT = 48;
+/** One page holds this many labels; extra copies past it are dropped with a warning. */
+const MAX_LABELS = 48;
 
 /** Columns that fit cleanly on band/label paper for the chosen count. */
 function gridFor(count: number): { cols: number; rows: number } {
@@ -43,7 +49,7 @@ function gridFor(count: number): { cols: number; rows: number } {
 }
 
 /**
- * Cell type and QR share shrink as more products crowd the page, and again
+ * Cell type and QR share shrink as more labels crowd the page, and again
  * when the longest SKU on the sheet is long — full string stays readable,
  * never truncated.
  */
@@ -89,29 +95,69 @@ function cellScale(count: number, maxSkuLen: number): {
   return { skuPx, qrMax, qrWidth };
 }
 
+const MAX_COPIES = 48;
+
 export function ProductQrPanel({ products }: { products: QrProduct[] }) {
-  const [count, setCount] = useState(DEFAULT_COUNT);
-  const [start, setStart] = useState(0);
   const [paper, setPaper] = useState<PaperSize>("a4");
+  const [query, setQuery] = useState("");
+  const [categoryId, setCategoryId] = useState<string>("all");
+  // id -> number of copies. Presence of a key means the product is selected.
+  const [selected, setSelected] = useState<Record<string, number>>({});
   const [codes, setCodes] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
-  const safeCount = Math.min(MAX_COUNT, Math.max(1, count || DEFAULT_COUNT));
-  const maxStart = Math.max(0, products.length - 1);
-  const safeStart = Math.min(Math.max(0, start), maxStart);
+  /** Distinct categories present on the SKU'd products, for the batch filter. */
+  const categories = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const product of products) {
+      if (product.categoryId && !seen.has(product.categoryId)) {
+        seen.set(product.categoryId, product.category ?? "—");
+      }
+    }
+    return [...seen.entries()]
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [products]);
 
-  const selected = useMemo(
-    () => products.slice(safeStart, safeStart + safeCount),
-    [products, safeStart, safeCount],
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return products.filter((product) => {
+      if (categoryId !== "all" && product.categoryId !== categoryId) return false;
+      if (!needle) return true;
+      return (
+        product.name.toLowerCase().includes(needle) ||
+        product.sku.toLowerCase().includes(needle)
+      );
+    });
+  }, [products, query, categoryId]);
+
+  const selectedProducts = useMemo(
+    () => products.filter((product) => selected[product.id] !== undefined),
+    [products, selected],
   );
 
-  const { cols, rows } = gridFor(selected.length);
+  /** Flatten each selected product into its copies, in product order. */
+  const labels = useMemo(() => {
+    const out: { key: string; id: string; sku: string }[] = [];
+    for (const product of selectedProducts) {
+      const copies = Math.max(1, selected[product.id] ?? 1);
+      for (let i = 0; i < copies; i += 1) {
+        out.push({ key: `${product.id}#${i}`, id: product.id, sku: product.sku });
+      }
+    }
+    return out;
+  }, [selectedProducts, selected]);
+
+  const overflow = labels.length > MAX_LABELS;
+  const pageLabels = overflow ? labels.slice(0, MAX_LABELS) : labels;
+
+  const { cols, rows } = gridFor(pageLabels.length);
   const paperSpec = PAPER[paper];
   const maxSkuLen = useMemo(
-    () => selected.reduce((max, product) => Math.max(max, product.sku.length), 0),
-    [selected],
+    () => pageLabels.reduce((max, label) => Math.max(max, label.sku.length), 0),
+    [pageLabels],
   );
-  const scale = cellScale(selected.length || 1, maxSkuLen);
+  const scale = cellScale(pageLabels.length || 1, maxSkuLen);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,8 +165,9 @@ export function ProductQrPanel({ products }: { products: QrProduct[] }) {
     async function build() {
       setBusy(true);
       const next: Record<string, string> = {};
+      // One QR per distinct product on the page; copies reuse the same image.
       await Promise.all(
-        selected.map(async (product) => {
+        selectedProducts.map(async (product) => {
           next[product.id] = await QRCode.toDataURL(product.sku, {
             errorCorrectionLevel: "M",
             margin: 1,
@@ -139,11 +186,41 @@ export function ProductQrPanel({ products }: { products: QrProduct[] }) {
     return () => {
       cancelled = true;
     };
-  }, [selected, scale.qrWidth]);
+  }, [selectedProducts, scale.qrWidth]);
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = { ...prev };
+      if (next[id] !== undefined) delete next[id];
+      else next[id] = 1;
+      return next;
+    });
+  }
+
+  function setCopies(id: string, value: number) {
+    const copies = Math.min(MAX_COPIES, Math.max(1, value || 1));
+    setSelected((prev) => ({ ...prev, [id]: copies }));
+  }
+
+  function selectAllFiltered() {
+    setSelected((prev) => {
+      const next = { ...prev };
+      for (const product of filtered) {
+        if (next[product.id] === undefined) next[product.id] = 1;
+      }
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelected({});
+  }
 
   function printSheet() {
     window.print();
   }
+
+  const selectedCount = selectedProducts.length;
 
   return (
     <>
@@ -175,34 +252,31 @@ export function ProductQrPanel({ products }: { products: QrProduct[] }) {
       <Card>
         <CardHeader
           icon={QrCode}
-          title="Sheet options"
-          description="How many products on this page, and which paper the printer uses."
+          title="Pick products"
+          description="Search by name or SKU, filter by category, then choose how many labels of each."
         />
-        <div className="grid gap-4 px-4 py-5 sm:grid-cols-2 lg:grid-cols-4 sm:px-6">
-          <Field label="Products on page" hint={`Default ${DEFAULT_COUNT}. Max ${MAX_COUNT}.`}>
+        <div className="grid gap-4 px-4 py-5 sm:grid-cols-2 lg:grid-cols-3 sm:px-6">
+          <Field label="Search" hint="Matches product name or SKU.">
             <Input
-              type="number"
-              min={1}
-              max={MAX_COUNT}
-              value={count}
-              onChange={(event) => setCount(Number(event.target.value) || 1)}
-              className="num"
+              icon={Search}
+              type="search"
+              placeholder="Name or SKU…"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
             />
           </Field>
-          <Field
-            label="Start at"
-            hint={`1 = first product with a SKU. ${products.length} available.`}
-          >
-            <Input
-              type="number"
-              min={1}
-              max={products.length}
-              value={safeStart + 1}
-              onChange={(event) =>
-                setStart(Math.max(0, (Number(event.target.value) || 1) - 1))
-              }
-              className="num"
-            />
+          <Field label="Category" hint="Filter to one batch, or all.">
+            <Select
+              value={categoryId}
+              onChange={(event) => setCategoryId(event.target.value)}
+            >
+              <option value="all">All categories</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.label}
+                </option>
+              ))}
+            </Select>
           </Field>
           <Field label="Paper size">
             <Select
@@ -213,23 +287,109 @@ export function ProductQrPanel({ products }: { products: QrProduct[] }) {
               <option value="legal">{PAPER.legal.label}</option>
             </Select>
           </Field>
-          <div className="flex items-end">
-            <Button
-              type="button"
-              icon={Printer}
-              onClick={printSheet}
-              disabled={selected.length === 0 || busy}
-              className="w-full"
-            >
-              Print sheet
-            </Button>
-          </div>
         </div>
-        <p className="border-t border-border px-4 py-3 text-caption text-ink-muted sm:px-6">
-          Showing {selected.length} of {products.length} products with SKUs
-          {busy ? " · generating QR…" : ""}. Grid {cols}×{rows}. Label shows SKU
-          only — type scales with how many fit on the page.
-        </p>
+
+        <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3 sm:px-6">
+          <Button
+            type="button"
+            variant="ghost"
+            icon={CheckSquare}
+            onClick={selectAllFiltered}
+            disabled={filtered.length === 0}
+          >
+            Select all ({filtered.length})
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            icon={X}
+            onClick={clearSelection}
+            disabled={selectedCount === 0}
+          >
+            Clear
+          </Button>
+          <span className="ml-auto text-caption text-ink-muted">
+            {selectedCount} selected · {labels.length} labels
+          </span>
+        </div>
+
+        <div className="max-h-80 overflow-y-auto border-t border-border">
+          {filtered.length === 0 ? (
+            <div className="px-4 py-8 sm:px-6">
+              <EmptyState
+                icon={Search}
+                title="No products match"
+                instruction="Clear the search or pick another category."
+              />
+            </div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {filtered.map((product) => {
+                const isSelected = selected[product.id] !== undefined;
+                return (
+                  <li
+                    key={product.id}
+                    className="flex items-center gap-3 px-4 py-2.5 sm:px-6"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggle(product.id)}
+                      className="flex flex-1 items-center gap-3 text-left"
+                    >
+                      {isSelected ? (
+                        <CheckSquare size={18} className="shrink-0 text-primary" />
+                      ) : (
+                        <Square size={18} className="shrink-0 text-ink-muted" />
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-body font-medium">
+                          {product.name}
+                        </span>
+                        <span className="num block truncate text-caption text-ink-muted">
+                          {product.sku}
+                          {product.category ? ` · ${product.category}` : ""}
+                        </span>
+                      </span>
+                    </button>
+                    {isSelected ? (
+                      <label className="flex shrink-0 items-center gap-1.5 text-caption text-ink-muted">
+                        copies
+                        <Input
+                          type="number"
+                          min={1}
+                          max={MAX_COPIES}
+                          value={selected[product.id]}
+                          onChange={(event) =>
+                            setCopies(product.id, Number(event.target.value))
+                          }
+                          className="num h-9 w-16"
+                        />
+                      </label>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 border-t border-border px-4 py-4 sm:px-6">
+          <Button
+            type="button"
+            icon={Printer}
+            onClick={printSheet}
+            disabled={pageLabels.length === 0 || busy}
+          >
+            Print sheet ({pageLabels.length})
+          </Button>
+          <p className="text-caption text-ink-muted">
+            Grid {cols}×{rows}
+            {busy ? " · generating QR…" : ""}.
+            {overflow
+              ? ` One page holds ${MAX_LABELS} — printing the first ${MAX_LABELS} of ${labels.length}.`
+              : ""}
+          </p>
+        </div>
       </Card>
 
       <Card className="overflow-hidden">
@@ -239,11 +399,11 @@ export function ProductQrPanel({ products }: { products: QrProduct[] }) {
           description={`${paperSpec.label} — what comes out of the printer.`}
         />
         <div className="flex justify-center bg-paper/80 px-4 py-6 sm:px-6">
-          {selected.length === 0 ? (
+          {pageLabels.length === 0 ? (
             <EmptyState
               icon={QrCode}
               title="Nothing to print"
-              instruction="Raise the start index or add SKUs to more products."
+              instruction="Select at least one product above."
             />
           ) : (
             <div
@@ -267,15 +427,15 @@ export function ProductQrPanel({ products }: { products: QrProduct[] }) {
                   border: "1px dashed #c4c0b5",
                 }}
               >
-                {selected.map((product) => (
+                {pageLabels.map((label) => (
                   <div
-                    key={product.id}
+                    key={label.key}
                     className="flex min-h-0 flex-col items-center justify-center gap-1 overflow-hidden border border-border/70 px-1 py-1 text-center"
                   >
-                    {codes[product.id] ? (
+                    {codes[label.id] ? (
                       <img
-                        src={codes[product.id]}
-                        alt={`QR for ${product.sku}`}
+                        src={codes[label.id]}
+                        alt={`QR for ${label.sku}`}
                         className="h-auto w-[78%] object-contain"
                         style={{ maxHeight: scale.qrMax }}
                       />
@@ -295,7 +455,7 @@ export function ProductQrPanel({ products }: { products: QrProduct[] }) {
                         wordBreak: "break-word",
                       }}
                     >
-                      {product.sku}
+                      {label.sku}
                     </span>
                   </div>
                 ))}
