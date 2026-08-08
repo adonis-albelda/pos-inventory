@@ -87,6 +87,7 @@ export interface NewPurchaseOrderItem {
   productName: string;
   quantityOrdered: number;
   unitCost: number;
+  note?: string | null;
 }
 
 export interface NewPurchaseOrderTerm {
@@ -125,6 +126,7 @@ export async function createPurchaseOrder(
         product_name: item.productName,
         quantity_ordered: item.quantityOrdered,
         unit_cost: item.unitCost,
+        note: item.note ?? null,
       })),
     );
     if (itemsError) throw itemsError;
@@ -188,6 +190,7 @@ export async function addPurchaseOrderItem(
       product_name: item.productName,
       quantity_ordered: item.quantityOrdered,
       unit_cost: item.unitCost,
+      note: item.note ?? null,
     })
     .select("*")
     .single();
@@ -199,14 +202,38 @@ export async function addPurchaseOrderItem(
 export async function updatePurchaseOrderItem(
   client: DoubleAClient,
   itemId: string,
-  patch: { quantityOrdered?: number; unitCost?: number },
+  patch: { quantityOrdered?: number; unitCost?: number; note?: string | null },
 ): Promise<PurchaseOrderItem> {
   const { data, error } = await client
     .from("purchase_order_items")
     .update({
       ...(patch.quantityOrdered !== undefined ? { quantity_ordered: patch.quantityOrdered } : {}),
       ...(patch.unitCost !== undefined ? { unit_cost: patch.unitCost } : {}),
+      ...(patch.note !== undefined ? { note: patch.note } : {}),
     })
+    .eq("id", itemId)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return toPurchaseOrderItem(data);
+}
+
+/**
+ * Owner's remark on a single PO line. Unlike quantity/cost edits, a note is
+ * allowed at any status — the paper trail on how an order actually arrived
+ * (short-shipped, damaged, substituted) keeps mattering after receiving.
+ * Empty string clears it back to null.
+ */
+export async function setPurchaseOrderItemNote(
+  client: DoubleAClient,
+  itemId: string,
+  note: string | null,
+): Promise<PurchaseOrderItem> {
+  const trimmed = note?.trim();
+  const { data, error } = await client
+    .from("purchase_order_items")
+    .update({ note: trimmed ? trimmed : null })
     .eq("id", itemId)
     .select("*")
     .single();

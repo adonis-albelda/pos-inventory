@@ -581,6 +581,7 @@ export interface Database {
           unit_cost: number;
           /** Generated column: quantity_ordered * unit_cost. */
           line_total: number;
+          note: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -592,6 +593,7 @@ export interface Database {
           quantity_ordered: number;
           quantity_received?: number;
           unit_cost: number;
+          note?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -601,6 +603,7 @@ export interface Database {
           quantity_ordered?: number;
           quantity_received?: number;
           unit_cost?: number;
+          note?: string | null;
           updated_at?: string;
         };
         Relationships: [

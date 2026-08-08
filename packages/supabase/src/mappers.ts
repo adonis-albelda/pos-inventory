@@ -220,6 +220,7 @@ export function toPurchaseOrderItem(
     quantityReceived: row.quantity_received,
     unitCost: Number(row.unit_cost),
     lineTotal: Number(row.line_total),
+    note: row.note,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

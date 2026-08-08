@@ -252,7 +252,7 @@ export function FromPhotoPanel({ categories }: { categories: CategoryOption[] })
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [reading, startReading] = useTransition();
+  const [reading, setReading] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [savingAll, startSavingAll] = useTransition();
 
@@ -281,22 +281,41 @@ export function FromPhotoPanel({ categories }: { categories: CategoryOption[] })
     setError(null);
     setSuccess(null);
     setRowErrors({});
+    setReading(true);
 
-    startReading(async () => {
-      const compressed = await compressImage(file);
-      const formData = new FormData();
-      formData.set("image", compressed);
-      const result = await extractProductsFromImage(formData);
-      if (result.error) {
-        setError(result.error);
+    void (async () => {
+      try {
+        let compressed: File;
+        try {
+          compressed = await compressImage(file);
+        } catch {
+          // createImageBitmap/canvas can fail on odd formats — send the original.
+          compressed = file;
+        }
+
+        const formData = new FormData();
+        formData.set("image", compressed);
+        const result = await extractProductsFromImage(formData);
+        if (result.error) {
+          setError(result.error);
+          setDrafts([]);
+          return;
+        }
+        setDrafts(result.drafts);
+        setSuccess(
+          `Found ${result.drafts.length} product${result.drafts.length === 1 ? "" : "s"}. Check each row, then save.`,
+        );
+      } catch (err) {
         setDrafts([]);
-        return;
+        setError(
+          err instanceof Error
+            ? `Could not read the photo: ${err.message}`
+            : "Could not read the photo. Try again.",
+        );
+      } finally {
+        setReading(false);
       }
-      setDrafts(result.drafts);
-      setSuccess(
-        `Found ${result.drafts.length} product${result.drafts.length === 1 ? "" : "s"}. Check each row, then save.`,
-      );
-    });
+    })();
   }
 
   function saveOne(draft: ScannedProductDraft) {

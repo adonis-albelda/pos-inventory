@@ -32,8 +32,20 @@ type TextractModule = {
 
 const textract = require("textract") as TextractModule;
 
+const OCR_TIMEOUT_MS = 45_000;
+
 function extractTextFromImage(mime: string, buffer: Buffer): Promise<string> {
   return new Promise((resolve, reject) => {
+    let settled = false;
+
+    // textract spawns tesseract; if that never calls back, don't hang the
+    // request (and the button) forever.
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error("OCR timed out. Try a smaller, clearer photo."));
+    }, OCR_TIMEOUT_MS);
+
     textract.fromBufferWithMime(
       mime,
       buffer,
@@ -43,6 +55,9 @@ function extractTextFromImage(mime: string, buffer: Buffer): Promise<string> {
         tesseract: { cmd: "-l eng --psm 6" },
       },
       (error, text) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
         if (error) reject(error);
         else resolve(text ?? "");
       },

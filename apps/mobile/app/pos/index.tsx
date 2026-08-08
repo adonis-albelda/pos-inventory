@@ -117,6 +117,7 @@ export default function SellScreen() {
   // it outranks the bulk tier and survives every quantity change after it.
   const [overridden, setOverridden] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [qtyEditingId, setQtyEditingId] = useState<string | null>(null);
   const [payment, setPayment] = useState<PaymentMethod>("cash");
   // Optional, and empty for most sales. Held on the cart rather than asked for
   // at the end, so a cashier can take a name while the order is still being
@@ -281,6 +282,30 @@ export default function SellScreen() {
 
     const line = lines.find((entry) => entry.productId === productId);
     if (line && line.quantity + delta <= 0) forgetOverride(productId);
+  }
+
+  /** Absolute qty — type a number instead of tapping +/− one at a time. */
+  function setQuantity(productId: string, quantity: number) {
+    const whole = Math.floor(quantity);
+    if (!Number.isFinite(whole) || whole <= 0) {
+      setLines((current) => current.filter((line) => line.productId !== productId));
+      forgetOverride(productId);
+      setQtyEditingId(null);
+      return;
+    }
+
+    setLines((current) =>
+      current
+        .map((line) => {
+          if (line.productId !== productId) return line;
+          const stockCap = Math.max(0, Math.floor(line.availableStock));
+          const next = Math.min(whole, stockCap);
+          if (next <= 0) return { ...line, quantity: 0 };
+          return repricedFor(line, next);
+        })
+        .filter((line) => line.quantity > 0),
+    );
+    setQtyEditingId(null);
   }
 
   function forgetOverride(productId: string) {
@@ -473,6 +498,8 @@ export default function SellScreen() {
   const oversellRisk = lines.some((line) => line.quantity > line.availableStock);
   const itemCount = lines.reduce((count, line) => count + line.quantity, 0);
   const editingLine = lines.find((line) => line.productId === editingId) ?? null;
+  const qtyEditingLine =
+    lines.find((line) => line.productId === qtyEditingId) ?? null;
 
   return (
     <View style={{ flex: 1, flexDirection: compact ? "column" : "row" }}>
@@ -710,6 +737,7 @@ export default function SellScreen() {
                     product={byId.get(item.productId)}
                     overridden={overridden.includes(item.productId)}
                     onChange={(delta) => changeQuantity(item.productId, delta)}
+                    onEditQuantity={() => setQtyEditingId(item.productId)}
                     onEditPrice={() => setEditingId(item.productId)}
                   />
                 )}
@@ -927,6 +955,13 @@ export default function SellScreen() {
           onReset={resetPrice}
         />
 
+        <QuantitySheet
+          key={qtyEditingId ?? "qty-closed"}
+          line={qtyEditingLine}
+          onClose={() => setQtyEditingId(null)}
+          onApply={setQuantity}
+        />
+
         <CustomerSheet
           key={editingCustomer ? "customer-open" : "customer-closed"}
           open={editingCustomer}
@@ -976,12 +1011,14 @@ function CartRow({
   product,
   overridden,
   onChange,
+  onEditQuantity,
   onEditPrice,
 }: {
   line: CartLine;
   product: ProductWithEstimatedStock | undefined;
   overridden: boolean;
   onChange: (delta: number) => void;
+  onEditQuantity: () => void;
   onEditPrice: () => void;
 }) {
   const stockCap = Math.max(0, Math.floor(line.availableStock));
@@ -1159,19 +1196,35 @@ function CartRow({
             tint={line.quantity === 1 ? color.danger : color.ink}
             onPress={() => onChange(-1)}
           />
-          <Text
-            style={[
-              styles.numeric,
-              {
-                minWidth: 28,
-                textAlign: "center",
-                fontSize: fontSize.body,
-                fontWeight: "700",
-              },
-            ]}
+          <Pressable
+            onPress={onEditQuantity}
+            accessibilityRole="button"
+            accessibilityLabel={`Type quantity for ${line.productName}`}
+            style={({ pressed }) => ({
+              minWidth: 40,
+              minHeight: 36,
+              paddingHorizontal: space.xs,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: pressed ? color.primarySoft : "transparent",
+            })}
           >
-            {line.quantity}
-          </Text>
+            <Text
+              style={[
+                styles.numeric,
+                {
+                  textAlign: "center",
+                  fontSize: fontSize.body,
+                  fontWeight: "700",
+                  color: color.primaryDark,
+                  textDecorationLine: "underline",
+                  textDecorationStyle: "dotted",
+                },
+              ]}
+            >
+              {line.quantity}
+            </Text>
+          </Pressable>
           <StepperButton
             icon={Plus}
             label={
@@ -1186,6 +1239,105 @@ function CartRow({
         </View>
       </View>
     </View>
+  );
+}
+
+/**
+ * Type the quantity instead of tapping +/− for every unit. Caps at estimated
+ * stock. Zero removes the line.
+ */
+function QuantitySheet({
+  line,
+  onClose,
+  onApply,
+}: {
+  line: CartLine | null;
+  onClose: () => void;
+  onApply: (productId: string, quantity: number) => void;
+}) {
+  const [draft, setDraft] = useState(() =>
+    line ? String(line.quantity) : "",
+  );
+
+  if (!line) return null;
+
+  const stockCap = Math.max(0, Math.floor(line.availableStock));
+  const typed = Number(draft);
+  const whole = Math.floor(typed);
+  const empty = draft.trim() === "";
+  const valid =
+    !empty && Number.isFinite(typed) && Number.isInteger(typed) && whole >= 0;
+  const overStock = valid && whole > stockCap;
+  const willRemove = valid && whole === 0;
+
+  return (
+    <BottomSheet open={line !== null} onClose={onClose}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+        <View style={[styles.iconWell, { width: 34, height: 34 }]}>
+          <ShoppingCart size={18} color={color.primary} strokeWidth={2} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text numberOfLines={1} style={styles.subheading}>
+            {line.productName}
+          </Text>
+          <Text style={{ fontSize: fontSize.caption, color: color.inkMuted }}>
+            Sold by {line.unit} · {stockCap} in stock
+          </Text>
+        </View>
+        <IconButton icon={X} label="Close" onPress={onClose} />
+      </View>
+
+      <Text style={{ fontSize: fontSize.body, fontWeight: "600" }}>Quantity</Text>
+
+      <TextInput
+        value={draft}
+        onChangeText={(next) => setDraft(next.replace(/[^0-9]/g, ""))}
+        keyboardType="number-pad"
+        autoFocus
+        selectTextOnFocus
+        accessibilityLabel={`Quantity of ${line.productName}`}
+        style={[
+          styles.numeric,
+          {
+            minHeight: 64,
+            borderWidth: 2,
+            borderColor: overStock || (!valid && !empty) ? color.danger : color.primary,
+            borderRadius: radius.sm,
+            backgroundColor:
+              overStock || (!valid && !empty) ? color.dangerSoft : color.primaryTint,
+            color:
+              overStock || (!valid && !empty) ? color.dangerInk : color.primaryDark,
+            paddingHorizontal: space.md,
+            fontSize: fontSize.headingMd,
+            fontWeight: "700",
+          },
+        ]}
+      />
+
+      {overStock ? (
+        <Text style={{ fontSize: fontSize.body, color: color.dangerInk }}>
+          Only {stockCap} in stock. Tap Set to use {stockCap}, or type a lower number.
+        </Text>
+      ) : willRemove ? (
+        <Text style={{ fontSize: fontSize.body, color: color.warningInk }}>
+          Zero removes this line from the cart.
+        </Text>
+      ) : (
+        <Text style={{ fontSize: fontSize.body, color: color.inkMuted }}>
+          Type the count. No need to tap + one by one.
+        </Text>
+      )}
+
+      <Button
+        label={willRemove ? "Remove from cart" : "Set quantity"}
+        large
+        icon={willRemove ? Trash2 : CheckCircle2}
+        variant={willRemove ? "danger" : "primary"}
+        disabled={!valid}
+        onPress={() => onApply(line.productId, overStock ? stockCap : whole)}
+      />
+      <Button label="Cancel" variant="secondary" onPress={onClose} />
+    </BottomSheet>
   );
 }
 

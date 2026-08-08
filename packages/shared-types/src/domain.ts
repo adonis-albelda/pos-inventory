@@ -493,6 +493,8 @@ export interface PurchaseOrderItem {
   /** Snapshot of what the supplier charged at order time. */
   unitCost: number;
   lineTotal: number;
+  /** Owner's remark on this one line — substitution, damage, back-order, etc. */
+  note: string | null;
   createdAt: string;
   updatedAt: string;
 }
