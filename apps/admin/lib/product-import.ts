@@ -1,5 +1,11 @@
 import type { Category, Product } from "@double-a/shared-types";
-import { formatMoney, isProductUnit, validateProductInput } from "@double-a/shared-types";
+import {
+  defaultAllowDecimal,
+  formatMoney,
+  isProductUnit,
+  validateProductInput,
+  type ProductUnit,
+} from "@double-a/shared-types";
 import type { TablesInsert } from "@double-a/supabase";
 import { toCategoryOptions } from "@/lib/category-options";
 import { parseCsvTable } from "@/lib/csv";
@@ -21,6 +27,7 @@ export const REQUIRED_COLUMNS = ["name", "sku", "price"] as const;
 export const OPTIONAL_COLUMNS = [
   "cost_price",
   "unit",
+  "allow_decimal",
   "barcode",
   "reorder_point",
   "bulk_price",
@@ -37,6 +44,7 @@ export const TEMPLATE_EXAMPLE = [
   "185.00",
   "132.50",
   "pc",
+  "false",
   "4806501234567",
   "12",
   "170.00",
@@ -181,6 +189,22 @@ export function planProductImport(
       problems.push(`"${cell("unit")}" is not a unit we sell by.`);
     }
 
+    // Follows the unit for a new product unless the sheet says otherwise; an
+    // existing product keeps its setting when the cell is blank.
+    let allowDecimal = existing
+      ? existing.allowDecimal
+      : isProductUnit(unit)
+        ? defaultAllowDecimal(unit as ProductUnit)
+        : false;
+    if (given("allow_decimal")) {
+      const parsed = parseBoolean(cell("allow_decimal"));
+      if (parsed === null) {
+        problems.push(`"${cell("allow_decimal")}" is not a yes or no.`);
+      } else {
+        allowDecimal = parsed;
+      }
+    }
+
     const barcode = given("barcode") ? cell("barcode") : (existing?.barcode ?? null);
 
     const reorderPoint = given("reorder_point")
@@ -254,6 +278,7 @@ export function planProductImport(
       price,
       cost_price: costPrice,
       unit,
+      allow_decimal: allowDecimal,
       barcode,
       reorder_point: reorderPoint,
       bulk_price: bulkPrice,
@@ -305,6 +330,11 @@ function describeChanges(
     );
   }
   if (existing.unit !== values.unit) changes.push(`Sold by → ${values.unit}`);
+  if (existing.allowDecimal !== (values.allow_decimal ?? false)) {
+    changes.push(
+      values.allow_decimal ? "Decimal quantities on" : "Decimal quantities off",
+    );
+  }
   if (existing.barcode !== values.barcode) changes.push("Barcode changes");
   if (existing.reorderPoint !== values.reorder_point) {
     changes.push(`Reorder point ${existing.reorderPoint} → ${values.reorder_point}`);

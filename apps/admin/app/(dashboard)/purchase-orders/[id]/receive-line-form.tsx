@@ -39,9 +39,9 @@ export function ReceiveLineForm({
       <div className="flex items-center justify-end gap-1.5">
         <Input
           type="number"
-          min="1"
+          min="0.001"
           max={remaining}
-          step="1"
+          step="0.001"
           value={quantity}
           onChange={(event) => setQuantity(event.target.value)}
           className="num h-9 w-20 text-right"

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Boxes, ListOrdered, Wallet } from "lucide-react";
 import {
   formatMoney,
+  formatQuantity,
   PURCHASE_ORDER_STATUS_LABELS,
   poItemReceiveState,
   purchaseOrderBalance,
@@ -151,8 +152,8 @@ export default async function PurchaseOrderDetailPage({
                 return (
                   <tr key={item.id}>
                     <Td className="font-medium">{item.productName}</Td>
-                    <Td numeric>{item.quantityOrdered}</Td>
-                    <Td numeric>{item.quantityReceived}</Td>
+                    <Td numeric>{formatQuantity(item.quantityOrdered)}</Td>
+                    <Td numeric>{formatQuantity(item.quantityReceived)}</Td>
                     <Td numeric>
                       <Money value={item.unitCost} />
                     </Td>

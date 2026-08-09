@@ -75,9 +75,41 @@ export const UNIT_LABELS: Record<ProductUnit, string> = {
   bag: "Bag",
 };
 
-/** Short label for a receipt or a quantity stepper: "3 m", "2 bag". */
+/**
+ * Units a shop sells in fractions of: wire by the metre, sand by the kilo,
+ * paint by the litre. A product on one of these accepts a decimal quantity by
+ * default; every other unit defaults to whole numbers but the owner can still
+ * turn decimals on per product (see `Product.allowDecimal`).
+ */
+export const FRACTIONAL_UNITS = ["m", "ft", "kg", "l", "gal", "roll"] as const;
+
+export function isFractionalUnit(unit: ProductUnit): boolean {
+  return (FRACTIONAL_UNITS as readonly string[]).includes(unit);
+}
+
+/** The `allow_decimal` a new product gets before the owner touches it. */
+export function defaultAllowDecimal(unit: ProductUnit): boolean {
+  return isFractionalUnit(unit);
+}
+
+/** How many decimal places a decimal quantity is kept to, matching numeric(12,3). */
+export const QUANTITY_DECIMALS = 3;
+
+/**
+ * A quantity as read by a human: whole numbers stay whole ("3"), fractions drop
+ * trailing zeros ("3.5", not "3.500"). Kept here so receipts, the POS and the
+ * dashboard never disagree on how a weight reads.
+ */
+export function formatQuantity(quantity: number): string {
+  if (Number.isInteger(quantity)) return String(quantity);
+  return String(
+    Number(quantity.toFixed(QUANTITY_DECIMALS)),
+  );
+}
+
+/** Short label for a receipt or a quantity stepper: "3.5 m", "2 bag". */
 export function formatUnit(quantity: number, unit: ProductUnit): string {
-  return `${quantity} ${unit}`;
+  return `${formatQuantity(quantity)} ${unit}`;
 }
 
 /** The shop's day, matching `public.store_timezone()` in Postgres. */
@@ -221,6 +253,12 @@ export interface Product {
   category: string | null;
   categoryId: string | null;
   unit: ProductUnit;
+  /**
+   * Whether this product can be sold and stocked in fractional quantities
+   * (2.5 kg, 1.75 m). Defaults from the unit — see `defaultAllowDecimal` — but
+   * the owner may override it either way per product.
+   */
+  allowDecimal: boolean;
   barcode: string | null;
   /** At or below this count the product lands on the reorder report. */
   reorderPoint: number;
@@ -548,6 +586,8 @@ export interface CartLine {
   /** Supplier cost, so the attendant can see the floor before discounting. */
   unitCost: number;
   unit: ProductUnit;
+  /** Whether this line can carry a fractional quantity (2.5 kg). From the product. */
+  allowDecimal: boolean;
   quantity: number;
   /** Last synced stock, kept so the cart can warn when a line exceeds it. */
   availableStock: number;

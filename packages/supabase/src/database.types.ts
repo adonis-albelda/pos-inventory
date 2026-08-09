@@ -254,6 +254,7 @@ export interface Database {
           category: string | null;
           category_id: string | null;
           unit: string;
+          allow_decimal: boolean;
           barcode: string | null;
           reorder_point: number;
           bulk_price: number | null;
@@ -272,6 +273,7 @@ export interface Database {
           category?: string | null;
           category_id?: string | null;
           unit?: string;
+          allow_decimal?: boolean;
           barcode?: string | null;
           reorder_point?: number;
           bulk_price?: number | null;
@@ -290,6 +292,7 @@ export interface Database {
           category?: string | null;
           category_id?: string | null;
           unit?: string;
+          allow_decimal?: boolean;
           barcode?: string | null;
           reorder_point?: number;
           bulk_price?: number | null;

@@ -1,12 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { isValidQuantity, QUANTITY_DECIMALS } from "@double-a/shared-types";
 import {
   adjustStock,
   currentAppUser,
   getProduct,
   type AdjustReason,
 } from "@double-a/supabase";
+
+function roundQuantity(value: number): number {
+  return Number(value.toFixed(QUANTITY_DECIMALS));
+}
 import type { FormState } from "@/lib/form-state";
 import { getServerClient } from "@/lib/supabase/server";
 
@@ -35,34 +40,38 @@ export async function moveStock(
   const mode: Mode = (MODES as readonly string[]).includes(rawMode)
     ? (rawMode as Mode)
     : "in";
-  const magnitude = Number(formData.get("quantity") ?? Number.NaN);
+  const rawMagnitude = Number(formData.get("quantity") ?? Number.NaN);
   const note = String(formData.get("note") ?? "").trim();
 
   if (!productId) return { error: "Pick a product.", ok: false };
   if (!REASONS.includes(reason)) return { error: "Pick a reason.", ok: false };
 
-  const floor = mode === "count" ? 0 : 1;
-  if (!Number.isInteger(magnitude) || magnitude < floor) {
+  const supabase = await getServerClient();
+  const actor = await currentAppUser(supabase);
+
+  // The product's decimal mode decides whether a fraction is allowed here, so
+  // it is always fetched — count mode needs its stock anyway.
+  const product = await getProduct(supabase, productId);
+  if (!product) return { error: "That product no longer exists.", ok: false };
+
+  const floor = mode === "count" ? 0 : product.allowDecimal ? 0.001 : 1;
+  const magnitude = roundQuantity(rawMagnitude);
+  if (!isValidQuantity(magnitude, product.allowDecimal, floor)) {
+    const wholeOnly = product.allowDecimal ? "" : " whole";
     return {
       error:
         mode === "count"
-          ? "Counted quantity must be a whole number, 0 or more."
-          : "Quantity must be a whole number, 1 or more.",
+          ? `Counted quantity must be a${wholeOnly} number, 0 or more.`
+          : `Quantity must be a${wholeOnly} number greater than zero.`,
       ok: false,
     };
   }
-
-  const supabase = await getServerClient();
-  const actor = await currentAppUser(supabase);
 
   let changeQuantity = mode === "out" ? -magnitude : magnitude;
   let movementNote = note;
 
   if (mode === "count") {
-    const product = await getProduct(supabase, productId);
-    if (!product) return { error: "That product no longer exists.", ok: false };
-
-    changeQuantity = magnitude - product.stockQuantity;
+    changeQuantity = roundQuantity(magnitude - product.stockQuantity);
     if (changeQuantity === 0) {
       return {
         error: `The count matches what is recorded (${product.stockQuantity}). Nothing to record.`,

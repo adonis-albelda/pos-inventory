@@ -16,6 +16,7 @@ interface ProductRow {
   category: string | null;
   category_id: string | null;
   unit: string;
+  allow_decimal: number;
   barcode: string | null;
   reorder_point: number;
   bulk_price: number | null;
@@ -41,6 +42,7 @@ function toProductWithEstimate(row: ProductRow): ProductWithEstimatedStock {
     category: row.category,
     categoryId: row.category_id,
     unit: toUnit(row.unit),
+    allowDecimal: row.allow_decimal === 1,
     barcode: row.barcode,
     reorderPoint: row.reorder_point,
     bulkPrice: row.bulk_price,
@@ -70,6 +72,7 @@ SELECT p.id,
        p.category,
        p.category_id,
        p.unit,
+       p.allow_decimal,
        p.barcode,
        p.reorder_point,
        p.bulk_price,
@@ -151,8 +154,8 @@ export async function upsertProducts(products: Product[]): Promise<void> {
       await db.runAsync(
         `INSERT INTO products
            (id, name, sku, price, cost_price, stock_quantity, category, category_id,
-            unit, barcode, reorder_point, bulk_price, bulk_min_quantity, is_active, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            unit, allow_decimal, barcode, reorder_point, bulk_price, bulk_min_quantity, is_active, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (id) DO UPDATE SET
            name = excluded.name,
            sku = excluded.sku,
@@ -162,6 +165,7 @@ export async function upsertProducts(products: Product[]): Promise<void> {
            category = excluded.category,
            category_id = excluded.category_id,
            unit = excluded.unit,
+           allow_decimal = excluded.allow_decimal,
            barcode = excluded.barcode,
            reorder_point = excluded.reorder_point,
            bulk_price = excluded.bulk_price,
@@ -177,6 +181,7 @@ export async function upsertProducts(products: Product[]): Promise<void> {
         product.category,
         product.categoryId,
         product.unit,
+        product.allowDecimal ? 1 : 0,
         product.barcode,
         product.reorderPoint,
         product.bulkPrice,

@@ -43,12 +43,14 @@ import {
   CUSTOMER_FIELD_MAX_LENGTH,
   formatMoney,
   formatPercent,
+  formatQuantity,
   hasCustomerDetails,
   lineProfit,
   lineSubtotal,
   marginPercent,
   normaliseCustomerDetails,
   priceForQuantity,
+  QUANTITY_DECIMALS,
   roundMoney,
   timeAgo,
   type CartLine,
@@ -99,6 +101,17 @@ const PAYMENT_METHODS: { value: PaymentMethod; label: string; icon: LucideIcon }
   { value: "gcash", label: "GCash", icon: Smartphone },
   { value: "card", label: "Card", icon: CreditCard },
 ];
+
+/**
+ * The most a line may sell. A whole-number product floors its estimated stock
+ * (you cannot sell half a box); a decimal one keeps the fraction (2.5 kg is a
+ * real amount on the shelf). Oversell past this is still possible by typing —
+ * that is a known, flagged tradeoff, not something blocked here.
+ */
+function stockCapFor(estimatedStock: number, allowDecimal: boolean): number {
+  if (allowDecimal) return Math.max(0, Number(estimatedStock.toFixed(QUANTITY_DECIMALS)));
+  return Math.max(0, Math.floor(estimatedStock));
+}
 
 export default function SellScreen() {
   const router = useRouter();
@@ -235,7 +248,7 @@ export default function SellScreen() {
 
   /** No confirmation here on purpose — adding to a cart is speed critical. */
   function addToCart(product: ProductWithEstimatedStock) {
-    const stockCap = Math.max(0, Math.floor(product.estimatedStock));
+    const stockCap = stockCapFor(product.estimatedStock, product.allowDecimal);
     if (stockCap <= 0) return;
 
     setLines((current) => {
@@ -260,6 +273,7 @@ export default function SellScreen() {
           listPrice: product.price,
           unitCost: product.costPrice,
           unit: product.unit,
+          allowDecimal: product.allowDecimal,
           quantity: 1,
           availableStock: stockCap,
         },
@@ -272,7 +286,7 @@ export default function SellScreen() {
       current
         .map((line) => {
           if (line.productId !== productId) return line;
-          const stockCap = Math.max(0, Math.floor(line.availableStock));
+          const stockCap = stockCapFor(line.availableStock, line.allowDecimal);
           const next = line.quantity + delta;
           if (delta > 0 && next > stockCap) return line;
           return repricedFor(line, next);
@@ -286,8 +300,7 @@ export default function SellScreen() {
 
   /** Absolute qty — type a number instead of tapping +/− one at a time. */
   function setQuantity(productId: string, quantity: number) {
-    const whole = Math.floor(quantity);
-    if (!Number.isFinite(whole) || whole <= 0) {
+    if (!Number.isFinite(quantity) || quantity <= 0) {
       setLines((current) => current.filter((line) => line.productId !== productId));
       forgetOverride(productId);
       setQtyEditingId(null);
@@ -298,8 +311,11 @@ export default function SellScreen() {
       current
         .map((line) => {
           if (line.productId !== productId) return line;
-          const stockCap = Math.max(0, Math.floor(line.availableStock));
-          const next = Math.min(whole, stockCap);
+          const stockCap = stockCapFor(line.availableStock, line.allowDecimal);
+          const asked = line.allowDecimal
+            ? Number(quantity.toFixed(QUANTITY_DECIMALS))
+            : Math.floor(quantity);
+          const next = Math.min(asked, stockCap);
           if (next <= 0) return { ...line, quantity: 0 };
           return repricedFor(line, next);
         })
@@ -1021,7 +1037,7 @@ function CartRow({
   onEditQuantity: () => void;
   onEditPrice: () => void;
 }) {
-  const stockCap = Math.max(0, Math.floor(line.availableStock));
+  const stockCap = stockCapFor(line.availableStock, line.allowDecimal);
   const remaining = Math.max(0, stockCap - line.quantity);
   const atMax = line.quantity >= stockCap;
   const oversell = line.quantity > stockCap;
@@ -1110,7 +1126,7 @@ function CartRow({
           <Text
             style={[styles.numeric, { fontSize: fontSize.caption, color: color.inkMuted }]}
           >
-            {line.quantity} {line.unit} ×
+            {formatQuantity(line.quantity)} {line.unit} ×
           </Text>
           {overridden && discounted ? (
             <Text
@@ -1222,7 +1238,7 @@ function CartRow({
                 },
               ]}
             >
-              {line.quantity}
+              {formatQuantity(line.quantity)}
             </Text>
           </Pressable>
           <StepperButton
@@ -1256,19 +1272,25 @@ function QuantitySheet({
   onApply: (productId: string, quantity: number) => void;
 }) {
   const [draft, setDraft] = useState(() =>
-    line ? String(line.quantity) : "",
+    line ? formatQuantity(line.quantity) : "",
   );
 
   if (!line) return null;
 
-  const stockCap = Math.max(0, Math.floor(line.availableStock));
+  const allowDecimal = line.allowDecimal;
+  const stockCap = stockCapFor(line.availableStock, allowDecimal);
   const typed = Number(draft);
-  const whole = Math.floor(typed);
+  const value = allowDecimal
+    ? Number(typed.toFixed(QUANTITY_DECIMALS))
+    : Math.floor(typed);
   const empty = draft.trim() === "";
   const valid =
-    !empty && Number.isFinite(typed) && Number.isInteger(typed) && whole >= 0;
-  const overStock = valid && whole > stockCap;
-  const willRemove = valid && whole === 0;
+    !empty &&
+    Number.isFinite(typed) &&
+    (allowDecimal || Number.isInteger(typed)) &&
+    value >= 0;
+  const overStock = valid && value > stockCap;
+  const willRemove = valid && value === 0;
 
   return (
     <BottomSheet open={line !== null} onClose={onClose}>
@@ -1281,7 +1303,7 @@ function QuantitySheet({
             {line.productName}
           </Text>
           <Text style={{ fontSize: fontSize.caption, color: color.inkMuted }}>
-            Sold by {line.unit} · {stockCap} in stock
+            Sold by {line.unit} · {formatQuantity(stockCap)} in stock
           </Text>
         </View>
         <IconButton icon={X} label="Close" onPress={onClose} />
@@ -1291,8 +1313,14 @@ function QuantitySheet({
 
       <TextInput
         value={draft}
-        onChangeText={(next) => setDraft(next.replace(/[^0-9]/g, ""))}
-        keyboardType="number-pad"
+        onChangeText={(next) =>
+          setDraft(
+            allowDecimal
+              ? next.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1")
+              : next.replace(/[^0-9]/g, ""),
+          )
+        }
+        keyboardType={allowDecimal ? "decimal-pad" : "number-pad"}
         autoFocus
         selectTextOnFocus
         accessibilityLabel={`Quantity of ${line.productName}`}
@@ -1316,7 +1344,8 @@ function QuantitySheet({
 
       {overStock ? (
         <Text style={{ fontSize: fontSize.body, color: color.dangerInk }}>
-          Only {stockCap} in stock. Tap Set to use {stockCap}, or type a lower number.
+          Only {formatQuantity(stockCap)} in stock. Tap Set to use{" "}
+          {formatQuantity(stockCap)}, or type a lower number.
         </Text>
       ) : willRemove ? (
         <Text style={{ fontSize: fontSize.body, color: color.warningInk }}>
@@ -1334,7 +1363,7 @@ function QuantitySheet({
         icon={willRemove ? Trash2 : CheckCircle2}
         variant={willRemove ? "danger" : "primary"}
         disabled={!valid}
-        onPress={() => onApply(line.productId, overStock ? stockCap : whole)}
+        onPress={() => onApply(line.productId, overStock ? stockCap : value)}
       />
       <Button label="Cancel" variant="secondary" onPress={onClose} />
     </BottomSheet>
@@ -1385,7 +1414,7 @@ function PriceSheet({
               </Text>
               <Text style={{ fontSize: fontSize.caption, color: color.inkMuted }}>
                 Shelf {formatMoney(line.listPrice)} · Cost {formatMoney(line.unitCost)} ·{" "}
-                {line.quantity} {line.unit}
+                {formatQuantity(line.quantity)} {line.unit}
               </Text>
             </View>
             <IconButton icon={X} label="Close" onPress={onClose} />

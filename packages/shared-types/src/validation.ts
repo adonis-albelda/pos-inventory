@@ -68,12 +68,27 @@ export function validateProductInput(input: {
   return { ok: errors.length === 0, errors };
 }
 
+/**
+ * A stock or sale quantity. Fractional only when the product allows it; whole
+ * numbers otherwise. `min` is the floor (1 for a sale line, 0 for a stock
+ * count). Rounding to QUANTITY_DECIMALS happens elsewhere — this only judges.
+ */
+export function isValidQuantity(
+  value: number,
+  allowDecimal: boolean,
+  min = 0,
+): boolean {
+  if (!Number.isFinite(value) || value < min) return false;
+  if (!allowDecimal && !Number.isInteger(value)) return false;
+  return true;
+}
+
 export function validateCart(lines: CartLine[]): ValidationResult {
   const errors: string[] = [];
 
   if (lines.length === 0) errors.push("Add at least one item before completing the sale.");
   for (const line of lines) {
-    if (line.quantity < 1) errors.push(`${line.productName}: quantity must be at least 1.`);
+    if (line.quantity <= 0) errors.push(`${line.productName}: quantity must be more than zero.`);
     if (!Number.isFinite(line.unitPrice) || line.unitPrice < 0) {
       errors.push(`${line.productName}: price is invalid.`);
     }
@@ -132,7 +147,7 @@ export function validateSaleForPush(
   for (const item of items) {
     if (!isUuid(item.id)) errors.push("Sale item id must be a UUID.");
     if (item.saleId !== sale.id) errors.push("Sale item belongs to a different sale.");
-    if (item.quantity < 1) errors.push(`${item.productName}: quantity must be at least 1.`);
+    if (item.quantity <= 0) errors.push(`${item.productName}: quantity must be more than zero.`);
     if (roundMoney(item.subtotal) !== lineSubtotal(item.unitPrice, item.quantity)) {
       errors.push(`${item.productName}: subtotal does not match price times quantity.`);
     }

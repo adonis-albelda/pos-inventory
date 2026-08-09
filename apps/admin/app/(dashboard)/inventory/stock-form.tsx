@@ -10,7 +10,7 @@ import {
 } from "react";
 import { ClipboardCheck, ClipboardList, Search, TriangleAlert, X } from "lucide-react";
 import type { Product } from "@double-a/shared-types";
-import { stockLevel } from "@double-a/shared-types";
+import { formatQuantity, stockLevel } from "@double-a/shared-types";
 import {
   Badge,
   Button,
@@ -80,8 +80,10 @@ export function StockForm({
   }, [state.ok, onDone]);
 
   const product = products.find((candidate) => candidate.id === productId) ?? null;
-  const typed = Number.parseInt(quantity, 10);
-  const magnitude = Number.isFinite(typed) ? typed : null;
+  const allowDecimal = product?.allowDecimal ?? false;
+  const typed = Number(quantity);
+  const magnitude =
+    quantity.trim() !== "" && Number.isFinite(typed) ? typed : null;
 
   const current = product?.stockQuantity ?? 0;
   const delta =
@@ -152,9 +154,9 @@ export function StockForm({
             <Input
               name="quantity"
               type="number"
-              inputMode="numeric"
-              min={mode === "count" ? 0 : 1}
-              step="1"
+              inputMode={allowDecimal ? "decimal" : "numeric"}
+              min={mode === "count" ? 0 : allowDecimal ? 0.001 : 1}
+              step={allowDecimal ? "0.001" : "1"}
               required
               value={quantity}
               onChange={(event) => setQuantity(event.target.value)}
@@ -286,7 +288,7 @@ function ProductPicker({
               <span>
                 On hand{" "}
                 <span className="num font-semibold text-ink">
-                  {selected.stockQuantity}
+                  {formatQuantity(selected.stockQuantity)}
                 </span>{" "}
                 {selected.unit}
               </span>
@@ -368,7 +370,7 @@ function ProductPicker({
                     </span>
                   </span>
                   <span className="num shrink-0 text-caption text-ink-muted">
-                    {product.stockQuantity} {product.unit}
+                    {formatQuantity(product.stockQuantity)} {product.unit}
                   </span>
                 </button>
               </li>
@@ -415,7 +417,9 @@ function MovementPreview({
     <PreviewShell>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span className="text-caption text-ink-muted">On hand</span>
-        <span className="num text-heading-sm font-semibold">{product.stockQuantity}</span>
+        <span className="num text-heading-sm font-semibold">
+          {formatQuantity(product.stockQuantity)}
+        </span>
         <span
           className={cx(
             "num rounded-sm px-2 py-0.5 text-caption font-semibold",
@@ -423,7 +427,7 @@ function MovementPreview({
           )}
         >
           {delta > 0 ? "+" : ""}
-          {delta}
+          {formatQuantity(delta)}
         </span>
         <span className="text-caption text-ink-muted">becomes</span>
         <span
@@ -432,7 +436,7 @@ function MovementPreview({
             projected < 0 && "text-danger",
           )}
         >
-          {projected}
+          {formatQuantity(projected)}
         </span>
         <span className="text-caption text-ink-muted">{product.unit}</span>
       </div>

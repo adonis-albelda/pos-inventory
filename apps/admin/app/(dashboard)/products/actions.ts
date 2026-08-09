@@ -24,6 +24,7 @@ function readProductForm(formData: FormData) {
     costPrice: Number(formData.get("cost_price") ?? 0),
     categoryId: text(formData, "category_id") || null,
     unit: text(formData, "unit") || "pc",
+    allowDecimal: formData.get("allow_decimal") != null,
     barcode: text(formData, "barcode") || null,
     reorderPoint: Number(formData.get("reorder_point") ?? 0),
     // The two bulk fields live or die together, so an empty pair is two nulls
@@ -67,6 +68,7 @@ export async function saveProduct(
     cost_price: input.costPrice,
     category_id: input.categoryId,
     unit: input.unit,
+    allow_decimal: input.allowDecimal,
     barcode: input.barcode,
     reorder_point: input.reorderPoint,
     bulk_price: input.bulkPrice,

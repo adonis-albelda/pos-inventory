@@ -217,6 +217,18 @@ ALTER TABLE users ADD COLUMN can_sell INTEGER NOT NULL DEFAULT 1;
 `;
 
 /**
+ * v9: decimal quantities. A product sold by weight or length carries fractions,
+ * so the flag comes down with every pull. The quantity columns themselves
+ * (products.stock_quantity, sale_items.quantity) keep their INTEGER affinity —
+ * SQLite stores a real value like 2.5 in an INTEGER-affinity column untouched,
+ * since the conversion would lose the fraction. Defaults to 0 (whole numbers)
+ * so a pending sale written before this upgrade is unaffected.
+ */
+const V9_ALLOW_DECIMAL = `
+ALTER TABLE products ADD COLUMN allow_decimal INTEGER NOT NULL DEFAULT 0;
+`;
+
+/**
  * v8: receipt layout from admin. One row, pulled whole every sync. Bluetooth
  * pairing stays in AsyncStorage on this device — never this table.
  */
@@ -252,6 +264,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 6, sql: V6_CUSTOMERS_PAID_DELIVERY },
   { version: 7, sql: V7_USER_CAN_SELL },
   { version: 8, sql: V8_RECEIPT_LAYOUT },
+  { version: 9, sql: V9_ALLOW_DECIMAL },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.reduce(

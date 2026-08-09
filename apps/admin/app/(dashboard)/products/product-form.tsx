@@ -4,8 +4,10 @@ import { useActionState, useEffect, useState } from "react";
 import { Check, Info, TriangleAlert } from "lucide-react";
 import type { Product } from "@double-a/shared-types";
 import {
+  defaultAllowDecimal,
   formatMoney,
   formatPercent,
+  isProductUnit,
   marginPercent,
   PRODUCT_UNITS,
   shelfPriceFromMarkup,
@@ -39,6 +41,20 @@ export function ProductForm({
   const [price, setPrice] = useState(product ? String(product.price) : "");
   const [costPrice, setCostPrice] = useState(product ? String(product.costPrice) : "");
   const [categoryId, setCategoryId] = useState(product?.categoryId ?? "");
+
+  // The decimal toggle follows the unit until the owner touches it — a product
+  // sold by the metre defaults to allowing fractions, a boxed one does not.
+  const [unit, setUnit] = useState(product?.unit ?? "pc");
+  const [allowDecimal, setAllowDecimal] = useState(
+    product?.allowDecimal ?? defaultAllowDecimal("pc"),
+  );
+  const [decimalTouched, setDecimalTouched] = useState(false);
+
+  function onUnitChange(next: string) {
+    if (!isProductUnit(next)) return;
+    setUnit(next);
+    if (!decimalTouched) setAllowDecimal(defaultAllowDecimal(next));
+  }
 
   useEffect(() => {
     if (state.ok) onDone?.();
@@ -149,13 +165,39 @@ export function ProductForm({
           </Select>
         </Field>
         <Field label="Sold by">
-          <Select name="unit" defaultValue={product?.unit ?? "pc"}>
-            {PRODUCT_UNITS.map((unit) => (
-              <option key={unit} value={unit}>
-                {UNIT_LABELS[unit] ?? unit}
+          <Select
+            name="unit"
+            value={unit}
+            onChange={(event) => onUnitChange(event.target.value)}
+          >
+            {PRODUCT_UNITS.map((option) => (
+              <option key={option} value={option}>
+                {UNIT_LABELS[option] ?? option}
               </option>
             ))}
           </Select>
+        </Field>
+        <Field
+          label="Quantity mode"
+          hint={
+            allowDecimal
+              ? "Sold and stocked in fractions (e.g. 2.5)."
+              : "Whole numbers only."
+          }
+        >
+          <label className="flex h-11 cursor-pointer items-center gap-2 rounded-sm border border-border bg-surface px-3 sm:h-10">
+            <input
+              type="checkbox"
+              name="allow_decimal"
+              checked={allowDecimal}
+              onChange={(event) => {
+                setAllowDecimal(event.target.checked);
+                setDecimalTouched(true);
+              }}
+              className="h-4 w-4 accent-primary"
+            />
+            <span className="text-body">Allow decimal quantities</span>
+          </label>
         </Field>
         <Field label="Reorder point" hint="Flag it for restocking at or below this count.">
           <Input

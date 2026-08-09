@@ -158,10 +158,14 @@ export function CreatePurchaseOrderForm({
       .filter((item) => item.productId && Number(item.quantityOrdered) > 0)
       .map((item) => {
         const product = productsById.get(item.productId);
+        const raw = Number(item.quantityOrdered) || 0;
+        const quantityOrdered = product?.allowDecimal
+          ? Math.max(0.001, Number(raw.toFixed(3)))
+          : Math.max(1, Math.round(raw));
         return {
           productId: item.productId,
           productName: product?.name ?? "Unknown product",
-          quantityOrdered: Math.max(1, Math.round(Number(item.quantityOrdered))),
+          quantityOrdered,
           unitCost: Math.max(0, Number(item.unitCost) || 0),
         };
       });
@@ -269,6 +273,8 @@ export function CreatePurchaseOrderForm({
             {items.map((item) => {
               const qty = Number(item.quantityOrdered) || 0;
               const cost = Number(item.unitCost) || 0;
+              const rowAllowsDecimal =
+                productsById.get(item.productId)?.allowDecimal ?? false;
               return (
                 <tr key={item.key}>
                   <Td>
@@ -288,8 +294,8 @@ export function CreatePurchaseOrderForm({
                   <Td numeric>
                     <Input
                       type="number"
-                      min="1"
-                      step="1"
+                      min={rowAllowsDecimal ? "0.001" : "1"}
+                      step={rowAllowsDecimal ? "0.001" : "1"}
                       className="num text-right"
                       value={item.quantityOrdered}
                       onChange={(event) =>
