@@ -52,7 +52,7 @@
    * as the page arriving, not as an effect. Applied with `motion-safe:` so a
    * reduced-motion preference gets the page with no movement at all.
    */
-  --animate-page-enter: page-enter 180ms ease-out;
+  --animate-page-enter: page-enter 180ms ease-out both;
 }
 
 @keyframes page-enter {

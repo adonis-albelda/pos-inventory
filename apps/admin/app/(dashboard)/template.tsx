@@ -1,3 +1,5 @@
+import { PageTransition } from "@/components/page-transition";
+
 /**
  * A template, not a layout: this remounts on every navigation, which is what
  * restarts the enter animation. The sidebar stays in `layout.tsx` so it never
@@ -11,7 +13,5 @@ export default function DashboardTemplate({
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <div className="space-y-6 motion-safe:animate-page-enter">{children}</div>
-  );
+  return <PageTransition>{children}</PageTransition>;
 }
