@@ -30,12 +30,6 @@ import { EMPTY_FORM_STATE } from "@/lib/form-state";
 import { resetUserPassword, toggleUserCanSell } from "./actions";
 import { UserForm } from "./user-form";
 
-const ROLE_LABELS: Record<string, string> = {
-  cashier: "Cashier",
-  admin: "Admin",
-  device: "Terminal",
-};
-
 const ROLE_ICONS: Record<string, LucideIcon> = {
   cashier: UserRound,
   admin: Shield,
@@ -120,7 +114,6 @@ export function UsersTable({ users }: { users: User[] }) {
           <tr>
             <Th>Name</Th>
             <Th>Email</Th>
-            <Th>Role</Th>
             <Th>State</Th>
             <Th />
           </tr>
@@ -145,7 +138,6 @@ export function UsersTable({ users }: { users: User[] }) {
                   </span>
                 </Td>
                 <Td className="text-ink-muted">{user.email}</Td>
-                <Td>{ROLE_LABELS[user.role] ?? user.role}</Td>
                 <Td>
                   <span className="flex flex-wrap gap-1.5">
                     {!user.isActive ? (

@@ -24,10 +24,12 @@ export function TabNav({
   items,
   active,
   className,
+  ariaLabel = "Views",
 }: {
   items: TabItem[];
   active: string;
   className?: string;
+  ariaLabel?: string;
 }) {
   return (
     <div
@@ -37,7 +39,7 @@ export function TabNav({
       )}
     >
       <nav
-        aria-label="Inventory views"
+        aria-label={ariaLabel}
         className="inline-flex min-w-full gap-1 rounded-md border border-border bg-paper p-1 sm:min-w-0"
       >
         {items.map((item) => {

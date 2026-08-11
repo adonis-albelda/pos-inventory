@@ -1,15 +1,40 @@
 "use client";
 
 import { useState } from "react";
-import { UserPlus } from "lucide-react";
-import type { User } from "@double-a/shared-types";
+import { Shield, Smartphone, UserPlus, UserRound } from "lucide-react";
+import type { User, UserRole } from "@double-a/shared-types";
 import { Card, EmptyState } from "@/components/ui";
 import { Sheet } from "@/components/overlay";
 import { Pagination, RecordToolbar } from "@/components/record-list";
 import { UserForm } from "./user-form";
 import { UsersTable } from "./users-table";
 
+const TAB_COPY: Record<
+  UserRole,
+  { addLabel: string; emptyTitle: string; emptyInstruction: string; sheetTitle: string }
+> = {
+  admin: {
+    addLabel: "Add admin",
+    emptyTitle: "No admins yet",
+    emptyInstruction: "Admins sign in to this dashboard with email and password.",
+    sheetTitle: "Add admin",
+  },
+  cashier: {
+    addLabel: "Add cashier",
+    emptyTitle: "No cashiers yet",
+    emptyInstruction: "Cashiers unlock a terminal with a PIN — no dashboard login.",
+    sheetTitle: "Add cashier",
+  },
+  device: {
+    addLabel: "Add terminal",
+    emptyTitle: "No terminals yet",
+    emptyInstruction: "Each POS device enrolls once with this login, then cashiers use PINs.",
+    sheetTitle: "Add terminal",
+  },
+};
+
 export function UsersPanel({
+  tab,
   users,
   query,
   page,
@@ -17,6 +42,7 @@ export function UsersPanel({
   total,
   pageSize,
 }: {
+  tab: UserRole;
   users: User[];
   query: string;
   page: number;
@@ -25,6 +51,9 @@ export function UsersPanel({
   pageSize: number;
 }) {
   const [creating, setCreating] = useState(false);
+  const copy = TAB_COPY[tab];
+  const TabIcon =
+    tab === "admin" ? Shield : tab === "device" ? Smartphone : UserRound;
 
   return (
     <>
@@ -32,19 +61,18 @@ export function UsersPanel({
         <RecordToolbar
           searchPlaceholder="Search name or email…"
           query={query}
-          addLabel="Add user"
+          preserve={{ tab }}
+          addLabel={copy.addLabel}
           onAdd={() => setCreating(true)}
           exportHref="/api/export/users"
         />
 
         {total === 0 ? (
           <EmptyState
-            icon={UserPlus}
-            title={query ? "Nothing matches that search" : "No users yet"}
+            icon={TabIcon}
+            title={query ? "Nothing matches that search" : copy.emptyTitle}
             instruction={
-              query
-                ? "Try a different name or email."
-                : "Add cashiers (PIN), admins (dashboard password), or terminal logins."
+              query ? "Try a different name or email." : copy.emptyInstruction
             }
           />
         ) : (
@@ -57,18 +85,18 @@ export function UsersPanel({
           total={total}
           pageSize={pageSize}
           basePath="/users"
-          query={{ q: query || undefined }}
+          query={{ tab, q: query || undefined }}
         />
       </Card>
 
       <Sheet
         open={creating}
         onClose={() => setCreating(false)}
-        title="Add user"
-        description="Pick a role — the form explains what that person can do."
+        title={copy.sheetTitle}
+        description="The form is set to this tab's role."
         wide
       >
-        <UserForm onDone={() => setCreating(false)} />
+        <UserForm defaultRole={tab} onDone={() => setCreating(false)} />
       </Sheet>
     </>
   );

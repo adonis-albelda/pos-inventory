@@ -43,9 +43,18 @@ function roleDescription(role: UserRole): string {
   return "Cashiers unlock with a PIN against the live server. They have no dashboard login. Disabling sales still lets them unlock, but they cannot complete a sale.";
 }
 
-export function UserForm({ user, onDone }: { user?: User; onDone?: () => void }) {
+export function UserForm({
+  user,
+  defaultRole = "cashier",
+  onDone,
+}: {
+  user?: User;
+  /** Pre-select role when adding from a tab. Ignored when editing. */
+  defaultRole?: UserRole;
+  onDone?: () => void;
+}) {
   const [state, action, pending] = useActionState(saveCashier, EMPTY_FORM_STATE);
-  const [role, setRole] = useState<UserRole>(user?.role ?? "cashier");
+  const [role, setRole] = useState<UserRole>(user?.role ?? defaultRole);
 
   useEffect(() => {
     if (state.ok) onDone?.();
