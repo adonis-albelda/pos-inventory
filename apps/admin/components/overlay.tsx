@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui";
 
@@ -114,6 +115,19 @@ function usePresence(open: boolean) {
   return { mounted, entered };
 }
 
+/**
+ * Escape the page-enter transform. `position: fixed` inside a transformed
+ * ancestor is sized to that ancestor — here, the table — not the viewport.
+ */
+function OverlayPortal({ children }: { children: ReactNode }) {
+  const [target, setTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setTarget(document.body);
+  }, []);
+  if (!target) return null;
+  return createPortal(children, target);
+}
+
 const backdropClass =
   "absolute inset-0 bg-ink/40 transition-opacity duration-[180ms] ease-out motion-reduce:transition-none";
 
@@ -148,6 +162,7 @@ export function Dialog({
   if (!mounted) return null;
 
   return (
+    <OverlayPortal>
     <OverlayContext.Provider value={{ onClose: stableClose }}>
       <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
         <button
@@ -188,6 +203,7 @@ export function Dialog({
         </div>
       </div>
     </OverlayContext.Provider>
+    </OverlayPortal>
   );
 }
 
@@ -223,6 +239,7 @@ export function Sheet({
   if (!mounted) return null;
 
   return (
+    <OverlayPortal>
     <OverlayContext.Provider value={{ onClose: stableClose }}>
       <div className="fixed inset-0 z-50 flex justify-end">
         <button
@@ -239,7 +256,7 @@ export function Sheet({
           tabIndex={-1}
           data-state={entered ? "open" : "closed"}
           className={cx(
-            "relative z-10 flex h-full w-full flex-col border-l border-border bg-surface shadow-lg outline-none",
+            "relative z-10 flex h-dvh w-full flex-col border-l border-border bg-surface shadow-lg outline-none",
             "transition-transform duration-[180ms] ease-out motion-reduce:transition-none",
             entered ? "translate-x-0" : "translate-x-full",
             wide ? "max-w-2xl" : "max-w-md",
@@ -260,6 +277,7 @@ export function Sheet({
         </div>
       </div>
     </OverlayContext.Provider>
+    </OverlayPortal>
   );
 }
 
