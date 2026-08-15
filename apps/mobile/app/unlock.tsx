@@ -19,7 +19,7 @@ import {
 import { listCashiers } from "@double-a/supabase";
 import { useLayout } from "@/lib/layout";
 import { useSession } from "@/lib/session";
-import { ensureFreshSession, getSupabase } from "@/lib/supabase";
+import { ensureFreshSession, getSupabase, unenrollTerminal } from "@/lib/supabase";
 import { useStoreSettings } from "@/lib/store";
 import { useSync } from "@/sync/sync-provider";
 import {
@@ -96,6 +96,19 @@ export default function UnlockScreen() {
     await loadCashiers();
     setPin("");
     setError(null);
+  }
+
+  async function switchAccount() {
+    setBusy(true);
+    setLoadError(null);
+    try {
+      await unenrollTerminal();
+      router.replace("/setup");
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Could not disconnect this terminal.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   function closePinDialog() {
@@ -261,7 +274,7 @@ export default function UnlockScreen() {
             instruction={
               loadError
                 ? "Check the connection, then press Refresh."
-                : "Add a cashier in the admin dashboard, then press Refresh."
+                : "Add a cashier with a PIN in the admin dashboard, or set a PIN on this shop's admin, then press Refresh."
             }
           />
         </Card>
@@ -372,6 +385,13 @@ export default function UnlockScreen() {
           })}
         </View>
       )}
+
+      <Button
+        label="Use a different shop account"
+        variant="secondary"
+        disabled={busy || syncing}
+        onPress={() => void switchAccount()}
+      />
 
     </ScrollView>
 

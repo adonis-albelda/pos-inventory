@@ -34,3 +34,7 @@ export async function getEnrolledCompanyId(): Promise<string | null> {
 export async function setEnrolledCompanyId(companyId: string): Promise<void> {
   await SecureStore.setItemAsync(COMPANY_ID_KEY, companyId);
 }
+
+export async function clearEnrolledCompanyId(): Promise<void> {
+  await SecureStore.deleteItemAsync(COMPANY_ID_KEY);
+}

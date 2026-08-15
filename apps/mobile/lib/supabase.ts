@@ -1,10 +1,14 @@
 import "react-native-url-polyfill/auto";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { currentAppUser } from "@double-a/supabase";
-import { createMobileClient } from "@double-a/supabase/mobile";
+import { createMobileClient, resetMobileClient } from "@double-a/supabase/mobile";
 import type { DoubleAClient } from "@double-a/supabase";
 import { resetLocalData } from "@/db";
-import { getEnrolledCompanyId, setEnrolledCompanyId } from "@/lib/device";
+import {
+  clearEnrolledCompanyId,
+  getEnrolledCompanyId,
+  setEnrolledCompanyId,
+} from "@/lib/device";
 
 /**
  * The one Supabase client on this device. It is only ever touched during a
@@ -67,4 +71,15 @@ async function bindEnrolledCompany(): Promise<void> {
 export async function isEnrolled(): Promise<boolean> {
   const { data } = await getSupabase().auth.getSession();
   return Boolean(data.session);
+}
+
+/**
+ * Drop the persisted Auth session and local catalogue so this tablet can
+ * enroll into a different company. Refuses while unsynced sales exist.
+ */
+export async function unenrollTerminal(): Promise<void> {
+  await resetLocalData();
+  await getSupabase().auth.signOut();
+  resetMobileClient();
+  await clearEnrolledCompanyId();
 }

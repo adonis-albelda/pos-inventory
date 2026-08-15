@@ -9,7 +9,7 @@ import { countLocalProducts } from "@/db/products";
 import { getDeviceId, getDeviceLabel, setDeviceLabel, getEnrolledCompanyId, setEnrolledCompanyId } from "@/lib/device";
 import { resetLocalData } from "@/db";
 import { useLayout } from "@/lib/layout";
-import { getSupabase, isEnrolled } from "@/lib/supabase";
+import { getSupabase, isEnrolled, unenrollTerminal } from "@/lib/supabase";
 import { runFirstPull } from "@/sync";
 import {
   CheckCircle2,
@@ -167,6 +167,25 @@ export default function SetupScreen() {
     }
   }
 
+  async function switchAccount() {
+    setBusy(true);
+    setError(null);
+    try {
+      await unenrollTerminal();
+      setAccount(null);
+      setPulled(null);
+      setStep("sign-in");
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not disconnect this terminal.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <BrandAuthShell>
     <View style={{ flex: 1 }}>
@@ -252,6 +271,12 @@ export default function SetupScreen() {
               busy={busy}
               onPress={() => void firstPull()}
             />
+            <Button
+              label="Use a different shop account"
+              variant="secondary"
+              disabled={busy}
+              onPress={() => void switchAccount()}
+            />
           </Card>
         ) : null}
 
@@ -268,6 +293,12 @@ export default function SetupScreen() {
               large
               icon={PlayCircle}
               onPress={() => router.replace("/unlock")}
+            />
+            <Button
+              label="Use a different shop account"
+              variant="secondary"
+              disabled={busy}
+              onPress={() => void switchAccount()}
             />
           </Card>
         ) : null}

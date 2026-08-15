@@ -130,12 +130,19 @@ export async function createCompany(
   const adminName = String(formData.get("admin_name") ?? "").trim();
   const adminEmail = String(formData.get("admin_email") ?? "").trim();
   const adminPassword = String(formData.get("admin_password") ?? "");
+  const adminPin = String(formData.get("admin_pin") ?? "").trim();
 
   if (!name) return { error: "Company name is required.", ok: false };
   if (!adminName) return { error: "Admin name is required.", ok: false };
   if (!adminEmail) return { error: "Admin email is required.", ok: false };
   if (adminPassword.length < 6) {
     return { error: "Admin password must be at least 6 characters.", ok: false };
+  }
+  if (!isValidPin(adminPin)) {
+    return {
+      error: "Admin PIN must be 4 to 6 digits. The POS unlocks with this PIN, not the dashboard password.",
+      ok: false,
+    };
   }
 
   const service = createServiceRoleClient();
@@ -169,6 +176,7 @@ export async function createCompany(
       role: "admin",
       company_id: companyId,
       auth_user_id: null,
+      pin_hash: hashPin(adminId, adminPin),
       can_sell: true,
       must_change_password: true,
     });
@@ -196,12 +204,16 @@ export async function addCompanyAdmin(
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
+  const pin = String(formData.get("pin") ?? "").trim();
 
   if (!companyId) return { error: "Missing company.", ok: false };
   if (!name) return { error: "Name is required.", ok: false };
   if (!email) return { error: "Email is required.", ok: false };
   if (password.length < 6) {
     return { error: "Password must be at least 6 characters.", ok: false };
+  }
+  if (pin && !isValidPin(pin)) {
+    return { error: "PIN must be 4 to 6 digits.", ok: false };
   }
 
   const service = createServiceRoleClient();
@@ -215,6 +227,7 @@ export async function addCompanyAdmin(
       role: "admin",
       company_id: companyId,
       auth_user_id: null,
+      pin_hash: pin ? hashPin(adminId, pin) : null,
       can_sell: true,
       must_change_password: true,
     });

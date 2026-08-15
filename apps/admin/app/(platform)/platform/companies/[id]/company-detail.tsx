@@ -45,6 +45,15 @@ export function AddAdminForm({ companyId }: { companyId: string }) {
           required
         />
       </Field>
+      <Field label="PIN" hint="Optional. 4–6 digits to unlock a terminal. Dashboard password will not work on the POS.">
+        <Input
+          icon={KeyRound}
+          name="pin"
+          inputMode="numeric"
+          minLength={4}
+          maxLength={6}
+        />
+      </Field>
       <div className="flex items-end">
         <Button type="submit" loading={pending}>
           Add admin
