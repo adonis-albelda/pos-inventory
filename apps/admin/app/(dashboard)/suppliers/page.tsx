@@ -7,6 +7,7 @@ import {
   listSuppliers,
 } from "@double-a/supabase";
 import { getServerClient } from "@/lib/supabase/server";
+import { isShopAdmin } from "@/lib/authz";
 import { matchesQuery, paginateItems, parseListQuery } from "@/lib/list-query";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { SuppliersPanel } from "./suppliers-panel";
@@ -21,7 +22,7 @@ export default async function SuppliersPage({
   const supabase = await getServerClient();
   const user = await currentAppUser(supabase);
 
-  if (user?.role !== "admin") {
+  if (!isShopAdmin(user)) {
     return (
       <div className="space-y-6">
         <PageHeader icon={Truck} title="Suppliers" />

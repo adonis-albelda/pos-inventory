@@ -1,6 +1,7 @@
 import { TriangleAlert, Wallet } from "lucide-react";
 import { currentAppUser, listExpenses } from "@double-a/supabase";
 import { getServerClient } from "@/lib/supabase/server";
+import { isShopAdmin } from "@/lib/authz";
 import { matchesQuery, paginateItems, parseListQuery } from "@/lib/list-query";
 import { storeToday } from "@/lib/date-range";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
@@ -16,7 +17,7 @@ export default async function ExpensesPage({
   const supabase = await getServerClient();
   const user = await currentAppUser(supabase);
 
-  if (user?.role !== "admin") {
+  if (!isShopAdmin(user)) {
     return (
       <div className="space-y-6">
         <PageHeader icon={Wallet} title="Expenses" />

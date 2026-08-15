@@ -228,6 +228,11 @@ const V9_ALLOW_DECIMAL = `
 ALTER TABLE products ADD COLUMN allow_decimal INTEGER NOT NULL DEFAULT 0;
 `;
 
+const V10_COMPANY_ID = `
+ALTER TABLE sales ADD COLUMN company_id TEXT;
+ALTER TABLE customers ADD COLUMN company_id TEXT;
+`;
+
 /**
  * v8: receipt layout from admin. One row, pulled whole every sync. Bluetooth
  * pairing stays in AsyncStorage on this device — never this table.
@@ -265,6 +270,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 7, sql: V7_USER_CAN_SELL },
   { version: 8, sql: V8_RECEIPT_LAYOUT },
   { version: 9, sql: V9_ALLOW_DECIMAL },
+  { version: 10, sql: V10_COMPANY_ID },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.reduce(

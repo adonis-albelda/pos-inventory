@@ -17,6 +17,7 @@ import {
 } from "@double-a/supabase";
 import type { FormState } from "@/lib/form-state";
 import { getServerClient } from "@/lib/supabase/server";
+import { isShopAdmin } from "@/lib/authz";
 
 function text(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
@@ -54,7 +55,7 @@ export async function saveSupplier(
 
   const supabase = await getServerClient();
   const user = await currentAppUser(supabase);
-  if (user?.role !== "admin") {
+  if (!isShopAdmin(user)) {
     return { error: "Only the owner can manage suppliers.", ok: false };
   }
 
@@ -92,7 +93,7 @@ export async function removeSupplier(formData: FormData): Promise<{ error: strin
 
   const supabase = await getServerClient();
   const user = await currentAppUser(supabase);
-  if (user?.role !== "admin") {
+  if (!isShopAdmin(user)) {
     return { error: "Only the owner can manage suppliers." };
   }
 

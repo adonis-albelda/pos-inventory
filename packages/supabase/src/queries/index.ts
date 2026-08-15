@@ -1,4 +1,5 @@
 export * from "./categories";
+export * from "./companies";
 export * from "./customers";
 export * from "./expenses";
 export * from "./inventory";

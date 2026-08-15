@@ -6,7 +6,8 @@ import type { User } from "@double-a/shared-types";
 import { currentAppUser } from "@double-a/supabase";
 import { getSyncMeta } from "@/db/meta";
 import { countLocalProducts } from "@/db/products";
-import { getDeviceId, getDeviceLabel, setDeviceLabel } from "@/lib/device";
+import { getDeviceId, getDeviceLabel, setDeviceLabel, getEnrolledCompanyId, setEnrolledCompanyId } from "@/lib/device";
+import { resetLocalData } from "@/db";
 import { useLayout } from "@/lib/layout";
 import { getSupabase, isEnrolled } from "@/lib/supabase";
 import { runFirstPull } from "@/sync";
@@ -113,6 +114,24 @@ export default function SetupScreen() {
         );
         return;
       }
+
+      if (!me.companyIsActive) {
+        await supabase.auth.signOut();
+        setError("This shop account is disabled. Contact the office.");
+        return;
+      }
+
+      if (!me.companyId) {
+        await supabase.auth.signOut();
+        setError("This login is not linked to a company.");
+        return;
+      }
+
+      const storedCompany = await getEnrolledCompanyId();
+      if (storedCompany && storedCompany !== me.companyId) {
+        await resetLocalData();
+      }
+      await setEnrolledCompanyId(me.companyId);
 
       setAccount(me);
       await setDeviceLabel(label.trim() || me.name);

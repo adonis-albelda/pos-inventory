@@ -10,6 +10,28 @@ export type Json = string | number | boolean | null | { [key: string]: Json } | 
 export interface Database {
   public: {
     Tables: {
+      companies: {
+        Row: {
+          id: string;
+          name: string;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          is_active?: boolean;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       users: {
         Row: {
           id: string;
@@ -21,6 +43,7 @@ export interface Database {
           is_active: boolean;
           can_sell: boolean;
           must_change_password: boolean;
+          company_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -34,6 +57,7 @@ export interface Database {
           is_active?: boolean;
           can_sell?: boolean;
           must_change_password?: boolean;
+          company_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -47,6 +71,7 @@ export interface Database {
           is_active?: boolean;
           can_sell?: boolean;
           must_change_password?: boolean;
+          company_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -54,8 +79,7 @@ export interface Database {
       };
       store_settings: {
         Row: {
-          /** Always true. The key that keeps this table to one row. */
-          id: boolean;
+          company_id: string;
           name: string;
           logo_url: string | null;
           address: string | null;
@@ -65,7 +89,7 @@ export interface Database {
           updated_at: string;
         };
         Insert: {
-          id?: boolean;
+          company_id: string;
           name?: string;
           logo_url?: string | null;
           address?: string | null;
@@ -86,8 +110,7 @@ export interface Database {
       };
       receipt_layout: {
         Row: {
-          /** Always true. One layout row for the whole shop. */
-          id: boolean;
+          company_id: string;
           show_shop_name: boolean;
           show_address: boolean;
           show_phone: boolean;
@@ -105,7 +128,7 @@ export interface Database {
           updated_at: string;
         };
         Insert: {
-          id?: boolean;
+          company_id: string;
           show_shop_name?: boolean;
           show_address?: boolean;
           show_phone?: boolean;
@@ -140,6 +163,7 @@ export interface Database {
       categories: {
         Row: {
           id: string;
+          company_id: string;
           name: string;
           parent_id: string | null;
           is_active: boolean;
@@ -150,6 +174,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
+          company_id?: string;
           name: string;
           parent_id?: string | null;
           is_active?: boolean;
@@ -178,6 +203,7 @@ export interface Database {
       customers: {
         Row: {
           id: string;
+          company_id: string;
           name: string;
           address: string | null;
           contact: string | null;
@@ -187,6 +213,7 @@ export interface Database {
         Insert: {
           /** Required when created on-device; admin may omit for server default. */
           id?: string;
+          company_id?: string;
           name: string;
           address?: string | null;
           contact?: string | null;
@@ -204,6 +231,7 @@ export interface Database {
       expenses: {
         Row: {
           id: string;
+          company_id: string;
           description: string;
           amount: number;
           category: string | null;
@@ -215,6 +243,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
+          company_id?: string;
           description: string;
           amount: number;
           category?: string | null;
@@ -245,6 +274,7 @@ export interface Database {
       products: {
         Row: {
           id: string;
+          company_id: string;
           name: string;
           sku: string | null;
           price: number;
@@ -265,6 +295,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
+          company_id?: string;
           name: string;
           sku?: string | null;
           price: number;
@@ -313,6 +344,7 @@ export interface Database {
       sales: {
         Row: {
           id: string;
+          company_id: string;
           user_id: string | null;
           total_amount: number;
           discount_amount: number;
@@ -334,6 +366,7 @@ export interface Database {
         Insert: {
           /** Required: generated on-device, never by the server. */
           id: string;
+          company_id?: string;
           user_id?: string | null;
           total_amount: number;
           discount_amount?: number;
@@ -385,6 +418,7 @@ export interface Database {
       sale_items: {
         Row: {
           id: string;
+          company_id: string;
           sale_id: string;
           product_id: string | null;
           product_name: string;
@@ -398,6 +432,7 @@ export interface Database {
         Insert: {
           /** Supplied by mobile so a retried push is idempotent. */
           id?: string;
+          company_id?: string;
           sale_id: string;
           product_id?: string | null;
           product_name: string;
@@ -435,6 +470,7 @@ export interface Database {
       inventory_movements: {
         Row: {
           id: string;
+          company_id: string;
           product_id: string;
           change_quantity: number;
           reason: string;
@@ -445,6 +481,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
+          company_id?: string;
           product_id: string;
           change_quantity: number;
           reason: string;
@@ -468,6 +505,7 @@ export interface Database {
       suppliers: {
         Row: {
           id: string;
+          company_id: string;
           name: string;
           contact_person: string | null;
           phone: string | null;
@@ -479,6 +517,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
+          company_id?: string;
           name: string;
           contact_person?: string | null;
           phone?: string | null;
@@ -502,12 +541,14 @@ export interface Database {
       supplier_products: {
         Row: {
           id: string;
+          company_id: string;
           supplier_id: string;
           product_id: string;
           created_at: string;
         };
         Insert: {
           id?: string;
+          company_id?: string;
           supplier_id: string;
           product_id: string;
           created_at?: string;
@@ -531,6 +572,7 @@ export interface Database {
       purchase_orders: {
         Row: {
           id: string;
+          company_id: string;
           supplier_id: string;
           status: string;
           order_date: string;
@@ -545,6 +587,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
+          company_id?: string;
           supplier_id: string;
           status?: string;
           order_date?: string;
@@ -576,6 +619,7 @@ export interface Database {
       purchase_order_items: {
         Row: {
           id: string;
+          company_id: string;
           purchase_order_id: string;
           product_id: string | null;
           product_name: string;
@@ -590,6 +634,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
+          company_id?: string;
           purchase_order_id: string;
           product_id?: string | null;
           product_name: string;
@@ -627,6 +672,7 @@ export interface Database {
       purchase_order_payments: {
         Row: {
           id: string;
+          company_id: string;
           purchase_order_id: string;
           term_number: number;
           due_date: string | null;
@@ -639,6 +685,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
+          company_id?: string;
           purchase_order_id: string;
           term_number: number;
           due_date?: string | null;
@@ -839,6 +886,8 @@ export interface Database {
           is_active: boolean;
           can_sell: boolean;
           must_change_password: boolean;
+          company_id: string | null;
+          company_is_active: boolean;
           created_at: string;
           updated_at: string;
         }[];
@@ -850,6 +899,38 @@ export interface Database {
       is_admin: {
         Args: Record<string, never>;
         Returns: boolean;
+      };
+      is_superadmin: {
+        Args: Record<string, never>;
+        Returns: boolean;
+      };
+      current_company_id: {
+        Args: Record<string, never>;
+        Returns: string | null;
+      };
+      company_is_active: {
+        Args: Record<string, never>;
+        Returns: boolean;
+      };
+      acting_company_id: {
+        Args: Record<string, never>;
+        Returns: string | null;
+      };
+      company_stats: {
+        Args: Record<string, never>;
+        Returns: {
+          id: string;
+          name: string;
+          is_active: boolean;
+          created_at: string;
+          product_count: number;
+          category_count: number;
+          supplier_count: number;
+          customer_count: number;
+          sale_count: number;
+          user_count: number;
+          stock_units: number;
+        }[];
       };
       patch_sale_flags: {
         Args: {

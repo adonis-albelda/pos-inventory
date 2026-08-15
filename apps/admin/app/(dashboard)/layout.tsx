@@ -2,6 +2,7 @@ import { currentAppUser, fetchStoreSettings } from "@double-a/supabase";
 import { getServerClient } from "@/lib/supabase/server";
 import { ClassicShell } from "@/components/classic-shell";
 import { DashboardShell } from "@/components/dashboard-shell";
+import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { getUiMode } from "@/lib/ui-mode";
 
 export default async function DashboardLayout({
@@ -22,6 +23,16 @@ export default async function DashboardLayout({
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
 
+  const content =
+    user?.role === "superadmin" ? (
+      <>
+        <ImpersonationBanner storeName={store.name} />
+        {children}
+      </>
+    ) : (
+      children
+    );
+
   if (mode === "classic") {
     return (
       <ClassicShell
@@ -31,7 +42,7 @@ export default async function DashboardLayout({
         userEmail={user?.email ?? null}
         mode={mode}
       >
-        {children}
+        {content}
       </ClassicShell>
     );
   }
@@ -45,7 +56,7 @@ export default async function DashboardLayout({
       initials={initials}
       mode={mode}
     >
-      {children}
+      {content}
     </DashboardShell>
   );
 }

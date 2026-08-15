@@ -5,6 +5,7 @@ import {
   fetchStoreSettings,
 } from "@double-a/supabase";
 import { getServerClient } from "@/lib/supabase/server";
+import { isShopAdmin } from "@/lib/authz";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui";
 import { ReceiptLayoutForm } from "./receipt-layout-form";
 
@@ -12,7 +13,7 @@ export default async function ReceiptLayoutPage() {
   const supabase = await getServerClient();
   const user = await currentAppUser(supabase);
 
-  if (user?.role !== "admin") {
+  if (!isShopAdmin(user)) {
     return (
       <div className="space-y-6">
         <PageHeader icon={Printer} title="Receipt layout" />

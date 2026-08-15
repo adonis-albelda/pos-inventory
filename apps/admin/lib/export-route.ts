@@ -2,6 +2,7 @@ import { currentAppUser, type DoubleAClient } from "@double-a/supabase";
 import { toCsv, type CsvValue } from "@/lib/csv";
 import { storeToday } from "@/lib/date-range";
 import { getServerClient } from "@/lib/supabase/server";
+import { isShopAdmin } from "@/lib/authz";
 
 /**
  * Every export carries supplier prices and margin, so each route checks the
@@ -19,7 +20,7 @@ export async function csvExport(
   if (!user) {
     return new Response("Sign in to download this file.\n", { status: 401 });
   }
-  if (user.role !== "admin") {
+  if (!isShopAdmin(user)) {
     return new Response("Downloads are for the owner's account.\n", { status: 403 });
   }
 

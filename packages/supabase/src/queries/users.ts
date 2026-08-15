@@ -4,13 +4,17 @@ import type { TablesInsert, TablesUpdate } from "../database.types";
 import { toUser } from "../mappers";
 
 const USER_COLUMNS =
-  "id, name, email, role, is_active, can_sell, must_change_password, created_at, updated_at";
+  "id, name, email, role, is_active, can_sell, must_change_password, company_id, created_at, updated_at";
 
 export async function listUsers(
   client: DoubleAClient,
   options: { includeInactive?: boolean } = {},
 ): Promise<User[]> {
-  let query = client.from("users").select(USER_COLUMNS).order("name");
+  let query = client
+    .from("users")
+    .select(USER_COLUMNS)
+    .neq("role", "superadmin")
+    .order("name");
   if (!options.includeInactive) query = query.eq("is_active", true);
 
   const { data, error } = await query;

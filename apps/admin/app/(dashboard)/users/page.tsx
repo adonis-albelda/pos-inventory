@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/ui";
 import { TabNav } from "@/components/tab-nav";
 import { UsersPanel } from "./users-panel";
 
-const USER_TABS: { key: UserRole; label: string }[] = [
+const USER_TABS: { key: Exclude<UserRole, "superadmin">; label: string }[] = [
   { key: "admin", label: "Admins" },
   { key: "cashier", label: "Cashiers" },
   { key: "device", label: "Terminals" },
@@ -22,7 +22,7 @@ function buildHref(params: Record<string, string | undefined>): string {
   return query ? `/users?${query}` : "/users";
 }
 
-function parseTab(raw: string | undefined): UserRole {
+function parseTab(raw: string | undefined): Exclude<UserRole, "superadmin"> {
   if (raw === "admin" || raw === "cashier" || raw === "device") return raw;
   return "cashier";
 }

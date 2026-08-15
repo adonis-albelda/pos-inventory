@@ -7,7 +7,7 @@
 
 import { roundMoney } from "./money";
 
-export type UserRole = "cashier" | "admin" | "device";
+export type UserRole = "cashier" | "admin" | "device" | "superadmin";
 export type PaymentMethod = "cash" | "gcash" | "card" | "other";
 export type SaleStatus = "completed" | "voided" | "refunded";
 /** How the customer takes the goods. Default pickup — delivery is opt-in. */
@@ -204,7 +204,30 @@ export interface User {
   canSell: boolean;
   /** Dashboard admin must set a new password before using the app. */
   mustChangePassword: boolean;
+  /** Null only for `superadmin`. Shop staff always belong to one company. */
+  companyId: string | null;
+  /** False when the shop account is disabled. Superadmin has no company — true. */
+  companyIsActive: boolean;
   updatedAt: string;
+}
+
+/** A tenant the platform superadmin creates. Shop identity still lives in store_settings. */
+export interface Company {
+  id: string;
+  name: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+/** Per-company counts for the platform console. */
+export interface CompanyStats extends Company {
+  productCount: number;
+  categoryCount: number;
+  supplierCount: number;
+  customerCount: number;
+  saleCount: number;
+  userCount: number;
+  stockUnits: number;
 }
 
 /** A node in the category tree, e.g. Plumbing / Pipes / PVC. */
@@ -394,6 +417,8 @@ export interface Sale {
   fulfillment: Fulfillment;
   /** Only meaningful when `fulfillment === "delivery"`. */
   deliveryCompleted: boolean;
+  /** Stamped on push from the enrolled terminal's company. */
+  companyId?: string | null;
 }
 
 /** The customer columns of a sale, as `CustomerDetails`. */

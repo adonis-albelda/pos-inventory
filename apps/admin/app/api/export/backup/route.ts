@@ -12,6 +12,7 @@ import {
 } from "@/lib/backup-formats";
 import { storeToday } from "@/lib/date-range";
 import { getServerClient } from "@/lib/supabase/server";
+import { isShopAdmin } from "@/lib/authz";
 
 export const runtime = "nodejs";
 
@@ -30,7 +31,7 @@ export async function GET(request: Request): Promise<Response> {
   if (!user) {
     return new Response("Sign in to download this file.\n", { status: 401 });
   }
-  if (user.role !== "admin") {
+  if (!isShopAdmin(user)) {
     return new Response("Downloads are for the owner's account.\n", { status: 403 });
   }
 

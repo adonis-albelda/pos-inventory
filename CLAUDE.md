@@ -184,6 +184,18 @@ COGS — that stays on `sale_items.unit_cost`. Never written from the POS and ne
 SQLite. Dashboard and reports **Net** = revenue − sum of expenses whose `expense_date` falls
 in the same shop-day range. Gross profit (revenue − supplier cost) stays a separate figure.
 
+### 15. Company is the isolation key (multi-tenant)
+Supabase still the source of truth. Every business row carries `company_id`. The first
+company is the pre-existing shop — tenancy migrations never delete business rows.
+
+`superadmin` is platform-only (`company_id` null). They create companies, assign shop
+admins, enable/disable a company (disabled blocks shop API), reset any shop user's Auth
+password or PIN, and may **Open company** (JWT `app_metadata.acting_company_id`) to use
+that shop's dashboard. Impersonation is not a second login.
+
+Shop writes never cross `company_id`. Mobile binds to the enrolled user's `company_id`
+and only pulls that company's catalog. Superadmin never enrolls a terminal.
+
 ---
 
 ## Commands

@@ -1,6 +1,7 @@
 import { QrCode, TriangleAlert } from "lucide-react";
 import { currentAppUser, listProducts } from "@double-a/supabase";
 import { getServerClient } from "@/lib/supabase/server";
+import { isShopAdmin } from "@/lib/authz";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { ProductQrPanel } from "./product-qr-panel";
 
@@ -8,7 +9,7 @@ export default async function ProductQrPage() {
   const supabase = await getServerClient();
   const user = await currentAppUser(supabase);
 
-  if (user?.role !== "admin") {
+  if (!isShopAdmin(user)) {
     return (
       <div className="space-y-6">
         <PageHeader icon={QrCode} title="Product QR codes" />

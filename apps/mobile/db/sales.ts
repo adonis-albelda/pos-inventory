@@ -15,6 +15,7 @@ import {
   type SaleItem,
 } from "@double-a/shared-types";
 import { getDb } from "./index";
+import { getEnrolledCompanyId } from "@/lib/device";
 
 interface SaleRow {
   id: string;
@@ -35,6 +36,7 @@ interface SaleRow {
   flags_pending: number | null;
   sync_status: string;
   synced_at: string | null;
+  company_id: string | null;
 }
 
 interface SaleItemRow {
@@ -66,6 +68,7 @@ function toLocalSale(row: SaleRow): LocalSale {
     isPaid: (row.is_paid ?? 1) === 1,
     fulfillment: (row.fulfillment as Fulfillment) ?? "pickup",
     deliveryCompleted: (row.delivery_completed ?? 0) === 1,
+    companyId: row.company_id,
     syncStatus: row.sync_status as LocalSale["syncStatus"],
     syncedAt: row.synced_at,
   };
@@ -120,13 +123,15 @@ export async function completeSale(
     subtotal: lineSubtotal(line.unitPrice, line.quantity),
   }));
 
+  const companyId = await getEnrolledCompanyId();
+
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO sales
          (id, user_id, total_amount, discount_amount, payment_method, status, device_id, created_at,
           customer_id, customer_name, customer_address, customer_contact,
-          is_paid, fulfillment, delivery_completed, flags_pending, sync_status)
-       VALUES (?, ?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'pending')`,
+          is_paid, fulfillment, delivery_completed, flags_pending, sync_status, company_id)
+       VALUES (?, ?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'pending', ?)`,
       saleId,
       input.userId,
       total,
@@ -141,6 +146,7 @@ export async function completeSale(
       isPaid ? 1 : 0,
       fulfillment,
       deliveryCompleted ? 1 : 0,
+      companyId,
     );
 
     for (const item of items) {

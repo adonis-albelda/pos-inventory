@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { currentAppUser, updateReceiptLayout } from "@double-a/supabase";
 import type { FormState } from "@/lib/form-state";
 import { getServerClient } from "@/lib/supabase/server";
+import { isShopAdmin } from "@/lib/authz";
 
 function checked(formData: FormData, key: string): boolean {
   return formData.get(key) === "true" || formData.get(key) === "on";
@@ -15,7 +16,7 @@ export async function saveReceiptLayout(
 ): Promise<FormState> {
   const supabase = await getServerClient();
   const user = await currentAppUser(supabase);
-  if (user?.role !== "admin") {
+  if (!isShopAdmin(user)) {
     return { error: "Only the owner can edit the receipt layout.", ok: false };
   }
 

@@ -19,13 +19,15 @@ import {
   markFlagsSynced,
   markSalesSynced,
 } from "@/db/sales";
+import { getEnrolledCompanyId } from "@/lib/device";
 import { getSupabase } from "@/lib/supabase";
 
 const BATCH_SIZE = 50;
 
-function toSaleInsert(sale: LocalSaleWithItems): TablesInsert<"sales"> {
+function toSaleInsert(sale: LocalSaleWithItems, companyId: string): TablesInsert<"sales"> {
   return {
     id: sale.id,
+    company_id: sale.companyId || companyId,
     user_id: sale.userId,
     total_amount: sale.totalAmount,
     discount_amount: sale.discountAmount,
@@ -49,9 +51,13 @@ function toSaleInsert(sale: LocalSaleWithItems): TablesInsert<"sales"> {
  * price when a device a version behind sends zeros, and a supplier price change
  * would then rewrite the margin on a sale made weeks earlier.
  */
-function toItemInserts(sale: LocalSaleWithItems): TablesInsert<"sale_items">[] {
+function toItemInserts(
+  sale: LocalSaleWithItems,
+  companyId: string,
+): TablesInsert<"sale_items">[] {
   return sale.items.map((item) => ({
     id: item.id,
+    company_id: sale.companyId || companyId,
     sale_id: item.saleId,
     product_id: item.productId,
     product_name: item.productName,
@@ -76,6 +82,12 @@ function toItemInserts(sale: LocalSaleWithItems): TablesInsert<"sale_items">[] {
  */
 export async function push(): Promise<PushResult> {
   const supabase = getSupabase();
+  const companyId = await getEnrolledCompanyId();
+  if (!companyId) {
+    throw new Error(
+      "This terminal is not linked to a company. Finish setup before syncing.",
+    );
+  }
 
   const pendingCustomers = await listPendingCustomers();
   if (pendingCustomers.length > 0) {
@@ -83,6 +95,7 @@ export async function push(): Promise<PushResult> {
       supabase,
       pendingCustomers.map((customer) => ({
         id: customer.id,
+        company_id: companyId,
         name: customer.name,
         address: customer.address,
         contact: customer.contact,
@@ -114,8 +127,8 @@ export async function push(): Promise<PushResult> {
 
   for (let index = 0; index < valid.length; index += BATCH_SIZE) {
     const batch = valid.slice(index, index + BATCH_SIZE);
-    const saleRows = batch.map(toSaleInsert);
-    const itemRows = batch.flatMap(toItemInserts);
+    const saleRows = batch.map((sale) => toSaleInsert(sale, companyId));
+    const itemRows = batch.flatMap((sale) => toItemInserts(sale, companyId));
 
     await pushSales(supabase, saleRows, itemRows);
 

@@ -3,6 +3,7 @@ import * as SecureStore from "expo-secure-store";
 
 const DEVICE_ID_KEY = "double-a.device-id";
 const DEVICE_LABEL_KEY = "double-a.device-label";
+const COMPANY_ID_KEY = "double-a.company-id";
 
 /**
  * A stable id for this terminal, minted once and kept in SecureStore. It rides
@@ -24,4 +25,12 @@ export async function getDeviceLabel(): Promise<string | null> {
 
 export async function setDeviceLabel(label: string): Promise<void> {
   await SecureStore.setItemAsync(DEVICE_LABEL_KEY, label);
+}
+
+export async function getEnrolledCompanyId(): Promise<string | null> {
+  return SecureStore.getItemAsync(COMPANY_ID_KEY);
+}
+
+export async function setEnrolledCompanyId(companyId: string): Promise<void> {
+  await SecureStore.setItemAsync(COMPANY_ID_KEY, companyId);
 }

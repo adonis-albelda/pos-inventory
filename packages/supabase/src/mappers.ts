@@ -100,7 +100,10 @@ export type UserRowSubset = Pick<
   | "can_sell"
   | "must_change_password"
   | "updated_at"
->;
+> & {
+  company_id?: string | null;
+  company_is_active?: boolean | null;
+};
 
 export function toUser(row: UserRowSubset): User {
   return {
@@ -111,6 +114,8 @@ export function toUser(row: UserRowSubset): User {
     isActive: row.is_active,
     canSell: row.can_sell,
     mustChangePassword: row.must_change_password,
+    companyId: row.company_id ?? null,
+    companyIsActive: row.company_is_active ?? true,
     updatedAt: row.updated_at,
   };
 }
@@ -162,6 +167,7 @@ export function toSale(row: Tables<"sales">): Sale {
     isPaid: row.is_paid ?? true,
     fulfillment: (row.fulfillment as Fulfillment) ?? "pickup",
     deliveryCompleted: row.delivery_completed ?? false,
+    companyId: row.company_id,
   };
 }
 

@@ -10,7 +10,7 @@ import { UserForm } from "./user-form";
 import { UsersTable } from "./users-table";
 
 const TAB_COPY: Record<
-  UserRole,
+  Exclude<UserRole, "superadmin">,
   { addLabel: string; emptyTitle: string; emptyInstruction: string; sheetTitle: string }
 > = {
   admin: {
@@ -42,7 +42,7 @@ export function UsersPanel({
   total,
   pageSize,
 }: {
-  tab: UserRole;
+  tab: Exclude<UserRole, "superadmin">;
   users: User[];
   query: string;
   page: number;

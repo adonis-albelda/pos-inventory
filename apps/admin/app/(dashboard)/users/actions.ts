@@ -157,6 +157,10 @@ export async function saveCashier(
   if (!name) return { error: "Name is required.", ok: false };
   if (!email) return { error: "Email is required — it identifies the person.", ok: false };
 
+  if (role === "superadmin") {
+    return { error: "A shop cannot create a platform superadmin.", ok: false };
+  }
+
   if (canUnlockWithPin(role)) {
     if (pin && !isValidPin(pin)) {
       return { error: "The PIN must be 4 to 6 digits.", ok: false };
@@ -189,6 +193,15 @@ export async function saveCashier(
   }
 
   const supabase = await getServerClient();
+  const { data: companyId, error: companyError } = await supabase.rpc(
+    "current_company_id",
+  );
+  if (companyError) {
+    return { error: companyError.message, ok: false };
+  }
+  if (!companyId) {
+    return { error: "No company in this session.", ok: false };
+  }
 
   try {
     if (id) {
@@ -244,6 +257,7 @@ export async function saveCashier(
           name,
           email,
           role,
+          company_id: companyId,
           auth_user_id: null,
           pin_hash: canUnlockWithPin(role) && pin ? hashPin(newId, pin) : null,
           can_sell: role === "device" ? true : canSell,
@@ -261,6 +275,7 @@ export async function saveCashier(
           name,
           email,
           role,
+          company_id: companyId,
           pin_hash: canUnlockWithPin(role) && pin ? hashPin(newId, pin) : null,
           can_sell: canSell,
           must_change_password: false,
@@ -272,7 +287,8 @@ export async function saveCashier(
     return {
       error: message.includes("SUPABASE_SERVICE_ROLE_KEY")
         ? "Server is missing SUPABASE_SERVICE_ROLE_KEY. Add it to apps/admin/.env.local (Supabase → Project Settings → API → service_role), then restart admin."
-        : message.includes("users_email_key")
+        : message.includes("users_email_key") ||
+            message.includes("users_company_email_idx")
           ? "That email is already used by another person."
           : isAlreadyRegistered(message)
             ? "That email already has an Auth login. Save again with a password to link it, or pick a new email."

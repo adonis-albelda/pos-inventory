@@ -36,6 +36,7 @@ import {
   summariseProfit,
 } from "@double-a/supabase";
 import { getServerClient } from "@/lib/supabase/server";
+import { isShopAdmin } from "@/lib/authz";
 import { formatStoreDay, resolveRange } from "@/lib/date-range";
 import {
   Badge,
@@ -70,7 +71,7 @@ export default async function ReportsPage({
 
   // Supplier cost and margin are the owner's business, and the database
   // refuses these functions to anyone else. Say so rather than crashing.
-  if (user?.role !== "admin") {
+  if (!isShopAdmin(user)) {
     return (
       <div className="space-y-6">
         <PageHeader icon={ChartColumn} title="Reports" />

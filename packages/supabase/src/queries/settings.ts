@@ -12,8 +12,8 @@ import { toReceiptLayout, toStoreSettings } from "../mappers";
 export const STORE_LOGO_BUCKET = "store-logos";
 
 /**
- * The one settings row. Migration 7 seeds it, so a miss means the migration has
- * not run rather than "the owner has not saved yet" — falling back to defaults
+ * The one settings row for the session's company. RLS returns at most one.
+ * A miss means the company has not been seeded — falling back to defaults
  * keeps a fresh checkout usable instead of blanking every page that reads the
  * shop name.
  */
@@ -37,7 +37,6 @@ export async function updateStoreSettings(
   const { data, error } = await client
     .from("store_settings")
     .update(patch)
-    .eq("id", true)
     .select("*")
     .single();
 
@@ -94,7 +93,6 @@ export async function updateReceiptLayout(
   const { data, error } = await client
     .from("receipt_layout")
     .update(patch)
-    .eq("id", true)
     .select("*")
     .single();
 

@@ -12,6 +12,7 @@ import {
   setPurchaseOrderStatus,
 } from "@double-a/supabase";
 import { getServerClient } from "@/lib/supabase/server";
+import { isShopAdmin } from "@/lib/authz";
 
 /** draft -> ordered and (draft | ordered) -> cancelled are the only manual jumps. */
 const MANUAL_STATUSES: PurchaseOrderStatus[] = ["ordered", "cancelled"];
@@ -26,7 +27,7 @@ function revalidatePurchaseOrderViews(id: string) {
 async function adminContext() {
   const supabase = await getServerClient();
   const user = await currentAppUser(supabase);
-  if (user?.role !== "admin") return null;
+  if (!isShopAdmin(user)) return null;
   return { supabase, user };
 }
 

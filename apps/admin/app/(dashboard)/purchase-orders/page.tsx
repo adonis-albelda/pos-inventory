@@ -9,6 +9,7 @@ import {
 } from "@double-a/shared-types";
 import { currentAppUser, listPurchaseOrders, listSuppliers } from "@double-a/supabase";
 import { getServerClient } from "@/lib/supabase/server";
+import { isShopAdmin } from "@/lib/authz";
 import { matchesQuery, paginateItems, parseListQuery } from "@/lib/list-query";
 import { PO_STATUS_TONE } from "@/lib/purchase-order-status";
 import {
@@ -41,7 +42,7 @@ export default async function PurchaseOrdersPage({
   const supabase = await getServerClient();
   const user = await currentAppUser(supabase);
 
-  if (user?.role !== "admin") {
+  if (!isShopAdmin(user)) {
     return (
       <div className="space-y-6">
         <PageHeader icon={ClipboardList} title="Purchase orders" />

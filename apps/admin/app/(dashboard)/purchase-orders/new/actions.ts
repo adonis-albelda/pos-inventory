@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { roundMoney } from "@double-a/shared-types";
 import { createPurchaseOrder, currentAppUser } from "@double-a/supabase";
 import { getServerClient } from "@/lib/supabase/server";
+import { isShopAdmin } from "@/lib/authz";
 
 export interface CreatePurchaseOrderInput {
   supplierId: string;
@@ -42,7 +43,7 @@ export async function createPurchaseOrderAction(
 
   const supabase = await getServerClient();
   const user = await currentAppUser(supabase);
-  if (user?.role !== "admin") {
+  if (!isShopAdmin(user)) {
     return { ok: false, error: "Only the owner can create a purchase order." };
   }
 
