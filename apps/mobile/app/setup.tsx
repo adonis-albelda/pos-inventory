@@ -84,13 +84,25 @@ export default function SetupScreen() {
 
     try {
       const supabase = getSupabase();
+      // Drop a stale session from another shop so sign-in is not fighting it.
+      await supabase.auth.signOut();
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
 
       if (signInError) {
-        setError("That email and password do not match an account.");
+        const code = signInError.code ?? "";
+        const message = signInError.message.toLowerCase();
+        if (
+          code === "invalid_credentials" ||
+          message.includes("invalid login") ||
+          message.includes("invalid credentials")
+        ) {
+          setError("That email and password do not match an account.");
+        } else {
+          setError(signInError.message);
+        }
         return;
       }
 

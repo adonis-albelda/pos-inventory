@@ -16,7 +16,7 @@ import {
   timeAgo,
   type User,
 } from "@double-a/shared-types";
-import { listCashiers } from "@double-a/supabase";
+import { currentAppUser, listCashiers } from "@double-a/supabase";
 import { useLayout } from "@/lib/layout";
 import { useSession } from "@/lib/session";
 import { ensureFreshSession, getSupabase, unenrollTerminal } from "@/lib/supabase";
@@ -52,6 +52,7 @@ export default function UnlockScreen() {
   const store = useStoreSettings();
 
   const [cashiers, setCashiers] = useState<User[]>([]);
+  const [enrolled, setEnrolled] = useState<User | null>(null);
   const [selected, setSelected] = useState<User | null>(null);
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +65,11 @@ export default function UnlockScreen() {
     setLoadError(null);
     try {
       await ensureFreshSession();
-      const next = await listCashiers(getSupabase());
+      const [next, me] = await Promise.all([
+        listCashiers(getSupabase()),
+        currentAppUser(getSupabase()),
+      ]);
+      setEnrolled(me);
       setCashiers(next);
       setSelected((prev) =>
         prev && next.some((c) => c.id === prev.id)
@@ -231,6 +236,18 @@ export default function UnlockScreen() {
           {store.name}
         </Text>
       </View>
+      {enrolled?.email ? (
+        <Text style={[authChrome.muted, { marginTop: -space.sm }]}>
+          Terminal signed in as {enrolled.email}. Shift unlock uses a 4–6 digit PIN, not this password.
+        </Text>
+      ) : null}
+
+      <Button
+        label="Use a different shop account"
+        variant="secondary"
+        disabled={busy || syncing}
+        onPress={() => void switchAccount()}
+      />
 
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.md }}>
         <View style={{ flex: 1 }}>
@@ -385,13 +402,6 @@ export default function UnlockScreen() {
           })}
         </View>
       )}
-
-      <Button
-        label="Use a different shop account"
-        variant="secondary"
-        disabled={busy || syncing}
-        onPress={() => void switchAccount()}
-      />
 
     </ScrollView>
 

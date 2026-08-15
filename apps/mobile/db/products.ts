@@ -96,8 +96,90 @@ const BY_BARCODE_SQL = `${SELECT_SQL}
   WHERE p.is_active = 1 AND (p.barcode = ? OR p.sku = ?)
   LIMIT 1`;
 
+/** First paint and each scroll batch on the sell grid. */
+export const PRODUCT_PAGE_SIZE = 50;
+
+export type ListLocalProductsPageArgs = {
+  limit?: number;
+  offset?: number;
+  search?: string;
+  /** Shelf filter. Ignored when `search` is non-empty — typing searches the whole catalogue. */
+  categoryIds?: string[] | null;
+};
+
+function likeContains(term: string): string {
+  return `%${term.replace(/[%_\\]/g, "")}%`;
+}
+
+function buildListQuery(args: ListLocalProductsPageArgs): {
+  sql: string;
+  params: (string | number)[];
+} {
+  const clauses = ["p.is_active = 1"];
+  const params: (string | number)[] = [];
+  const needle = args.search?.trim() ?? "";
+  const categoryIds = needle ? null : (args.categoryIds ?? null);
+
+  if (categoryIds && categoryIds.length > 0) {
+    clauses.push(`p.category_id IN (${categoryIds.map(() => "?").join(", ")})`);
+    params.push(...categoryIds);
+  } else if (categoryIds && categoryIds.length === 0) {
+    clauses.push("1 = 0");
+  }
+
+  let orderBy = "p.name";
+  if (needle) {
+    const like = likeContains(needle);
+    clauses.push(
+      `(p.name LIKE ? COLLATE NOCASE OR IFNULL(p.sku, '') LIKE ? COLLATE NOCASE OR IFNULL(p.barcode, '') LIKE ? COLLATE NOCASE)`,
+    );
+    params.push(like, like, like);
+    orderBy = `CASE
+      WHEN IFNULL(p.barcode, '') = ? COLLATE NOCASE THEN 0
+      WHEN IFNULL(p.sku, '') = ? COLLATE NOCASE THEN 1
+      ELSE 2
+    END, p.name`;
+    params.push(needle, needle);
+  }
+
+  let sql = `${SELECT_SQL} WHERE ${clauses.join(" AND ")} ORDER BY ${orderBy}`;
+  if (args.limit != null) {
+    sql += " LIMIT ? OFFSET ?";
+    params.push(args.limit, args.offset ?? 0);
+  }
+
+  return { sql, params };
+}
+
 export async function listLocalProducts(): Promise<ProductWithEstimatedStock[]> {
   const rows = await getDb().getAllAsync<ProductRow>(LIST_SQL);
+  return rows.map(toProductWithEstimate);
+}
+
+/** One window of the catalogue. Sell screen keeps only what the cashier has scrolled. */
+export async function listLocalProductsPage(
+  args: ListLocalProductsPageArgs = {},
+): Promise<ProductWithEstimatedStock[]> {
+  const { sql, params } = buildListQuery({
+    ...args,
+    limit: args.limit ?? PRODUCT_PAGE_SIZE,
+    offset: args.offset ?? 0,
+  });
+  const rows = await getDb().getAllAsync<ProductRow>(sql, ...params);
+  return rows.map(toProductWithEstimate);
+}
+
+export async function listLocalProductsByIds(
+  productIds: string[],
+): Promise<ProductWithEstimatedStock[]> {
+  const ids = [...new Set(productIds)];
+  if (ids.length === 0) return [];
+
+  const placeholders = ids.map(() => "?").join(", ");
+  const rows = await getDb().getAllAsync<ProductRow>(
+    `${SELECT_SQL} WHERE p.id IN (${placeholders})`,
+    ...ids,
+  );
   return rows.map(toProductWithEstimate);
 }
 
@@ -122,26 +204,12 @@ export async function findLocalProductByBarcode(
 export async function searchLocalProducts(
   term: string,
 ): Promise<ProductWithEstimatedStock[]> {
-  const products = await listLocalProducts();
-  const needle = term.trim().toLowerCase();
-  if (!needle) return products;
+  const needle = term.trim();
+  if (!needle) return listLocalProducts();
 
-  const matches = products.filter(
-    (product) =>
-      product.name.toLowerCase().includes(needle) ||
-      (product.sku ?? "").toLowerCase().includes(needle) ||
-      (product.barcode ?? "").toLowerCase().includes(needle),
-  );
-
-  const exactIndex = matches.findIndex(
-    (product) => (product.barcode ?? "").toLowerCase() === needle,
-  );
-  if (exactIndex <= 0) return matches;
-
-  const exact = matches[exactIndex];
-  return exact
-    ? [exact, ...matches.filter((_, index) => index !== exactIndex)]
-    : matches;
+  const { sql, params } = buildListQuery({ search: needle });
+  const rows = await getDb().getAllAsync<ProductRow>(sql, ...params);
+  return rows.map(toProductWithEstimate);
 }
 
 /** Overwrites local rows with what the pull returned. Supabase wins, always. */

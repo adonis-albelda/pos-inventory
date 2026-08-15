@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Modal,
@@ -61,7 +62,12 @@ import {
 } from "@double-a/shared-types";
 import { listLocalCategories, type LocalCategory } from "@/db/categories";
 import { searchLocalCustomers, upsertLocalCustomer } from "@/db/customers";
-import { findLocalProductByBarcode, listLocalProducts } from "@/db/products";
+import {
+  findLocalProductByBarcode,
+  listLocalProductsByIds,
+  listLocalProductsPage,
+  PRODUCT_PAGE_SIZE,
+} from "@/db/products";
 import { completeSale } from "@/db/sales";
 import {
   addCartDraft,
@@ -125,6 +131,16 @@ export default function SellScreen() {
 
   const [products, setProducts] = useState<ProductWithEstimatedStock[]>([]);
   const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingPage, setLoadingPage] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [focusEpoch, setFocusEpoch] = useState(0);
+  const [heldTick, setHeldTick] = useState(0);
+  const requestId = useRef(0);
+  const loadingMoreRef = useRef(false);
+  const heldById = useRef(new Map<string, ProductWithEstimatedStock>());
   const [lines, setLines] = useState<CartLine[]>([]);
   // Lines whose price the attendant typed in. A manual price is a decision, so
   // it outranks the bulk tier and survives every quantity change after it.
@@ -153,13 +169,15 @@ export default function SellScreen() {
     setHasDraft(next.length > 0);
   }, []);
 
-  const load = useCallback(async () => {
-    const [nextProducts, nextCategories] = await Promise.all([
-      listLocalProducts(),
-      listLocalCategories(),
-    ]);
+  const rememberProducts = useCallback((rows: ProductWithEstimatedStock[]) => {
+    for (const product of rows) {
+      heldById.current.set(product.id, product);
+    }
+    setHeldTick((tick) => tick + 1);
+  }, []);
 
-    setProducts(nextProducts);
+  const loadCategories = useCallback(async () => {
+    const nextCategories = await listLocalCategories();
     setCategories(nextCategories);
     // A pull can retire the shelf the cashier is standing on. Falling back to
     // everything is the honest thing: a lit tab for a category that no longer
@@ -172,9 +190,10 @@ export default function SellScreen() {
   // Reload on focus so a sync or a finished sale is reflected in estimated stock.
   useFocusEffect(
     useCallback(() => {
-      void load();
+      void loadCategories();
       void refreshDrafts();
-    }, [load, refreshDrafts]),
+      setFocusEpoch((epoch) => epoch + 1);
+    }, [loadCategories, refreshDrafts]),
   );
 
   /**
@@ -184,43 +203,98 @@ export default function SellScreen() {
    * until the cashier navigated away and back.
    */
   useEffect(() => {
-    void load();
-  }, [load, dataVersion]);
+    void loadCategories();
+  }, [loadCategories, dataVersion]);
 
-  const byId = useMemo(
-    () => new Map(products.map((product) => [product.id, product])),
-    [products],
-  );
+  useEffect(() => {
+    const handle = setTimeout(() => setQuery(search.trim()), 150);
+    return () => clearTimeout(handle);
+  }, [search]);
 
   /**
-   * The selected category and everything under it. Matching is on ids, not on
-   * the path text a product carries: that text is a snapshot kept for receipts
-   * and reports, and it survives the category being deleted in the office.
+   * Search reaches the whole catalogue on purpose: a cashier typing a name
+   * wants the product, not an explanation of which tab it is filed under.
    */
-  const branch = useMemo(() => {
+  const categoryIds = useMemo(() => {
+    if (query) return null;
     const selected = categories.find((entry) => entry.id === category);
-    return selected ? new Set(selected.subtreeIds) : null;
-  }, [categories, category]);
+    return selected ? selected.subtreeIds : null;
+  }, [categories, category, query]);
 
-  const visible = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    // Search reaches the whole catalogue on purpose: a cashier typing a name
-    // wants the product, not an explanation of which tab it is filed under.
-    const pool =
-      branch === null || needle
-        ? products
-        : products.filter(
-            (product) => product.categoryId !== null && branch.has(product.categoryId),
-          );
+  useEffect(() => {
+    const id = ++requestId.current;
+    loadingMoreRef.current = false;
+    setLoadingPage(true);
+    setLoadingMore(false);
+    setHasMore(true);
 
-    if (!needle) return pool;
-    return pool.filter(
-      (product) =>
-        product.name.toLowerCase().includes(needle) ||
-        (product.sku ?? "").toLowerCase().includes(needle) ||
-        (product.barcode ?? "").toLowerCase().includes(needle),
-    );
-  }, [products, search, branch]);
+    void listLocalProductsPage({
+      limit: PRODUCT_PAGE_SIZE,
+      offset: 0,
+      search: query,
+      categoryIds,
+    })
+      .then((next) => {
+        if (id !== requestId.current) return;
+        setProducts(next);
+        setHasMore(next.length === PRODUCT_PAGE_SIZE);
+        setLoadingPage(false);
+        setReady(true);
+      })
+      .catch(() => {
+        if (id !== requestId.current) return;
+        setLoadingPage(false);
+        setReady(true);
+      });
+
+    return () => {
+      requestId.current += 1;
+    };
+  }, [query, categoryIds, dataVersion, focusEpoch]);
+
+  useEffect(() => {
+    const ids = [...heldById.current.keys()];
+    if (ids.length === 0) return;
+    void listLocalProductsByIds(ids).then((rows) => {
+      heldById.current = new Map(rows.map((row) => [row.id, row]));
+      setHeldTick((tick) => tick + 1);
+    });
+  }, [dataVersion, focusEpoch]);
+
+  const loadMore = useCallback(() => {
+    if (loadingMoreRef.current || loadingPage || !hasMore) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    const id = requestId.current;
+    const offset = products.length;
+
+    void listLocalProductsPage({
+      limit: PRODUCT_PAGE_SIZE,
+      offset,
+      search: query,
+      categoryIds,
+    })
+      .then((next) => {
+        if (id !== requestId.current) return;
+        setProducts((current) => [...current, ...next]);
+        setHasMore(next.length === PRODUCT_PAGE_SIZE);
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
+      })
+      .catch(() => {
+        if (id !== requestId.current) return;
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
+      });
+  }, [loadingPage, hasMore, products.length, query, categoryIds]);
+
+  const byId = useMemo(() => {
+    const map = new Map(heldById.current);
+    for (const product of products) {
+      map.set(product.id, product);
+    }
+    return map;
+  }, [products, heldTick]);
 
   const total = cartTotal(lines);
   const discount = cartDiscount(lines);
@@ -248,6 +322,7 @@ export default function SellScreen() {
 
   /** No confirmation here on purpose — adding to a cart is speed critical. */
   function addToCart(product: ProductWithEstimatedStock) {
+    rememberProducts([product]);
     const stockCap = stockCapFor(product.estimatedStock, product.allowDecimal);
     if (stockCap <= 0) return;
 
@@ -414,6 +489,9 @@ export default function SellScreen() {
     setPayment(draft.payment);
     setCustomer(draft.customer);
     setFulfillment(draft.fulfillment);
+    void listLocalProductsByIds(draft.lines.map((line) => line.productId)).then(
+      rememberProducts,
+    );
     void removeCartDraft(draft.id).then(() => refreshDrafts());
     setDraftPickerOpen(false);
   }
@@ -496,7 +574,7 @@ export default function SellScreen() {
       setFulfillment("pickup");
       setConfirmOpen(false);
       setCartOpen(false);
-      void load();
+      setFocusEpoch((epoch) => epoch + 1);
       void refresh();
 
       // Deliberately not awaited: a printer that is off or unreachable must not
@@ -587,7 +665,11 @@ export default function SellScreen() {
         )}
 
         <View style={{ flex: 1, minHeight: 0, gap: space.sm }}>
-          {products.length === 0 ? (
+          {!ready || (loadingPage && products.length === 0) ? (
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+              <ActivityIndicator color={color.primary} />
+            </View>
+          ) : products.length === 0 && !query && category === null ? (
             <EmptyState
               icon={PackageSearch}
               title="No products on this terminal"
@@ -595,7 +677,7 @@ export default function SellScreen() {
             />
           ) : (
             <FlatList
-              data={visible}
+              data={products}
               style={{ flex: 1 }}
               keyExtractor={(item) => item.id}
               // numColumns cannot change on a mounted list, so the column count is
@@ -609,6 +691,19 @@ export default function SellScreen() {
                 flexGrow: 1,
               }}
               keyboardShouldPersistTaps="handled"
+              initialNumToRender={PRODUCT_PAGE_SIZE}
+              maxToRenderPerBatch={PRODUCT_PAGE_SIZE}
+              windowSize={5}
+              removeClippedSubviews
+              onEndReached={loadMore}
+              onEndReachedThreshold={0.4}
+              ListFooterComponent={
+                loadingMore ? (
+                  <View style={{ paddingVertical: space.md, alignItems: "center" }}>
+                    <ActivityIndicator color={color.primary} />
+                  </View>
+                ) : null
+              }
               ListEmptyComponent={
                 <EmptyState
                   icon={PackageSearch}

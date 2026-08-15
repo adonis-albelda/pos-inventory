@@ -109,10 +109,13 @@ export async function updateUser(
 export async function currentAppUser(
   client: DoubleAClient,
 ): Promise<User | null> {
+  // getSession is local. getUser() hits the network and can return null on
+  // React Native after a good sign-in, which setup then mislabels as "no
+  // staff record".
   const {
-    data: { user },
-  } = await client.auth.getUser();
-  if (!user) return null;
+    data: { session },
+  } = await client.auth.getSession();
+  if (!session) return null;
 
   // auth_user_id is not selectable by authenticated clients. This RPC resolves
   // the row as security definer, same idea as current_app_role().
