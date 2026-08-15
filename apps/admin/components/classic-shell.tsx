@@ -57,6 +57,7 @@ export function ClassicShell({
 
   return (
     <div className="flex min-h-screen flex-col bg-paper">
+      <header className="sticky top-0 z-30">
       {/* Title bar */}
       <div className="flex items-center gap-2 bg-primary px-2 py-2 pt-[calc(0.5rem+env(safe-area-inset-top))] text-white sm:gap-3 sm:px-3">
         <button
@@ -171,6 +172,7 @@ export function ClassicShell({
           {userName ?? "Signed in"}
         </span>
       </div>
+      </header>
 
       {drawerOpen ? (
         <>
