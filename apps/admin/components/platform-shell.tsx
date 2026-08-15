@@ -114,9 +114,7 @@ export function PlatformShell({
       </aside>
 
       <main className="flex min-h-screen min-w-0 flex-1 flex-col pt-[calc(3.5rem+env(safe-area-inset-top))] lg:pt-0">
-        <div className="flex-1 px-3 py-3 sm:px-4 sm:py-4 lg:px-5 lg:py-5">
-          <div className="mx-auto max-w-6xl">{children}</div>
-        </div>
+        <div className="flex-1 px-3 py-3 sm:px-4 sm:py-4 lg:px-5 lg:py-5">{children}</div>
       </main>
     </div>
   );

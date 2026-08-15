@@ -161,12 +161,10 @@ export function DashboardShell({
       </aside>
 
       <main className="flex min-w-0 min-h-screen flex-1 flex-col pt-[calc(3.5rem+env(safe-area-inset-top))] lg:pt-0">
-        <div className="flex-1 px-3 py-3 sm:px-4 sm:py-4 lg:px-5 lg:py-5">
-          <div className="mx-auto max-w-6xl">{children}</div>
-        </div>
+        <div className="flex-1 px-3 py-3 sm:px-4 sm:py-4 lg:px-5 lg:py-5">{children}</div>
 
         <footer className="mt-auto border-t border-border px-3 py-3 sm:px-4 lg:px-5">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-2 text-caption text-ink-muted">
+          <div className="flex flex-wrap items-center justify-center gap-2 text-caption text-ink-muted">
             <img
               src="/logo.png"
               alt=""

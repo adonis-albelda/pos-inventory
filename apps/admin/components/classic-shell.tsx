@@ -233,13 +233,11 @@ export function ClassicShell({
         </>
       ) : null}
 
-      <main className="flex-1 px-2 py-2 sm:px-3 sm:py-3">
-        <div className="mx-auto max-w-6xl">{children}</div>
-      </main>
+      <main className="flex-1 px-2 py-2 sm:px-3 sm:py-3">{children}</main>
 
       {/* Status strip */}
       <footer className="border-t border-border bg-surface px-3 py-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))]">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-4 gap-y-1 text-caption text-ink-muted sm:justify-start">
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-caption text-ink-muted sm:justify-start">
           <span>{storeName}</span>
           <span className="hidden sm:inline">{userEmail}</span>
           <span className="sm:ml-auto">
