@@ -33,7 +33,6 @@ import {
 
 export function StockPanel({
   products,
-  allProducts,
   categories,
   query,
   state,
@@ -46,7 +45,6 @@ export function StockPanel({
   focusedProduct,
 }: {
   products: Product[];
-  allProducts: Product[];
   categories: CategoryOption[];
   query: string;
   state: StockState;
@@ -279,7 +277,6 @@ export function StockPanel({
       <RestockSheet
         open={restocking !== null}
         onClose={() => setRestocking(null)}
-        products={allProducts}
         defaultProductId={restocking?.productId}
       />
     </>

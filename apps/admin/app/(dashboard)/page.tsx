@@ -21,7 +21,7 @@ import { formatMoney, formatPercent, stockLevel } from "@double-a/shared-types";
 import {
   countOpenPurchaseOrders,
   listOversold,
-  listProducts,
+  listBelowReorder,
   listSales,
   listUpcomingSupplierPayments,
   reportProfit,
@@ -52,7 +52,7 @@ export default async function DashboardPage() {
 
   const [
     todaysSales,
-    products,
+    lowStockRows,
     oversold,
     profitRows,
     expensesTotal,
@@ -61,7 +61,7 @@ export default async function DashboardPage() {
     upcomingPayments,
   ] = await Promise.all([
     listSales(supabase, { from: range.from, limit: 500 }),
-    listProducts(supabase, { includeInactive: true }),
+    listBelowReorder(supabase),
     listOversold(supabase),
     // Profit is admin-only in the database. A manager signed in as a cashier
     // still gets the rest of the dashboard rather than an error page.
@@ -84,13 +84,7 @@ export default async function DashboardPage() {
   );
   const net =
     expensesTotal === null ? null : revenue - expensesTotal;
-  // Each product says for itself when it is low — a box of screws and a length
-  // of GI pipe run out very differently.
-  const lowStock = products.filter(
-    (product) =>
-      product.isActive &&
-      stockLevel(product.stockQuantity, product.reorderPoint) !== "healthy",
-  );
+  const lowStock = lowStockRows.slice(0, 8);
 
   return (
     <div className="space-y-6">
@@ -260,13 +254,13 @@ export default async function DashboardPage() {
               </thead>
               <tbody>
                 {lowStock.map((product) => {
-                  const level = stockLevel(product.stockQuantity, product.reorderPoint);
+                  const level = stockLevel(product.stock_quantity, product.reorder_point);
                   return (
                     <tr key={product.id}>
                       <Td>{product.name}</Td>
-                      <Td numeric>{product.stockQuantity}</Td>
+                      <Td numeric>{product.stock_quantity}</Td>
                       <Td numeric className="text-ink-muted">
-                        {product.reorderPoint}
+                        {product.reorder_point}
                       </Td>
                       <Td>
                         <Badge tone={level === "out" ? "danger" : "warning"}>

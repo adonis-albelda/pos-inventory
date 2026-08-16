@@ -6,8 +6,10 @@ import {
   adjustStock,
   currentAppUser,
   getProduct,
+  listProductsPage,
   type AdjustReason,
 } from "@double-a/supabase";
+import type { Product } from "@double-a/shared-types";
 
 function roundQuantity(value: number): number {
   return Number(value.toFixed(QUANTITY_DECIMALS));
@@ -18,6 +20,23 @@ import { getServerClient } from "@/lib/supabase/server";
 const REASONS: AdjustReason[] = ["restock", "adjustment", "oversell_correction"];
 const MODES = ["in", "out", "count"] as const;
 type Mode = (typeof MODES)[number];
+
+export async function searchProductsForPicker(q: string): Promise<Product[]> {
+  const supabase = await getServerClient();
+  const { products } = await listProductsPage(supabase, {
+    q,
+    page: 1,
+    pageSize: 8,
+    includeInactive: true,
+  });
+  return products;
+}
+
+export async function loadProductForPicker(id: string): Promise<Product | null> {
+  if (!id) return null;
+  const supabase = await getServerClient();
+  return getProduct(supabase, id);
+}
 
 /**
  * Every stock change goes through this. It writes an inventory_movements row

@@ -49,3 +49,20 @@ export function descendantIds(options: CategoryOption[], id: string): Set<string
 
   return blocked;
 }
+
+/**
+ * Own counts plus everything nested underneath. Parents first in `options`,
+ * so a reverse walk pushes each child's total up one level.
+ */
+export function rollupProductCounts(
+  options: CategoryOption[],
+  ownCounts: Record<string, number>,
+): Record<string, number> {
+  const rolled = { ...ownCounts };
+  for (let i = options.length - 1; i >= 0; i--) {
+    const option = options[i];
+    if (!option?.parentId) continue;
+    rolled[option.parentId] = (rolled[option.parentId] ?? 0) + (rolled[option.id] ?? 0);
+  }
+  return rolled;
+}

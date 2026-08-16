@@ -1,6 +1,5 @@
 "use client";
 
-import type { Product } from "@double-a/shared-types";
 import { Sheet } from "@/components/overlay";
 import { StockForm } from "./stock-form";
 
@@ -11,12 +10,10 @@ import { StockForm } from "./stock-form";
 export function RestockSheet({
   open,
   onClose,
-  products,
   defaultProductId,
 }: {
   open: boolean;
   onClose: () => void;
-  products: Product[];
   defaultProductId?: string;
 }) {
   return (
@@ -29,7 +26,6 @@ export function RestockSheet({
     >
       <StockForm
         key={defaultProductId ?? "any"}
-        products={products}
         defaultProductId={defaultProductId}
         onDone={onClose}
       />

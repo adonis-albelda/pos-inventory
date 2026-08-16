@@ -38,12 +38,14 @@ export function SupplierForm({
 
   const visibleProducts = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    if (!needle) return products;
-    return products.filter(
-      (product) =>
-        product.name.toLowerCase().includes(needle) ||
-        (product.sku ?? "").toLowerCase().includes(needle),
-    );
+    const pool = needle
+      ? products.filter(
+          (product) =>
+            product.name.toLowerCase().includes(needle) ||
+            (product.sku ?? "").toLowerCase().includes(needle),
+        )
+      : products;
+    return pool.slice(0, 40);
   }, [products, search]);
 
   function toggle(productId: string) {

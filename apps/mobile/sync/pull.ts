@@ -1,5 +1,6 @@
 import type { PullResult } from "@double-a/shared-types";
 import {
+  countProducts,
   fetchProductsChangedSince,
   fetchReceiptLayout,
   fetchStoreSettings,
@@ -10,7 +11,7 @@ import {
 import { replaceCategories } from "@/db/categories";
 import { replaceSyncedCustomers } from "@/db/customers";
 import { getSyncMeta, recordSyncSuccess } from "@/db/meta";
-import { upsertProducts } from "@/db/products";
+import { countLocalProducts, upsertProducts } from "@/db/products";
 import { saveLocalReceiptLayout } from "@/db/receipt-layout";
 import { saveLocalStoreSettings } from "@/db/store";
 import { upsertUsers } from "@/db/users";
@@ -27,7 +28,18 @@ import { getSupabase } from "@/lib/supabase";
 export async function pull(options: { full?: boolean } = {}): Promise<PullResult> {
   const supabase = getSupabase();
   const meta = await getSyncMeta();
-  const since = options.full ? null : meta.highWaterMark;
+  let since = options.full ? null : meta.highWaterMark;
+
+  // A PostgREST page used to stop at 1,000 rows. A device that already pulled
+  // can sit short of the office catalogue with a high water mark that will
+  // never fetch the missing SKUs. Fall back to a full product pull when counts differ.
+  if (since) {
+    const [remoteCount, localCount] = await Promise.all([
+      countProducts(supabase, { includeInactive: true }),
+      countLocalProducts(),
+    ]);
+    if (localCount < remoteCount) since = null;
+  }
 
   // Categories and customers come down whole every time, not since the high
   // water mark. Both tables stay small, and a wholesale fetch is the only way a

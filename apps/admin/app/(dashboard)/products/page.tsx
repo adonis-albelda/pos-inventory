@@ -1,8 +1,8 @@
 import { Package } from "lucide-react";
-import { listCategories, listProducts } from "@double-a/supabase";
+import { listCategories, listProductsPage } from "@double-a/supabase";
 import { getServerClient } from "@/lib/supabase/server";
 import { toCategoryOptions } from "@/lib/category-options";
-import { matchesQuery, paginateItems, parseListQuery } from "@/lib/list-query";
+import { DEFAULT_PAGE_SIZE, parseListQuery } from "@/lib/list-query";
 import { PageHeader } from "@/components/ui";
 import { ProductsPanel } from "./products-panel";
 
@@ -15,19 +15,30 @@ export default async function ProductsPage({
   const { q, page } = parseListQuery(params);
   const supabase = await getServerClient();
 
-  const [products, categories] = await Promise.all([
-    listProducts(supabase, { includeInactive: true }),
+  const [{ products: pageItems, total }, categories] = await Promise.all([
+    listProductsPage(supabase, {
+      q,
+      page,
+      pageSize: DEFAULT_PAGE_SIZE,
+      includeInactive: true,
+    }),
     listCategories(supabase, { includeInactive: true }),
   ]);
 
   const categoryOptions = toCategoryOptions(categories);
-  const filtered = products.filter((product) =>
-    matchesQuery([product.name, product.sku, product.barcode, product.category], q),
-  );
-  const { pageItems, page: safePage, pageCount, total, pageSize } = paginateItems(
-    filtered,
-    page,
-  );
+  const pageCount = Math.max(1, Math.ceil(total / DEFAULT_PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const products =
+    safePage === page || total === 0
+      ? pageItems
+      : (
+          await listProductsPage(supabase, {
+            q,
+            page: safePage,
+            pageSize: DEFAULT_PAGE_SIZE,
+            includeInactive: true,
+          })
+        ).products;
 
   return (
     <div className="space-y-6">
@@ -38,13 +49,13 @@ export default async function ProductsPage({
       />
 
       <ProductsPanel
-        products={pageItems}
+        products={products}
         categories={categoryOptions}
         query={q}
         page={safePage}
         pageCount={pageCount}
         total={total}
-        pageSize={pageSize}
+        pageSize={DEFAULT_PAGE_SIZE}
       />
     </div>
   );

@@ -3,7 +3,6 @@
 import {
   useActionState,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -22,7 +21,7 @@ import {
   SuccessNote,
 } from "@/components/ui";
 import { EMPTY_FORM_STATE } from "@/lib/form-state";
-import { moveStock } from "./actions";
+import { loadProductForPicker, moveStock, searchProductsForPicker } from "./actions";
 
 function cx(...parts: (string | false | null | undefined)[]): string {
   return parts.filter(Boolean).join(" ");
@@ -54,16 +53,15 @@ const MODES: { key: Mode; label: string; hint: string; reason: string }[] = [
 const QUICK_STEPS = [1, 5, 10, 50];
 
 export function StockForm({
-  products,
   defaultProductId,
   onDone,
 }: {
-  products: Product[];
   defaultProductId?: string;
   onDone?: () => void;
 }) {
   const [state, action, pending] = useActionState(moveStock, EMPTY_FORM_STATE);
   const [productId, setProductId] = useState(defaultProductId ?? "");
+  const [product, setProduct] = useState<Product | null>(null);
   const [mode, setMode] = useState<Mode>("in");
   const [quantity, setQuantity] = useState("");
   const [reason, setReason] = useState("restock");
@@ -79,7 +77,15 @@ export function StockForm({
     if (state.ok) onDone?.();
   }, [state.ok, onDone]);
 
-  const product = products.find((candidate) => candidate.id === productId) ?? null;
+  useEffect(() => {
+    if (!defaultProductId) return;
+    void loadProductForPicker(defaultProductId).then((row) => {
+      if (!row) return;
+      setProduct(row);
+      setProductId(row.id);
+    });
+  }, [defaultProductId]);
+
   const allowDecimal = product?.allowDecimal ?? false;
   const typed = Number(quantity);
   const magnitude =
@@ -108,9 +114,11 @@ export function StockForm({
       <input type="hidden" name="mode" value={mode} />
 
       <ProductPicker
-        products={products}
         selected={product}
-        onSelect={(next) => setProductId(next?.id ?? "")}
+        onSelect={(next) => {
+          setProduct(next);
+          setProductId(next?.id ?? "");
+        }}
       />
 
       <fieldset>
@@ -238,16 +246,15 @@ export function StockForm({
 /* -------------------------------------------------------------------------- */
 
 function ProductPicker({
-  products,
   selected,
   onSelect,
 }: {
-  products: Product[];
   selected: Product | null;
   onSelect: (product: Product | null) => void;
 }) {
   const [term, setTerm] = useState("");
   const [open, setOpen] = useState(false);
+  const [matches, setMatches] = useState<Product[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -260,17 +267,13 @@ function ProductPicker({
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [open]);
 
-  const matches = useMemo(() => {
-    const needle = term.trim().toLowerCase();
-    const pool = needle
-      ? products.filter((product) =>
-          [product.name, product.sku, product.barcode].some((value) =>
-            value?.toLowerCase().includes(needle),
-          ),
-        )
-      : products;
-    return pool.slice(0, 8);
-  }, [products, term]);
+  useEffect(() => {
+    if (!open) return;
+    const handle = setTimeout(() => {
+      void searchProductsForPicker(term).then(setMatches);
+    }, 150);
+    return () => clearTimeout(handle);
+  }, [term, open]);
 
   if (selected) {
     const level = stockLevel(selected.stockQuantity, selected.reorderPoint);

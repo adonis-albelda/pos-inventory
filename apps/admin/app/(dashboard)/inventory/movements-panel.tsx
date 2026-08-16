@@ -4,7 +4,7 @@ import { Fragment, useState } from "react";
 import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FilterX, History, Receipt } from "lucide-react";
-import type { InventoryMovement, InventoryReason, Product } from "@double-a/shared-types";
+import type { InventoryMovement, InventoryReason } from "@double-a/shared-types";
 import {
   Badge,
   Button,
@@ -37,7 +37,6 @@ export function MovementsPanel({
   total,
   page,
   pageSize,
-  products,
   productNames,
   userNames,
   query,
@@ -51,7 +50,6 @@ export function MovementsPanel({
   total: number;
   page: number;
   pageSize: number;
-  products: Product[];
   productNames: Record<string, string>;
   userNames: Record<string, string>;
   query: string;
@@ -135,24 +133,6 @@ export function MovementsPanel({
                 {REASONS.map((option) => (
                   <option key={option} value={option}>
                     {reasonLabel(option)}
-                  </option>
-                ))}
-              </Select>
-            </label>
-
-            <label className="block min-w-0 flex-1">
-              <span className="mb-1 block text-caption font-medium text-ink-muted">
-                Product
-              </span>
-              <Select
-                value={focusedProduct ?? ""}
-                onChange={(event) => push({ product: event.target.value })}
-              >
-                <option value="">Every product</option>
-                {products.map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {product.name}
-                    {product.sku ? ` (${product.sku})` : ""}
                   </option>
                 ))}
               </Select>
@@ -299,7 +279,6 @@ export function MovementsPanel({
       <RestockSheet
         open={restocking !== null}
         onClose={() => setRestocking(null)}
-        products={products}
         defaultProductId={restocking?.productId}
       />
     </>

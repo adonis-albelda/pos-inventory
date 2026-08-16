@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { fetchStoreSettings, listProducts, listUsers } from "@double-a/supabase";
+import { fetchStoreSettings, countProducts, listUsers } from "@double-a/supabase";
 import { getServerClient } from "@/lib/supabase/server";
 import { NAV_ITEMS } from "@/lib/nav";
 import { Card } from "@/components/ui";
@@ -19,9 +19,9 @@ const TILE_STYLES: Record<string, string> = {
  */
 export default async function MenuPage() {
   const supabase = await getServerClient();
-  const [store, products, users] = await Promise.all([
+  const [store, productCount, users] = await Promise.all([
     fetchStoreSettings(supabase),
-    listProducts(supabase, { includeInactive: true }),
+    countProducts(supabase, { includeInactive: true }),
     listUsers(supabase, { includeInactive: true }),
   ]);
 
@@ -79,7 +79,7 @@ export default async function MenuPage() {
           </div>
           <div>
             <dt className="text-ink-muted">Products on file</dt>
-            <dd className="num font-medium text-ink">{products.length}</dd>
+            <dd className="num font-medium text-ink">{productCount}</dd>
           </div>
           <div>
             <dt className="text-ink-muted">Users on file</dt>

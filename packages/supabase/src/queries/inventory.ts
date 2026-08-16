@@ -2,6 +2,7 @@ import type { InventoryMovement, InventoryReason } from "@double-a/shared-types"
 import type { DoubleAClient } from "../client-browser";
 import type { Views } from "../database.types";
 import { toInventoryMovement } from "../mappers";
+import { fetchAllPages } from "./fetch-all";
 
 export type AdjustReason = "restock" | "adjustment" | "oversell_correction";
 
@@ -144,11 +145,13 @@ export async function sumMovements(
 export async function listOversold(
   client: DoubleAClient,
 ): Promise<Views<"oversold_products">[]> {
-  const { data, error } = await client
-    .from("oversold_products")
-    .select("*")
-    .order("oversold_by", { ascending: false });
-
-  if (error) throw error;
-  return data ?? [];
+  return fetchAllPages(async (from, to) => {
+    const { data, error } = await client
+      .from("oversold_products")
+      .select("*")
+      .order("oversold_by", { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+    return data ?? [];
+  });
 }

@@ -10,9 +10,11 @@ import {
 } from "lucide-react";
 import { formatMoney, stockLevel } from "@double-a/shared-types";
 import {
+  findProductIdsMatching,
   listCategories,
   listMovementsPage,
   listProducts,
+  listProductsByIds,
   listUsers,
   sumMovements,
 } from "@double-a/supabase";
@@ -133,11 +135,7 @@ export default async function InventoryPage({
     // A name search reaches inventory_movements through product ids: the table
     // itself holds no product name.
     const searchIds = q
-      ? products
-          .filter((product) =>
-            matchesQuery([product.name, product.sku, product.barcode], q),
-          )
-          .map((product) => product.id)
+      ? await findProductIdsMatching(supabase, q, { includeInactive: true })
       : undefined;
 
     const filter = {
@@ -163,9 +161,13 @@ export default async function InventoryPage({
       listUsers(supabase, { includeInactive: true }),
     ]);
 
+    const named = await listProductsByIds(supabase, [
+      ...movementPage.movements.map((movement) => movement.productId),
+      ...(focusedProduct ? [focusedProduct] : []),
+    ]);
     const userNames = Object.fromEntries(users.map((user) => [user.id, user.name]));
     const productNames = Object.fromEntries(
-      products.map((product) => [product.id, product.name]),
+      named.map((product) => [product.id, product.name]),
     );
 
     return (
@@ -208,7 +210,6 @@ export default async function InventoryPage({
           total={movementPage.total}
           page={page}
           pageSize={MOVEMENTS_PAGE_SIZE}
-          products={products}
           productNames={productNames}
           userNames={userNames}
           query={q}
@@ -317,7 +318,6 @@ export default async function InventoryPage({
 
       <StockPanel
         products={pageItems}
-        allProducts={products}
         categories={categoryOptions}
         query={q}
         state={state}

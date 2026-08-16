@@ -1,7 +1,7 @@
 import { FolderTree } from "lucide-react";
-import { listCategories, listProducts } from "@double-a/supabase";
+import { countProductsByCategory, listCategories } from "@double-a/supabase";
 import { getServerClient } from "@/lib/supabase/server";
-import { toCategoryOptions } from "@/lib/category-options";
+import { rollupProductCounts, toCategoryOptions } from "@/lib/category-options";
 import { matchesQuery, paginateItems, parseListQuery } from "@/lib/list-query";
 import { PageHeader } from "@/components/ui";
 import { CategoriesPanel } from "./categories-panel";
@@ -15,18 +15,13 @@ export default async function CategoriesPage({
   const { q, page } = parseListQuery(params);
   const supabase = await getServerClient();
 
-  const [categories, products] = await Promise.all([
+  const [categories, ownCounts] = await Promise.all([
     listCategories(supabase, { includeInactive: true }),
-    listProducts(supabase, { includeInactive: true }),
+    countProductsByCategory(supabase, { includeInactive: true }),
   ]);
 
   const options = toCategoryOptions(categories);
-
-  const productCounts: Record<string, number> = {};
-  for (const product of products) {
-    if (!product.categoryId) continue;
-    productCounts[product.categoryId] = (productCounts[product.categoryId] ?? 0) + 1;
-  }
+  const productCounts = rollupProductCounts(options, ownCounts);
 
   const filtered = options.filter((category) =>
     matchesQuery([category.name, category.path], q),
