@@ -1,0 +1,231 @@
+import type { Product } from "@double-a/shared-types";
+import { ApiError, type ApiClient, type JsonApiPage, type JsonApiResource } from "../http";
+import { type ProductAttrs, toProduct } from "../mappers";
+
+export interface ProductInput {
+  name: string;
+  sku?: string | null;
+  price: number;
+  costPrice: number;
+  categoryId?: string | null;
+  unit: string;
+  barcode?: string | null;
+  reorderPoint?: number;
+  bulkPrice?: number | null;
+  bulkMinQuantity?: number | null;
+  allowDecimal?: boolean;
+  isActive?: boolean;
+}
+
+function toPayload(input: Partial<ProductInput>): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+  if (input.name !== undefined) payload.name = input.name;
+  if (input.sku !== undefined) payload.sku = input.sku;
+  if (input.price !== undefined) payload.price = input.price;
+  if (input.costPrice !== undefined) payload.cost_price = input.costPrice;
+  if (input.categoryId !== undefined) payload.category_id = input.categoryId;
+  if (input.unit !== undefined) payload.unit = input.unit;
+  if (input.barcode !== undefined) payload.barcode = input.barcode;
+  if (input.reorderPoint !== undefined) payload.reorder_point = input.reorderPoint;
+  if (input.bulkPrice !== undefined) payload.bulk_price = input.bulkPrice;
+  if (input.bulkMinQuantity !== undefined) payload.bulk_min_quantity = input.bulkMinQuantity;
+  if (input.allowDecimal !== undefined) payload.allow_decimal = input.allowDecimal;
+  if (input.isActive !== undefined) payload.is_active = input.isActive;
+  return payload;
+}
+
+export interface ListProductsPageOptions {
+  q?: string;
+  page?: number;
+  pageSize?: number;
+  includeInactive?: boolean;
+  categoryId?: string;
+}
+
+export async function listProductsPage(
+  client: ApiClient,
+  options: ListProductsPageOptions = {},
+): Promise<{ products: Product[]; total: number; lastPage: number }> {
+  const page = await client.get<JsonApiPage<ProductAttrs>>("/products", {
+    search: options.q,
+    category_id: options.categoryId,
+    is_active: options.includeInactive ? undefined : true,
+    page: options.page ?? 1,
+    per_page: options.pageSize ?? 25,
+  });
+
+  return {
+    products: page.data.map(toProduct),
+    total: page.meta?.total ?? page.data.length,
+    lastPage: page.meta?.last_page ?? 1,
+  };
+}
+
+/**
+ * Walks every page. Same "load the whole catalogue" contract the old
+ * PostgREST-backed `fetchAllPages` gave callers — now paid for in page-count
+ * round trips instead of Range headers.
+ */
+export async function listProducts(
+  client: ApiClient,
+  options: { includeInactive?: boolean } = {},
+): Promise<Product[]> {
+  const products: Product[] = [];
+  let page = 1;
+  for (;;) {
+    const result = await listProductsPage(client, {
+      page,
+      pageSize: 200,
+      includeInactive: options.includeInactive,
+    });
+    products.push(...result.products);
+    if (page >= result.lastPage) return products;
+    page += 1;
+  }
+}
+
+export async function countProducts(
+  client: ApiClient,
+  options: { includeInactive?: boolean } = {},
+): Promise<number> {
+  const result = await listProductsPage(client, { page: 1, pageSize: 1, includeInactive: options.includeInactive });
+  return result.total;
+}
+
+/**
+ * No batch-by-id endpoint on the Tally API. Falls back to N parallel
+ * `GET /products/{id}` calls — fine for a cart-sized list, not for a large
+ * report. Ask backend for a batch endpoint if a caller needs more than a
+ * couple dozen ids at once.
+ */
+export async function listProductsByIds(client: ApiClient, ids: string[]): Promise<Product[]> {
+  const unique = [...new Set(ids)];
+  const results = await Promise.all(unique.map((id) => getProduct(client, id)));
+  return results.filter((p): p is Product => p !== null);
+}
+
+/**
+ * No server-side id-search endpoint — walks the search-filtered listing
+ * client-side. Fine for admin's typeahead-sized result sets.
+ */
+export async function findProductIdsMatching(
+  client: ApiClient,
+  q: string,
+  options: { includeInactive?: boolean } = {},
+): Promise<string[]> {
+  const needle = q.trim();
+  if (!needle) return [];
+
+  const ids: string[] = [];
+  let page = 1;
+  for (;;) {
+    const result = await listProductsPage(client, {
+      q: needle,
+      page,
+      pageSize: 200,
+      includeInactive: options.includeInactive,
+    });
+    ids.push(...result.products.map((p) => p.id));
+    if (page >= result.lastPage) return ids;
+    page += 1;
+  }
+}
+
+/**
+ * GAP: no `category_id` aggregate endpoint on the Tally API (the old query
+ * used a Postgres GROUP BY). This pulls the full catalogue client-side to
+ * count it, same cost as `listProducts`. Fine for a shop-sized catalogue;
+ * ask backend for a real aggregate if this gets slow.
+ */
+export async function countProductsByCategory(
+  client: ApiClient,
+  options: { includeInactive?: boolean } = {},
+): Promise<Record<string, number>> {
+  const products = await listProducts(client, options);
+  const counts: Record<string, number> = {};
+  for (const product of products) {
+    if (!product.categoryId) continue;
+    counts[product.categoryId] = (counts[product.categoryId] ?? 0) + 1;
+  }
+  return counts;
+}
+
+export async function getProduct(client: ApiClient, id: string): Promise<Product | null> {
+  try {
+    const { data } = await client.get<{ data: JsonApiResource<ProductAttrs> }>(`/products/${id}`);
+    return toProduct(data);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+/**
+ * Incremental fetch for the mobile pull step is now handled server-side by
+ * `GET /pos/sync/pull?since=`, which returns products in the same response
+ * as categories/customers/settings — see queries/pos.ts. This standalone
+ * per-resource "since" fetch has no direct Tally API equivalent and is not
+ * ported; use `pullSync()` instead.
+ */
+
+export async function createProduct(client: ApiClient, input: ProductInput): Promise<Product> {
+  const { data } = await client.post<{ data: JsonApiResource<ProductAttrs> }>(
+    "/products",
+    toPayload(input),
+  );
+  return toProduct(data);
+}
+
+/** stock_quantity is intentionally not part of ProductInput — see AdjustStockAction / adjustStock(). */
+export async function updateProduct(
+  client: ApiClient,
+  id: string,
+  patch: Partial<ProductInput>,
+): Promise<Product> {
+  const { data } = await client.patch<{ data: JsonApiResource<ProductAttrs> }>(
+    `/products/${id}`,
+    toPayload(patch),
+  );
+  return toProduct(data);
+}
+
+export async function setProductActive(client: ApiClient, id: string, isActive: boolean): Promise<void> {
+  await updateProduct(client, id, { isActive });
+}
+
+export type AdjustStockReason = "restock" | "adjustment" | "oversell_correction";
+
+export async function adjustStock(
+  client: ApiClient,
+  id: string,
+  input: { changeQuantity: number; reason: AdjustStockReason; note?: string | null },
+): Promise<Product> {
+  const { data } = await client.post<{ data: JsonApiResource<ProductAttrs> }>(
+    `/products/${id}/adjust-stock`,
+    { change_quantity: input.changeQuantity, reason: input.reason, note: input.note ?? null },
+    { idempotent: true },
+  );
+  return toProduct(data);
+}
+
+/**
+ * GAP: no bulk upsert-by-SKU endpoint on the Tally API. The old CSV import
+ * flow (`upsertProductsBySku`) relied on a single Postgres `upsert(...,
+ * { onConflict: "sku" })` call. Doing this as N sequential create/update
+ * calls changes the error contract (partial-failure semantics, no single
+ * transaction) — flagging rather than faking it. CSV import needs either a
+ * bulk endpoint on pos-inventory-laravel or an explicit decision to accept
+ * per-row calls with its own progress/error UI.
+ */
+export function upsertProductsBySku(): never {
+  throw new Error(
+    "upsertProductsBySku has no Tally API equivalent yet — CSV bulk import needs a backend decision before porting this call site.",
+  );
+}
+
+export async function listBelowReorder(client: ApiClient): Promise<Product[]> {
+  const { data } = await client.get<{ data: JsonApiResource<ProductAttrs>[] }>(
+    "/inventory/below-reorder",
+  );
+  return data.map(toProduct);
+}

@@ -1,24 +1,18 @@
 import { ClipboardList, TriangleAlert } from "lucide-react";
-import {
-  currentAppUser,
-  listAllSupplierProductIds,
-  listProducts,
-  listSuppliers,
-} from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/api/session";
 import { isShopAdmin } from "@/lib/authz";
-import { storeToday } from "@/lib/date-range";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
-import { CreatePurchaseOrderForm } from "./create-po-form";
+import { NewPurchaseOrderPageClient } from "./new-purchase-order-page-client";
 
-export default async function NewPurchaseOrderPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ supplier?: string }>;
-}) {
-  const { supplier } = await searchParams;
-  const supabase = await getServerClient();
-  const user = await currentAppUser(supabase);
+/**
+ * Stays a (thin) Server Component so the admin-only gate runs before any of
+ * the client bundle/data below it ever mounts — same split as
+ * purchase-orders/page.tsx and suppliers/page.tsx. Everything past the gate —
+ * the supplier/product lookup and the builder itself — is client-side
+ * TanStack Query, in NewPurchaseOrderPageClient.
+ */
+export default async function NewPurchaseOrderPage() {
+  const user = await getCurrentUser();
 
   if (!isShopAdmin(user)) {
     return (
@@ -35,41 +29,5 @@ export default async function NewPurchaseOrderPage({
     );
   }
 
-  const [suppliers, products, supplierProductIds] = await Promise.all([
-    listSuppliers(supabase),
-    listProducts(supabase),
-    listAllSupplierProductIds(supabase),
-  ]);
-
-  if (suppliers.length === 0) {
-    return (
-      <div className="space-y-6">
-        <PageHeader icon={ClipboardList} title="New purchase order" />
-        <Card>
-          <EmptyState
-            icon={TriangleAlert}
-            title="Add a supplier first"
-            instruction="A purchase order needs a supplier to order from."
-          />
-        </Card>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        icon={ClipboardList}
-        title="New purchase order"
-        description="Add line items and, if the supplier expects installments, a payment schedule."
-      />
-      <CreatePurchaseOrderForm
-        suppliers={suppliers}
-        products={products}
-        supplierProductIds={supplierProductIds}
-        defaultSupplierId={supplier}
-        defaultOrderDate={storeToday()}
-      />
-    </div>
-  );
+  return <NewPurchaseOrderPageClient />;
 }

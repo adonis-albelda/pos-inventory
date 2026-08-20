@@ -13,6 +13,7 @@ import {
 } from "@/db/sales";
 import { useLayout } from "@/lib/layout";
 import { useSync } from "@/sync/sync-provider";
+import { WaveBackdrop } from "@/components/wave-backdrop";
 import { Badge, Button, Card, EmptyState, Money, SectionTitle } from "@/components/ui";
 import { color, fontSize, space, styles } from "@/theme";
 
@@ -63,6 +64,8 @@ export default function DeliveryScreen() {
         alignSelf: "center",
       }}
     >
+      <WaveBackdrop />
+
       <SectionTitle
         icon={Truck}
         title="Deliveries"

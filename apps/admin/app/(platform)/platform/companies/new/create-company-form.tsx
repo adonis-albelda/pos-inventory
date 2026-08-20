@@ -26,7 +26,7 @@ export function CreateCompanyForm() {
           name="admin_password"
           type="password"
           autoComplete="new-password"
-          minLength={6}
+          minLength={8}
           required
         />
       </Field>

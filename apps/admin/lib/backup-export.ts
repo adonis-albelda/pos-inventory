@@ -4,18 +4,18 @@ import {
   marginPercent,
 } from "@double-a/shared-types";
 import {
-  fetchStoreSettings,
+  getStoreSettings,
   listCategories,
   listCustomers,
   listExpenses,
-  listMovements,
+  listMovementsPage,
   listProducts,
-  listPurchaseOrders,
-  listSales,
+  listPurchaseOrdersPage,
+  listSalesPage,
   listSuppliers,
   listUsers,
-  type DoubleAClient,
-} from "@double-a/supabase";
+} from "@double-a/api-client/queries";
+import type { ApiClient } from "@double-a/api-client";
 import { type CsvValue, toCsv } from "@/lib/csv";
 
 /**
@@ -112,7 +112,7 @@ export interface BackupSheet {
 }
 
 export async function buildBackupSheets(
-  client: DoubleAClient,
+  client: ApiClient,
   ids: BackupDatasetId[],
 ): Promise<BackupSheet[]> {
   const sheets: BackupSheet[] = [];
@@ -122,8 +122,25 @@ export async function buildBackupSheets(
   return sheets;
 }
 
+/** Walks every page of a paginated list up to `cap`, same pattern api-client's own list-alls use. */
+async function walkPages<T>(
+  loadPage: (page: number) => Promise<{ items: T[]; lastPage: number }>,
+  cap: number,
+): Promise<{ items: T[]; truncated: boolean }> {
+  const items: T[] = [];
+  let page = 1;
+  for (;;) {
+    const result = await loadPage(page);
+    items.push(...result.items);
+    if (items.length >= cap || page >= result.lastPage) {
+      return { items: items.slice(0, cap), truncated: items.length >= cap && page < result.lastPage };
+    }
+    page += 1;
+  }
+}
+
 async function buildSheet(
-  client: DoubleAClient,
+  client: ApiClient,
   id: BackupDatasetId,
 ): Promise<BackupSheet> {
   const label = BACKUP_DATASET_META[id].label;
@@ -224,12 +241,22 @@ async function buildSheet(
     }
 
     case "sales": {
-      const sales = await listSales(client, { limit: MAX_SALES });
+      // GAP (see queries/sales.ts): SaleResource carries no cashier name — joined
+      // against a separately fetched user list.
+      const users = await listUsers(client, { includeInactive: true });
+      const cashierNameById = new Map(users.map((user) => [user.id, user.name]));
+      const { items: sales, truncated: salesTruncated } = await walkPages(
+        async (page) => {
+          const result = await listSalesPage(client, { page, pageSize: 200 });
+          return { items: result.sales, lastPage: result.lastPage };
+        },
+        MAX_SALES,
+      );
       const rows = sales.flatMap((sale) =>
         sale.items.map((item) => [
           sale.createdAt,
           sale.id,
-          sale.cashierName,
+          (sale.userId && cashierNameById.get(sale.userId)) ?? null,
           sale.deviceId,
           sale.paymentMethod,
           sale.status,
@@ -255,7 +282,7 @@ async function buildSheet(
         id,
         label,
         filename: "sales",
-        truncated: sales.length >= MAX_SALES,
+        truncated: salesTruncated,
         headers: [
           "sold_at",
           "sale_id",
@@ -285,12 +312,18 @@ async function buildSheet(
     }
 
     case "inventory_movements": {
-      const movements = await listMovements(client, { limit: MAX_MOVEMENTS });
+      const { items: movements, truncated: movementsTruncated } = await walkPages(
+        async (page) => {
+          const result = await listMovementsPage(client, { page, pageSize: 200 });
+          return { items: result.movements, lastPage: result.lastPage };
+        },
+        MAX_MOVEMENTS,
+      );
       return {
         id,
         label,
         filename: "inventory_movements",
-        truncated: movements.length >= MAX_MOVEMENTS,
+        truncated: movementsTruncated,
         headers: [
           "id",
           "product_id",
@@ -379,9 +412,17 @@ async function buildSheet(
     }
 
     case "purchase_orders": {
-      const orders = await listPurchaseOrders(client, {
-        limit: MAX_PURCHASE_ORDERS,
-      });
+      // GAP (see queries/purchase-orders.ts): PurchaseOrderResource carries no
+      // supplier name — joined against a separately fetched supplier list.
+      const suppliers = await listSuppliers(client, { includeInactive: true });
+      const supplierNameById = new Map(suppliers.map((supplier) => [supplier.id, supplier.name]));
+      const { items: orders, truncated: ordersTruncated } = await walkPages(
+        async (page) => {
+          const result = await listPurchaseOrdersPage(client, { page, pageSize: 200 });
+          return { items: result.purchaseOrders, lastPage: result.lastPage };
+        },
+        MAX_PURCHASE_ORDERS,
+      );
       const rows: CsvValue[][] = [];
       for (const order of orders) {
         const terms = order.payments
@@ -393,7 +434,7 @@ async function buildSheet(
         const header = [
           order.id,
           order.supplierId,
-          order.supplierName,
+          supplierNameById.get(order.supplierId) ?? null,
           order.status,
           order.orderDate,
           order.expectedDate,
@@ -427,7 +468,7 @@ async function buildSheet(
         id,
         label,
         filename: "purchase_orders",
-        truncated: orders.length >= MAX_PURCHASE_ORDERS,
+        truncated: ordersTruncated,
         headers: [
           "purchase_order_id",
           "supplier_id",
@@ -485,7 +526,7 @@ async function buildSheet(
     }
 
     case "store_settings": {
-      const settings = await fetchStoreSettings(client);
+      const settings = await getStoreSettings(client);
       return {
         id,
         label,

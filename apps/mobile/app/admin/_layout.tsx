@@ -1,0 +1,114 @@
+import { useEffect, useState } from "react";
+import { Redirect, Stack, useRouter } from "expo-router";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ArrowLeft } from "lucide-react-native";
+import { useSession } from "@/lib/session";
+import { ensureFreshSession } from "@/lib/api/session";
+import { Button } from "@/components/ui";
+import { color, fontSize, space, styles } from "@/theme";
+
+type SessionCheck = "checking" | "ready" | "error";
+
+/**
+ * Admin-mode: the same domains apps/admin manages, reachable from the POS
+ * once an admin-role user has unlocked — but strictly online, same as
+ * apps/admin itself (CLAUDE.md §5's "no offline mode" applies to every
+ * screen under here too, even though it's inside the mobile binary). No
+ * local SQLite involvement — every screen under app/admin/** calls the
+ * Tally API directly via lib/api/session.ts's getApiClient(), same client
+ * the POS sync flow uses.
+ */
+export default function AdminLayout() {
+  const { cashier } = useSession();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+
+  const [check, setCheck] = useState<SessionCheck>("checking");
+  const [error, setError] = useState<string | null>(null);
+
+  // Unlocking a shift only proves the cashier's PIN was good at that moment —
+  // it says nothing about whether the terminal's own stored API token is
+  // still accepted. Every screen under here calls getApiClient() directly
+  // with no check of its own, so without this gate a stale token surfaces as
+  // every domain (categories, suppliers, products, all of it) failing at
+  // once with an unclear error, instead of one clear message here.
+  useEffect(() => {
+    if (!cashier || cashier.role !== "admin") return;
+    let cancelled = false;
+    ensureFreshSession()
+      .then(() => {
+        if (!cancelled) setCheck("ready");
+      })
+      .catch((cause: unknown) => {
+        if (cancelled) return;
+        setError(cause instanceof Error ? cause.message : "Could not reach the server.");
+        setCheck("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cashier]);
+
+  if (!cashier) return <Redirect href="/unlock" />;
+  if (cashier.role !== "admin") return <Redirect href="/pos" />;
+
+  if (check === "checking") {
+    return (
+      <View style={[styles.screen, { flex: 1, alignItems: "center", justifyContent: "center" }]}>
+        <ActivityIndicator color={color.primary} />
+      </View>
+    );
+  }
+
+  if (check === "error") {
+    return (
+      <View
+        style={[
+          styles.screen,
+          { flex: 1, alignItems: "center", justifyContent: "center", padding: space.xl, gap: space.md },
+        ]}
+      >
+        <Text style={styles.subheading}>Could not open the admin dashboard</Text>
+        <Text style={[styles.muted, { textAlign: "center" }]}>{error}</Text>
+        <Button label="Back to POS" onPress={() => router.replace("/pos")} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: space.sm,
+          paddingHorizontal: space.md,
+          paddingVertical: space.sm,
+          backgroundColor: color.primary,
+        }}
+      >
+        <Pressable
+          onPress={() => (router.canGoBack() ? router.back() : router.replace("/pos"))}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          style={styles.tapTarget}
+        >
+          <ArrowLeft size={20} color={color.onPrimary} strokeWidth={2} />
+        </Pressable>
+        <Text style={{ fontSize: fontSize.bodyLg, fontWeight: "700", color: color.onPrimary }}>
+          Admin dashboard
+        </Text>
+      </View>
+
+      <View style={{ flex: 1, minHeight: 0 }}>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: "transparent" },
+          }}
+        />
+      </View>
+    </View>
+  );
+}

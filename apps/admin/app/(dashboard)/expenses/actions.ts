@@ -9,12 +9,11 @@ import {
 } from "@double-a/shared-types";
 import {
   createExpense,
-  currentAppUser,
   deleteExpense,
   updateExpense,
-} from "@double-a/supabase";
+} from "@double-a/api-client/queries";
 import type { FormState } from "@/lib/form-state";
-import { getServerClient } from "@/lib/supabase/server";
+import { getAuthedClient, getCurrentUser } from "@/lib/api/session";
 import { isShopAdmin } from "@/lib/authz";
 
 function text(formData: FormData, key: string): string {
@@ -48,8 +47,7 @@ export async function saveExpense(
     return { error: "Pick a valid date.", ok: false };
   }
 
-  const supabase = await getServerClient();
-  const user = await currentAppUser(supabase);
+  const user = await getCurrentUser();
   if (!isShopAdmin(user)) {
     return { error: "Only the owner can record expenses.", ok: false };
   }
@@ -60,15 +58,17 @@ export async function saveExpense(
     category: categoryRaw
       ? categoryRaw.slice(0, EXPENSE_CATEGORY_MAX)
       : null,
-    expense_date: expenseDate,
+    expenseDate,
     note: noteRaw ? noteRaw.slice(0, EXPENSE_NOTE_MAX) : null,
   };
 
   try {
+    const client = getAuthedClient();
+    // created_by is stamped server-side from the authenticated user, not sent here.
     if (id) {
-      await updateExpense(supabase, id, row);
+      await updateExpense(client, id, row);
     } else {
-      await createExpense(supabase, { ...row, created_by: user.id });
+      await createExpense(client, row);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -83,10 +83,9 @@ export async function removeExpense(formData: FormData): Promise<void> {
   const id = text(formData, "id");
   if (!id) return;
 
-  const supabase = await getServerClient();
-  const user = await currentAppUser(supabase);
+  const user = await getCurrentUser();
   if (!isShopAdmin(user)) return;
 
-  await deleteExpense(supabase, id);
+  await deleteExpense(getAuthedClient(), id);
   revalidateExpenseViews();
 }

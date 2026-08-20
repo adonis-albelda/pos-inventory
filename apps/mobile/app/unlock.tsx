@@ -16,10 +16,10 @@ import {
   timeAgo,
   type User,
 } from "@double-a/shared-types";
-import { currentAppUser, listCashiers } from "@double-a/supabase";
+import { listCashiers, me } from "@double-a/api-client/queries";
 import { useLayout } from "@/lib/layout";
 import { useSession } from "@/lib/session";
-import { ensureFreshSession, getSupabase, unenrollTerminal } from "@/lib/supabase";
+import { ensureFreshSession, getApiClient, unenrollTerminal } from "@/lib/api/session";
 import { useStoreSettings } from "@/lib/store";
 import { useSync } from "@/sync/sync-provider";
 import {
@@ -27,20 +27,20 @@ import {
   Delete,
   RefreshCw,
   Shield,
+  UserRoundCog,
   UserRound,
   Users,
   X,
 } from "lucide-react-native";
-import {
-  authChrome,
-  BrandAuthShell,
-  PoweredByLabel,
-} from "@/components/brand-auth-shell";
+import { WaveBackdrop } from "@/components/wave-backdrop";
 import { Button, Card, EmptyState, ErrorNote, IconButton } from "@/components/ui";
-import { color, fontSize, radius, space, styles } from "@/theme";
+import { color, fontSize, space, styles } from "@/theme";
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- same asset-require pattern as company-intro.tsx; no *.png module declaration in this project
+const PIN_ICON = require("../assets/password-protection.png");
 
 /**
- * Start of a shift. Cashier list + PIN check hit live Supabase. Local SQLite
+ * Start of a shift. Cashier list + PIN check hit the live Tally API. Local SQLite
  * is for selling after unlock — never for credentials.
  */
 export default function UnlockScreen() {
@@ -65,11 +65,9 @@ export default function UnlockScreen() {
     setLoadError(null);
     try {
       await ensureFreshSession();
-      const [next, me] = await Promise.all([
-        listCashiers(getSupabase()),
-        currentAppUser(getSupabase()),
-      ]);
-      setEnrolled(me);
+      const client = getApiClient();
+      const [next, profile] = await Promise.all([listCashiers(client), me(client)]);
+      setEnrolled(profile);
       setCashiers(next);
       setSelected((prev) =>
         prev && next.some((c) => c.id === prev.id)
@@ -169,10 +167,11 @@ export default function UnlockScreen() {
   const cashierTileWidth = (listWidth - space.sm * (cashierCols - 1)) / cashierCols;
 
   return (
-    <BrandAuthShell>
+    <View style={{ flex: 1, backgroundColor: "transparent" }}>
+    <WaveBackdrop />
     <View style={{ flex: 1 }}>
     <ScrollView
-      style={styles.screen}
+      style={{ flex: 1 }}
       contentContainerStyle={{
         paddingHorizontal: dialogPadding,
         paddingTop: insets.top + space.xl,
@@ -186,6 +185,7 @@ export default function UnlockScreen() {
         paddingBottom: space.xl,
       }}
     >
+      {/* Store banner — floats over the wave, same treatment as the setup card. */}
       <View
         style={{
           flexDirection: "row",
@@ -194,17 +194,20 @@ export default function UnlockScreen() {
           padding: space.md,
           backgroundColor: color.surface,
           borderWidth: 1,
-          borderColor: color.border,
-          borderLeftWidth: 3,
-          borderLeftColor: color.primary,
-          borderRadius: radius.sm,
+          borderColor: color.borderSoft,
+          borderRadius: 20,
+          shadowColor: "#000",
+          shadowOpacity: 0.1,
+          shadowRadius: 16,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 6,
         }}
       >
         <View
           style={{
             width: 44,
             height: 44,
-            borderRadius: radius.sm,
+            borderRadius: 14,
             borderWidth: 1,
             borderColor: store.logoUrl ? color.border : color.primary,
             overflow: "hidden",
@@ -232,12 +235,15 @@ export default function UnlockScreen() {
             </Text>
           )}
         </View>
-        <Text numberOfLines={1} style={[authChrome.subheading, { flex: 1 }]}>
+        <Text
+          numberOfLines={1}
+          style={{ flex: 1, fontSize: fontSize.headingSm, fontWeight: "700", color: color.ink }}
+        >
           {store.name}
         </Text>
       </View>
       {enrolled?.email ? (
-        <Text style={[authChrome.muted, { marginTop: -space.sm }]}>
+        <Text style={{ fontSize: fontSize.body, color: color.inkMuted, marginTop: -space.sm }}>
           Terminal signed in as {enrolled.email}. Shift unlock uses a 4–6 digit PIN, not this password.
         </Text>
       ) : null}
@@ -245,14 +251,18 @@ export default function UnlockScreen() {
       <Button
         label="Use a different shop account"
         variant="secondary"
+        icon={UserRoundCog}
         disabled={busy || syncing}
         onPress={() => void switchAccount()}
+        style={{ borderRadius: 14 }}
       />
 
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.md }}>
         <View style={{ flex: 1 }}>
-          <Text style={authChrome.heading}>Who is on shift?</Text>
-          <Text style={[authChrome.muted, { marginTop: space.xs }]}>
+          <Text style={{ fontSize: fontSize.headingMd, fontWeight: "700", color: color.ink }}>
+            Who is on shift?
+          </Text>
+          <Text style={{ fontSize: fontSize.body, color: color.inkMuted, marginTop: space.xs }}>
             Pick your name, then enter your PIN. Needs a connection.
           </Text>
           <Text
@@ -274,6 +284,7 @@ export default function UnlockScreen() {
           icon={RefreshCw}
           busy={syncing || loadingList}
           onPress={() => void refreshCashiers()}
+          style={{ borderRadius: 14 }}
         />
       </View>
 
@@ -403,9 +414,31 @@ export default function UnlockScreen() {
         </View>
       )}
 
+      {/* Bottom of the wave — was empty. A short, genuinely useful note instead of dead space. */}
+      <View style={{ gap: space.xs, marginTop: space["3xl"], paddingBottom: space.md }}>
+        <Text
+          style={{
+            fontSize: fontSize.body,
+            fontWeight: "600",
+            color: color.onPrimary,
+            textAlign: "center",
+          }}
+        >
+          Why does unlocking need a connection?
+        </Text>
+        <Text
+          style={{
+            fontSize: fontSize.caption,
+            color: color.sageLight,
+            textAlign: "center",
+            lineHeight: 18,
+          }}
+        >
+          Your PIN is checked live against the shop's account, every time — never stored on
+          this tablet. Once you're in, selling works fully offline until you tap Sync.
+        </Text>
+      </View>
     </ScrollView>
-
-    <PoweredByLabel />
 
     {/*
       An in-tree overlay, not a native Modal. The keypad is the only way into a
@@ -438,21 +471,41 @@ export default function UnlockScreen() {
             maxWidth: 400,
             alignSelf: "center",
             backgroundColor: color.surface,
-            borderRadius: radius.md,
+            borderRadius: 24,
             borderWidth: 1,
-            borderColor: color.border,
+            borderColor: color.borderSoft,
             padding: space.lg,
             gap: space.lg,
+            shadowColor: "#000",
+            shadowOpacity: 0.18,
+            shadowRadius: 24,
+            shadowOffset: { width: 0, height: 10 },
+            elevation: 12,
           }}
         >
-          <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.sm }}>
-            <View style={{ flex: 1, gap: space.xs }}>
-              <Text style={styles.subheading}>PIN for {selected?.name}</Text>
-              <Text style={styles.muted}>
-                {PIN_LENGTH_MIN} to {PIN_LENGTH_MAX} digits.
-              </Text>
-            </View>
+          <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
             <IconButton icon={X} label="Close" onPress={closePinDialog} disabled={busy} />
+          </View>
+
+          <View style={{ alignItems: "center", gap: space.sm, marginTop: -space.lg }}>
+            <View
+              style={{
+                width: 72,
+                height: 72,
+                borderRadius: 36,
+                backgroundColor: color.primarySoft,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Image source={PIN_ICON} style={{ width: 44, height: 44 }} resizeMode="contain" />
+            </View>
+            <Text style={{ fontSize: fontSize.headingSm, fontWeight: "700", color: color.ink }}>
+              PIN for {selected?.name}
+            </Text>
+            <Text style={{ fontSize: fontSize.body, color: color.inkMuted, textAlign: "center" }}>
+              Enter your {PIN_LENGTH_MIN}-{PIN_LENGTH_MAX} digit PIN to start the shift.
+            </Text>
           </View>
 
           <View style={{ flexDirection: "row", gap: space.sm, justifyContent: "center" }}>
@@ -482,69 +535,55 @@ export default function UnlockScreen() {
               ["1", "2", "3"],
               ["4", "5", "6"],
               ["7", "8", "9"],
-              ["clear", "0", "enter"],
+              ["", "0", "clear"],
             ].map((row) => (
-              <View key={row.join()} style={{ flexDirection: "row", gap: space.sm }}>
-                {row.map((key) => (
-                  <Pressable
-                    key={key}
-                    onPress={() => {
-                      if (key === "clear") {
-                        setPin("");
-                        return;
-                      }
-                      if (key === "enter") {
-                        void submit();
-                        return;
-                      }
-                      if (pin.length < PIN_LENGTH_MAX) setPin(pin + key);
-                    }}
-                    disabled={busy}
-                    accessibilityLabel={
-                      key === "clear" ? "Clear PIN" : key === "enter" ? "Start shift" : key
-                    }
-                    style={({ pressed }) => ({
-                      flex: 1,
-                      minHeight: 56,
-                      flexDirection: "row",
-                      gap: space.xs,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderRadius: radius.sm,
-                      borderWidth: key === "enter" ? 0 : 1,
-                      borderColor:
-                        key === "clear" ? color.dangerSoft : color.primarySoft,
-                      backgroundColor:
-                        key === "enter"
-                          ? color.primary
-                          : pressed
-                            ? color.primarySoft
-                            : key === "clear"
-                              ? color.dangerSoft
-                              : color.paper,
-                    })}
-                  >
-                    {key === "clear" ? (
-                      <Delete size={20} color={color.dangerInk} strokeWidth={2} />
-                    ) : key === "enter" ? (
-                      <Check size={20} color={color.onPrimary} strokeWidth={2.5} />
-                    ) : null}
-                    <Text
-                      style={{
-                        fontSize: fontSize.headingSm,
-                        fontWeight: "600",
-                        color:
-                          key === "enter"
-                            ? color.onPrimary
-                            : key === "clear"
-                              ? color.dangerInk
-                              : color.ink,
+              <View
+                key={row.join()}
+                style={{ flexDirection: "row", gap: space.lg, justifyContent: "center" }}
+              >
+                {row.map((key, i) => {
+                  if (key === "") {
+                    // Empty bottom-left cell — keeps 0 centred and clear bottom-right, standard PIN pad layout.
+                    return <View key={`spacer-${i}`} style={{ width: 64, height: 64 }} />;
+                  }
+                  const isClear = key === "clear";
+                  return (
+                    <Pressable
+                      key={key}
+                      onPress={() => {
+                        if (isClear) {
+                          setPin("");
+                          return;
+                        }
+                        if (pin.length < PIN_LENGTH_MAX) setPin(pin + key);
                       }}
+                      disabled={busy}
+                      accessibilityLabel={isClear ? "Clear PIN" : key}
+                      style={({ pressed }) => ({
+                        width: 64,
+                        height: 64,
+                        borderRadius: 32,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderWidth: 1,
+                        borderColor: isClear ? color.dangerSoft : color.primarySoft,
+                        backgroundColor: pressed
+                          ? color.primarySoft
+                          : isClear
+                            ? color.dangerSoft
+                            : color.paper,
+                      })}
                     >
-                      {key === "clear" ? "Clear" : key === "enter" ? "Enter" : key}
-                    </Text>
-                  </Pressable>
-                ))}
+                      {isClear ? (
+                        <Delete size={22} color={color.dangerInk} strokeWidth={2} />
+                      ) : (
+                        <Text style={{ fontSize: fontSize.headingMd, fontWeight: "600", color: color.ink }}>
+                          {key}
+                        </Text>
+                      )}
+                    </Pressable>
+                  );
+                })}
               </View>
             ))}
           </View>
@@ -558,11 +597,16 @@ export default function UnlockScreen() {
             busy={busy}
             disabled={pin.length < PIN_LENGTH_MIN}
             onPress={() => void submit()}
+            style={{ borderRadius: 14 }}
           />
+
+          <Text style={{ fontSize: fontSize.caption, color: color.inkMuted, textAlign: "center" }}>
+            Forgot your PIN? Ask an admin to set a new one from the dashboard.
+          </Text>
         </View>
       </View>
     ) : null}
     </View>
-    </BrandAuthShell>
+    </View>
   );
 }

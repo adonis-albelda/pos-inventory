@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ActivityIndicator, Image, Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { ChevronRight } from "lucide-react-native";
+import { ChevronRight, Menu } from "lucide-react-native";
 import { storeInitial } from "@double-a/shared-types";
 import { AccountDrawer } from "@/components/account-drawer";
 import { useStoreSettings } from "@/lib/store";
@@ -36,11 +36,28 @@ export function StoreHeader() {
           gap: compact ? space.xs : space.sm,
           paddingHorizontal: compact ? space.sm : space.md,
           paddingVertical: compact ? space.xs : space.sm,
-          backgroundColor: color.surface,
+          backgroundColor: color.primary,
           borderBottomWidth: 1,
-          borderBottomColor: color.border,
+          borderBottomColor: "rgba(255,255,255,0.15)",
         }}
       >
+        {/* Explicit hamburger — the logo alone opened the drawer but read as a brand mark, not a control. */}
+        <Pressable
+          onPress={() => setDrawerOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Open menu"
+          hitSlop={4}
+          style={({ pressed }) => ({
+            width: logoSize,
+            height: logoSize,
+            alignItems: "center",
+            justifyContent: "center",
+            opacity: pressed ? 0.6 : 1,
+          })}
+        >
+          <Menu size={compact ? 20 : 22} color={color.onPrimary} strokeWidth={2.25} />
+        </Pressable>
+
         <Pressable
           onPress={() => setDrawerOpen(true)}
           accessibilityRole="button"
@@ -52,7 +69,7 @@ export function StoreHeader() {
             overflow: "hidden",
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: store.logoUrl ? color.paper : color.primary,
+            backgroundColor: store.logoUrl ? color.surface : "rgba(255,255,255,0.2)",
             opacity: pressed ? 0.85 : 1,
           })}
         >
@@ -83,7 +100,7 @@ export function StoreHeader() {
             minWidth: 0,
             fontSize: compact ? fontSize.body : fontSize.bodyLg,
             fontWeight: "700",
-            color: color.ink,
+            color: color.onPrimary,
           }}
         >
           {store.name}

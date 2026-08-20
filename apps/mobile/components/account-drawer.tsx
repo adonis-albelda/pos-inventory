@@ -1,9 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { Animated, Modal, Pressable, Text, View, useWindowDimensions } from "react-native";
+import {
+  Animated,
+  Image,
+  Modal,
+  Pressable,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePathname, useRouter } from "expo-router";
 import {
   CloudUpload,
+  LayoutGrid,
   LogOut,
   Receipt,
   Settings,
@@ -12,13 +21,14 @@ import {
   Truck,
   UserRound,
   X,
+  type LucideIcon,
 } from "lucide-react-native";
 import { useSession } from "@/lib/session";
 import { useStoreSettings } from "@/lib/store";
 import { Button } from "@/components/ui";
-import { color, fontSize, radius, space, styles } from "@/theme";
+import { color, fontSize, space, styles } from "@/theme";
 
-const TABS = [
+const POS_TABS = [
   { href: "/pos", label: "Sell", icon: ShoppingCart },
   { href: "/pos/delivery", label: "Delivery", icon: Truck },
   { href: "/pos/history", label: "History", icon: Receipt },
@@ -26,9 +36,19 @@ const TABS = [
   { href: "/pos/sync", label: "Sync", icon: CloudUpload },
 ] as const;
 
+/**
+ * Admin dashboard mode — every domain apps/admin manages, online-only (see
+ * app/admin/_layout.tsx). Only ever shown to a role: "admin" cashier; a
+ * plain cashier never sees this tile at all.
+ */
+const ADMIN_TAB = { href: "/admin", label: "Admin dashboard", icon: LayoutGrid } as const;
+
 const DRAWER_WIDTH_RATIO = 0.82;
 const DRAWER_MAX_WIDTH = 360;
 const ANIM_MS = 220;
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- same asset-require pattern as setup.tsx/company-intro.tsx; no *.png module declaration in this project
+const LOGO = require("../assets/logo.png");
 
 /**
  * Account panel opened from the store logo. Nav tabs, shift identity, and
@@ -78,7 +98,7 @@ export function AccountDrawer({
   // Close the drawer first and let its slide-out finish before the screen
   // underneath changes — running both animations at once is what reads as
   // the previous and next screen "mixing up".
-  function go(href: (typeof TABS)[number]["href"]) {
+  function go(href: (typeof POS_TABS)[number]["href"] | typeof ADMIN_TAB.href) {
     onClose();
     setTimeout(() => router.replace(href), ANIM_MS);
   }
@@ -102,78 +122,61 @@ export function AccountDrawer({
             paddingBottom: insets.bottom + space.lg,
             paddingHorizontal: space.lg,
             gap: space.lg,
-            borderRightWidth: 1,
-            borderRightColor: color.border,
+            // Floats over the scrim now — shadow does the separation, not a flat border.
+            shadowColor: "#000",
+            shadowOpacity: 0.18,
+            shadowRadius: 24,
+            shadowOffset: { width: 8, height: 0 },
+            elevation: 16,
             transform: [{ translateX }],
           }}
         >
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: space.md,
-            }}
-          >
-            <Text
-              numberOfLines={1}
-              style={{ flex: 1, fontSize: fontSize.headingSm, fontWeight: "700", color: color.ink }}
-            >
-              {store.name}
-            </Text>
+          <View style={{ alignItems: "center", gap: space.sm }}>
             <Pressable
               onPress={onClose}
               accessibilityRole="button"
               accessibilityLabel="Close"
-              style={styles.tapTarget}
+              style={[styles.tapTarget, { position: "absolute", top: -space.xs, right: -space.xs }]}
             >
               <X size={22} color={color.inkMuted} strokeWidth={2} />
             </Pressable>
+
+            <View
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 16,
+                backgroundColor: color.primarySoft,
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+              }}
+            >
+              <Image
+                source={LOGO}
+                style={{ width: 40, height: 40 }}
+                resizeMode="contain"
+                accessibilityIgnoresInvertColors
+              />
+            </View>
+            <Text
+              numberOfLines={1}
+              style={{ fontSize: fontSize.headingSm, fontWeight: "700", color: color.ink, textAlign: "center" }}
+            >
+              {store.name}
+            </Text>
           </View>
 
           <View style={{ gap: space.xs }}>
-            {TABS.map((tab) => {
-              const active = pathname === tab.href;
-              const TabIcon = tab.icon;
-
-              return (
-                <Pressable
-                  key={tab.href}
-                  onPress={() => go(tab.href)}
-                  accessibilityRole="button"
-                  accessibilityLabel={tab.label}
-                  accessibilityState={{ selected: active }}
-                  style={({ pressed }) => ({
-                    minHeight: 48,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: space.md,
-                    paddingHorizontal: space.md,
-                    borderRadius: radius.sm,
-                    backgroundColor: active
-                      ? color.primarySoft
-                      : pressed
-                        ? color.surfacePressed
-                        : "transparent",
-                  })}
-                >
-                  <TabIcon
-                    size={20}
-                    color={active ? color.primary : color.inkMuted}
-                    strokeWidth={active ? 2.25 : 2}
-                  />
-                  <Text
-                    style={{
-                      fontSize: fontSize.bodyLg,
-                      fontWeight: active ? "700" : "600",
-                      color: active ? color.primary : color.ink,
-                    }}
-                  >
-                    {tab.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
+            {POS_TABS.map((tab) => (
+              <DrawerTab
+                key={tab.href}
+                icon={tab.icon}
+                label={tab.label}
+                active={pathname === tab.href}
+                onPress={() => go(tab.href)}
+              />
+            ))}
           </View>
 
           <View style={[styles.ledgerLine, { marginVertical: space.xs }]} />
@@ -189,10 +192,15 @@ export function AccountDrawer({
                 alignItems: "center",
                 gap: space.md,
                 padding: space.md,
-                borderRadius: radius.md,
+                borderRadius: 18,
                 backgroundColor: color.primaryTint,
                 borderWidth: 1,
                 borderColor: color.primarySoft,
+                shadowColor: "#000",
+                shadowOpacity: 0.05,
+                shadowRadius: 8,
+                shadowOffset: { width: 0, height: 3 },
+                elevation: 2,
               }}
             >
               <View
@@ -244,13 +252,28 @@ export function AccountDrawer({
 
           <View style={{ flex: 1 }} />
 
+          {/* Admin dashboard — pinned above End shift, apart from the regular POS tabs above. */}
+          {cashier.role === "admin" ? (
+            <DrawerTab
+              icon={ADMIN_TAB.icon}
+              label={ADMIN_TAB.label}
+              active={pathname === ADMIN_TAB.href}
+              onPress={() => go(ADMIN_TAB.href)}
+            />
+          ) : null}
+
           <Button
             label="End shift"
             variant="secondary"
             icon={LogOut}
             large
+            style={{ borderRadius: 14 }}
             onPress={endShift}
           />
+
+          <Text style={{ fontSize: fontSize.caption, color: color.inkMuted, textAlign: "center" }}>
+            Copyright © 2026 PROPos - All Rights Reserved.
+          </Text>
         </Animated.View>
 
         <Animated.View style={{ flex: 1, opacity: scrim }}>
@@ -263,5 +286,47 @@ export function AccountDrawer({
         </Animated.View>
       </View>
     </Modal>
+  );
+}
+
+/** One shared row style for every drawer link — POS tabs and the admin-dashboard link alike. */
+function DrawerTab({
+  icon: Icon,
+  label,
+  active,
+  onPress,
+}: {
+  icon: LucideIcon;
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+      style={({ pressed }) => ({
+        minHeight: 48,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: space.md,
+        paddingHorizontal: space.md,
+        borderRadius: 14,
+        backgroundColor: active ? color.primarySoft : pressed ? color.surfacePressed : "transparent",
+      })}
+    >
+      <Icon size={20} color={active ? color.primary : color.inkMuted} strokeWidth={active ? 2.25 : 2} />
+      <Text
+        style={{
+          fontSize: fontSize.bodyLg,
+          fontWeight: active ? "700" : "600",
+          color: active ? color.primary : color.ink,
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
 }

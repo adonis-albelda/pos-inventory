@@ -21,6 +21,7 @@ import {
   SuccessNote,
 } from "@/components/ui";
 import { EMPTY_FORM_STATE } from "@/lib/form-state";
+import { useInvalidateUsers } from "@/lib/query/users";
 import { saveCashier } from "./actions";
 
 function successMessage(role: UserRole): string {
@@ -55,9 +56,15 @@ export function UserForm({
 }) {
   const [state, action, pending] = useActionState(saveCashier, EMPTY_FORM_STATE);
   const [role, setRole] = useState<UserRole>(user?.role ?? defaultRole);
+  const invalidateUsers = useInvalidateUsers();
 
   useEffect(() => {
-    if (state.ok) onDone?.();
+    if (state.ok) {
+      invalidateUsers();
+      onDone?.();
+    }
+    // invalidateUsers is stable enough for this effect; only state.ok/onDone gate re-entry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.ok, onDone]);
 
   const RoleIcon =
@@ -89,15 +96,24 @@ export function UserForm({
             required
           />
         </Field>
-        <Field label="Role" hint="Controls dashboard access, PIN unlock, and terminal enrollment.">
+        <Field
+          label="Role"
+          hint={
+            user
+              ? "Role can't be changed after creation."
+              : "Controls dashboard access and PIN unlock. Terminals enroll themselves from the POS app, not here."
+          }
+        >
+          {user ? <input type="hidden" name="role" value={role} /> : null}
           <Select
-            name="role"
+            name={user ? undefined : "role"}
             value={role}
+            disabled={Boolean(user)}
             onChange={(event) => setRole(event.target.value as UserRole)}
           >
             <option value="cashier">Cashier</option>
             <option value="admin">Admin</option>
-            <option value="device">Terminal</option>
+            {user?.role === "device" ? <option value="device">Terminal</option> : null}
           </Select>
         </Field>
 
@@ -123,24 +139,15 @@ export function UserForm({
           </Field>
         ) : null}
 
-        {role === "admin" || role === "device" ? (
-          <Field
-            label={user ? "New password" : "Password"}
-            hint={
-              user
-                ? "Leave empty to keep the current password. Prefer Reset password in the table for a forced change."
-                : role === "admin"
-                  ? "Dashboard login — not a cashier PIN."
-                  : "POS enrollment password — not a cashier PIN."
-            }
-          >
+        {!user && role === "admin" ? (
+          <Field label="Password" hint="Dashboard login — not a cashier PIN.">
             <Input
               icon={Lock}
               name="password"
               type="password"
               autoComplete="new-password"
-              minLength={6}
-              required={!user}
+              minLength={8}
+              required
             />
           </Field>
         ) : null}
@@ -166,29 +173,21 @@ export function UserForm({
         <input type="hidden" name="can_sell" value="true" />
       )}
 
-      {role === "admin" || role === "device" ? (
-        <Field
-          label="Password policy"
-          hint="When checked, they must pick a new password right after signing in."
-        >
-          <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-sm border border-border bg-surface px-3 text-body">
-            <input
-              type="checkbox"
-              name="must_change_password"
-              value="true"
-              defaultChecked={user?.mustChangePassword ?? !user}
-              className="size-4 accent-primary"
-            />
-            Require password change after next login
-          </label>
-        </Field>
+      {user && role === "admin" ? (
+        <p className="flex items-start gap-2 text-caption text-ink-muted">
+          <Info size={14} className="mt-0.5 shrink-0" />
+          <span>
+            To reset this admin&rsquo;s password or force a change on next
+            sign-in, ask a superadmin on the Platform surface.
+          </span>
+        </p>
       ) : null}
 
       <p className="flex items-start gap-2 text-caption text-ink-muted">
         <Info size={14} className="mt-0.5 shrink-0" />
         <span>
-          Changes reach terminals on their next Sync or Refresh. PIN and Auth
-          password stay on separate paths.
+          Changes reach terminals on their next Sync or Refresh. PIN and
+          dashboard password stay on separate paths.
         </span>
       </p>
 

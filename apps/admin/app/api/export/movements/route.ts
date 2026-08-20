@@ -1,15 +1,22 @@
-import { listMovements, listProducts, listUsers } from "@double-a/supabase";
+import { listMovementsPage, listProducts, listUsers } from "@double-a/api-client/queries";
 import { resolveDayWindow } from "@/lib/date-range";
 import { csvExport } from "@/lib/export-route";
 import { isReason, reasonLabel } from "@/lib/inventory-reasons";
 
-/** A long history in a spreadsheet, and PostgREST caps the response anyway. */
+/** A long history in a spreadsheet, and the walk below is bounded anyway. */
 const MAX_MOVEMENTS = 5000;
 
 /**
  * The stock ledger as a file: every movement the same filters on the Inventory
  * page produced, with product names and who recorded each one resolved so the
  * sheet reads without a second lookup.
+ *
+ * GAP: IndexInventoryMovementsController only accepts `product_id` (see
+ * queries/inventory.ts) — no `reason` or date-range filter server-side.
+ * Without a `product` filter this walks the WHOLE movement history up to
+ * MAX_MOVEMENTS, filtering reason/date client-side — slow for a shop with a
+ * long history; ask backend to extend the endpoint if this export gets used
+ * often without narrowing to one product.
  */
 export async function GET(request: Request): Promise<Response> {
   const params = new URL(request.url).searchParams;
@@ -20,17 +27,25 @@ export async function GET(request: Request): Promise<Response> {
   const reason = params.get("reason") ?? undefined;
   const productId = params.get("product") ?? undefined;
 
-  return csvExport("stock-movements", async (supabase) => {
-    const [movements, products, users] = await Promise.all([
-      listMovements(supabase, {
-        productId,
-        reasons: isReason(reason) ? [reason] : undefined,
-        from: window.from,
-        to: window.to,
-        limit: MAX_MOVEMENTS,
-      }),
-      listProducts(supabase, { includeInactive: true }),
-      listUsers(supabase, { includeInactive: true }),
+  return csvExport("stock-movements", async (client) => {
+    const allMovements = [];
+    let page = 1;
+    for (;;) {
+      const result = await listMovementsPage(client, { productId, page, pageSize: 200 });
+      allMovements.push(...result.movements);
+      if (allMovements.length >= MAX_MOVEMENTS || page >= result.lastPage) break;
+      page += 1;
+    }
+
+    const movements = allMovements
+      .filter((m) => !isReason(reason) || m.reason === reason)
+      .filter((m) => !window.from || m.createdAt >= window.from)
+      .filter((m) => !window.to || m.createdAt < window.to)
+      .slice(0, MAX_MOVEMENTS);
+
+    const [products, users] = await Promise.all([
+      listProducts(client, { includeInactive: true }),
+      listUsers(client, { includeInactive: true }),
     ]);
 
     const productById = new Map(products.map((product) => [product.id, product]));

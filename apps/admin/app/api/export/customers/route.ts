@@ -1,9 +1,9 @@
-import { listCustomers } from "@double-a/supabase";
+import { listCustomers } from "@double-a/api-client/queries";
 import { csvExport } from "@/lib/export-route";
 
 export async function GET(): Promise<Response> {
-  return csvExport("customers", async (supabase) => {
-    const customers = await listCustomers(supabase);
+  return csvExport("customers", async (client) => {
+    const customers = await listCustomers(client);
 
     return {
       headers: ["name", "contact", "address"],

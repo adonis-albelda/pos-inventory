@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import { Check, Printer } from "lucide-react";
 import {
   RECEIPT_COLUMNS,
@@ -12,6 +12,7 @@ import {
 } from "@double-a/shared-types";
 import { Button, ErrorNote, SuccessNote } from "@/components/ui";
 import { EMPTY_FORM_STATE } from "@/lib/form-state";
+import { useInvalidateSettings } from "@/lib/query/settings";
 import { saveReceiptLayout } from "./actions";
 
 const TOGGLES: { key: keyof ReceiptLayout; label: string; hint: string }[] = [
@@ -68,6 +69,13 @@ export function ReceiptLayoutForm({
 }) {
   const [layout, setLayout] = useState(initial);
   const [state, action, pending] = useActionState(saveReceiptLayout, EMPTY_FORM_STATE);
+  const invalidate = useInvalidateSettings();
+
+  useEffect(() => {
+    if (state.ok) invalidate();
+    // invalidate is stable enough for this effect; only state.ok gates re-entry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.ok]);
 
   const preview = useMemo(
     () => formatReceiptPreview(undefined, { layout, store }),

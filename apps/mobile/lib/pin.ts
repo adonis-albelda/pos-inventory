@@ -1,5 +1,5 @@
-import { currentAppRole, verifyCashierPin } from "@double-a/supabase";
-import { ensureFreshSession, getSupabase } from "@/lib/supabase";
+import { me, verifyCashierPin } from "@double-a/api-client/queries";
+import { ensureFreshSession, getApiClient } from "@/lib/api/session";
 
 export type PinResult =
   | "ok"
@@ -8,24 +8,38 @@ export type PinResult =
   /** This terminal's own sign-in is not one the server accepts. */
   | "terminal-not-authorized";
 
+export interface PinUnlock {
+  result: PinResult;
+  /**
+   * Set only when the unlocked cashier is themselves an admin — a real
+   * admin-scoped token, separate from this terminal's device token. Policies
+   * gated on actsAsAdmin() (suppliers, expenses, purchase orders, some
+   * reports) 403 a device token no matter who unlocked it; this is what
+   * apps/mobile/app/admin/** calls need instead.
+   */
+  adminToken: string | null;
+  adminTokenExpiresAt: string | null;
+}
+
 /**
- * Live PIN check against Supabase. Local SQLite never sees the PIN or the hash
- * at unlock time — that is what verify_pin() is for.
+ * Live PIN check against the Tally API. Local SQLite never sees the PIN or
+ * the hash at unlock time — that is what `/pos/cashiers/verify-pin` is for.
  *
- * verify_pin() answers with a bare false for every failure: wrong digits, no
- * PIN set, or a caller whose role is not device/admin. Reads are unaffected in
- * that last case, so the cashier list still fills and only unlock breaks —
- * which reads to a cashier as "my PIN stopped working". The role is probed on
- * failure to tell the three apart.
+ * The endpoint answers with a bare `false` for every failure: wrong digits,
+ * no PIN set, or a caller whose role is not device/admin. The role is
+ * probed on failure to tell the three apart, same as the old verify_pin()
+ * flow.
  */
-export async function verifyPin(userId: string, pin: string): Promise<PinResult> {
+export async function verifyPin(userId: string, pin: string): Promise<PinUnlock> {
   await ensureFreshSession();
-  const supabase = getSupabase();
+  const client = getApiClient();
 
-  if (await verifyCashierPin(supabase, userId, pin)) return "ok";
+  const outcome = await verifyCashierPin(client, { userId, pin });
+  if (outcome.verified) {
+    return { result: "ok", adminToken: outcome.adminToken, adminTokenExpiresAt: outcome.adminTokenExpiresAt };
+  }
 
-  const role = await currentAppRole(supabase);
-  if (role !== "device" && role !== "admin") return "terminal-not-authorized";
-
-  return "wrong-pin";
+  const profile = await me(client);
+  const result = profile.role !== "device" && profile.role !== "admin" ? "terminal-not-authorized" : "wrong-pin";
+  return { result, adminToken: null, adminTokenExpiresAt: null };
 }

@@ -2,9 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { validateProductInput } from "@double-a/shared-types";
-import { createProduct, setProductActive, updateProduct } from "@double-a/supabase";
+import { createProduct, setProductActive, updateProduct } from "@double-a/api-client/queries";
+import { ApiError } from "@double-a/api-client";
 import type { FormState } from "@/lib/form-state";
-import { getServerClient } from "@/lib/supabase/server";
+import { getAuthedClient } from "@/lib/api/session";
 
 function text(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
@@ -24,7 +25,7 @@ function readProductForm(formData: FormData) {
     costPrice: Number(formData.get("cost_price") ?? 0),
     categoryId: text(formData, "category_id") || null,
     unit: text(formData, "unit") || "pc",
-    allowDecimal: formData.get("allow_decimal") != null,
+    allowDecimal: formData.get("allow_decimal") !== null,
     barcode: text(formData, "barcode") || null,
     reorderPoint: Number(formData.get("reorder_point") ?? 0),
     // The two bulk fields live or die together, so an empty pair is two nulls
@@ -34,16 +35,21 @@ function readProductForm(formData: FormData) {
   };
 }
 
-function describeSaveError(message: string): string {
-  if (message.includes("products_sku_key")) {
-    return "That SKU is already used by another product.";
+// Old Postgres constraint names (products_sku_key, etc) never reach the
+// client through the Laravel API — validation now comes back as per-field
+// messages on ApiError.errors instead, so field-key checks replace the old
+// substring matches.
+function describeSaveError(error: unknown): string {
+  if (error instanceof ApiError && error.isValidation) {
+    if (error.errors?.sku) return "That SKU is already used by another product.";
+    if (error.errors?.barcode) return "That barcode is already on another product.";
+    if (error.errors?.bulk_price || error.errors?.bulk_min_quantity) {
+      return "Bulk pricing needs both a bulk price and a minimum quantity.";
+    }
+    const first = Object.values(error.errors ?? {})[0]?.[0];
+    if (first) return first;
   }
-  if (message.includes("products_barcode_idx")) {
-    return "That barcode is already on another product.";
-  }
-  if (message.includes("products_bulk_pair_ck")) {
-    return "Bulk pricing needs both a bulk price and a minimum quantity.";
-  }
+  const message = error instanceof Error ? error.message : "Unknown error";
   return `Could not save the product: ${message}`;
 }
 
@@ -65,29 +71,28 @@ export async function saveProduct(
     name: input.name,
     sku: input.sku,
     price: input.price,
-    cost_price: input.costPrice,
-    category_id: input.categoryId,
+    costPrice: input.costPrice,
+    categoryId: input.categoryId,
     unit: input.unit,
-    allow_decimal: input.allowDecimal,
+    allowDecimal: input.allowDecimal,
     barcode: input.barcode,
-    reorder_point: input.reorderPoint,
-    bulk_price: input.bulkPrice,
-    bulk_min_quantity: input.bulkMinQuantity,
+    reorderPoint: input.reorderPoint,
+    bulkPrice: input.bulkPrice,
+    bulkMinQuantity: input.bulkMinQuantity,
   };
 
-  const supabase = await getServerClient();
+  const client = getAuthedClient();
 
   try {
     if (id) {
       // stock_quantity is deliberately absent: stock only moves through the
       // inventory page, which writes a movement row the trigger applies.
-      await updateProduct(supabase, id, row);
+      await updateProduct(client, id, row);
     } else {
-      await createProduct(supabase, row);
+      await createProduct(client, row);
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return { error: describeSaveError(message), ok: false };
+    return { error: describeSaveError(error), ok: false };
   }
 
   revalidatePath("/products");
@@ -100,8 +105,8 @@ export async function toggleProductActive(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   const isActive = String(formData.get("is_active") ?? "") === "true";
 
-  const supabase = await getServerClient();
-  await setProductActive(supabase, id, isActive);
+  const client = getAuthedClient();
+  await setProductActive(client, id, isActive);
 
   revalidatePath("/products");
   revalidatePath("/inventory");

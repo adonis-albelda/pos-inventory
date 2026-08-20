@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, Inter, Manrope } from "next/font/google";
 import { CompanyIntro } from "@/components/company-intro";
+import { QueryProvider } from "@/components/query-provider";
 import "./globals.css";
 
 const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope" });
@@ -12,8 +13,8 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DOUBLE A — Admin",
-  description: "Products, inventory, sales and cashiers for DOUBLE A.",
+  title: "POSPro — Admin",
+  description: "Sales, inventory, and cashiers — everything your store needs, in one place.",
 };
 
 export const viewport: Viewport = {
@@ -28,8 +29,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body
         className={`${manrope.variable} ${inter.variable} ${plexMono.variable} antialiased`}
       >
-        <CompanyIntro />
-        {children}
+        <QueryProvider>
+          <CompanyIntro />
+          {children}
+        </QueryProvider>
       </body>
     </html>
   );

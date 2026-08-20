@@ -1,44 +1,37 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createAdminServerClient } from "@double-a/supabase/server";
+import { ApiClient, ApiError, assertApiUrl } from "@double-a/api-client";
+import { me } from "@double-a/api-client/queries";
+import { ACTING_COMPANY_COOKIE, SESSION_COOKIE } from "@/lib/api/cookie-names";
 
 const PUBLIC_PATHS = ["/login", "/auth"];
 
-function actingCompanyId(user: {
-  app_metadata?: Record<string, unknown>;
-}): string | null {
-  const value = user.app_metadata?.acting_company_id;
-  return typeof value === "string" && value.length > 0 ? value : null;
-}
-
 /**
- * Refreshes the Supabase session cookie on every request and keeps the dashboard
- * behind a login. Runs on every navigation, which is fine — this app assumes
- * constant connectivity.
+ * Refreshes-in-place is no longer a concept (Sanctum tokens aren't renewed
+ * client-side the way a Supabase JWT was) — this just gates routes off
+ * whatever `GET /auth/me` says about the current session cookie, every
+ * navigation. Fine — apps/admin assumes constant connectivity (CLAUDE.md §5).
  */
 export default async function proxy(request: NextRequest) {
-  let response = NextResponse.next({ request });
-
-  const supabase = createAdminServerClient({
-    getAll: () => request.cookies.getAll(),
-    setAll: (records) => {
-      for (const { name, value } of records) {
-        request.cookies.set(name, value);
-      }
-      response = NextResponse.next({ request });
-      for (const { name, value, options } of records) {
-        response.cookies.set(name, value, options);
-      }
-    },
-  });
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const path = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some((publicPath) => path.startsWith(publicPath));
   const isChangePassword = path.startsWith("/change-password");
   const isPlatform = path.startsWith("/platform");
+
+  const token = request.cookies.get(SESSION_COOKIE)?.value ?? null;
+  const acting = Boolean(request.cookies.get(ACTING_COMPANY_COOKIE)?.value);
+
+  let user: Awaited<ReturnType<typeof me>> | null = null;
+  if (token) {
+    try {
+      const client = new ApiClient({
+        baseUrl: assertApiUrl(process.env.NEXT_PUBLIC_TALLY_API_URL, "NEXT_PUBLIC_TALLY_API_URL"),
+        getToken: () => token,
+      });
+      user = await me(client);
+    } catch (error) {
+      if (!(error instanceof ApiError && (error.isUnauthenticated || error.isForbidden))) throw error;
+    }
+  }
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
@@ -48,56 +41,45 @@ export default async function proxy(request: NextRequest) {
   }
 
   if (user && !isPublic) {
-    const { data: rows, error: appError } = await supabase.rpc("current_app_user");
-    if (!appError) {
-      const appUser = Array.isArray(rows) ? rows[0] : rows;
-      const role = appUser?.role as string | undefined;
-      const mustChange = Boolean(appUser?.must_change_password);
-      const acting = actingCompanyId(user);
-      const home = role === "superadmin" && !acting ? "/platform" : "/";
+    const home = user.role === "superadmin" && !acting ? "/platform" : "/";
 
-      if (mustChange && !isChangePassword) {
-        const url = request.nextUrl.clone();
-        url.pathname = "/change-password";
-        url.search = "";
-        return NextResponse.redirect(url);
-      }
+    if (user.mustChangePassword && !isChangePassword) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/change-password";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
 
-      if (!mustChange && isChangePassword) {
-        const url = request.nextUrl.clone();
-        url.pathname = home;
-        url.search = "";
-        return NextResponse.redirect(url);
-      }
+    if (!user.mustChangePassword && isChangePassword) {
+      const url = request.nextUrl.clone();
+      url.pathname = home;
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
 
-      if (role === "superadmin" && !acting && !isPlatform && !isChangePassword) {
-        const url = request.nextUrl.clone();
-        url.pathname = "/platform";
-        url.search = "";
-        return NextResponse.redirect(url);
-      }
+    if (user.role === "superadmin" && !acting && !isPlatform && !isChangePassword) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/platform";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
 
-      if (role === "admin" && isPlatform) {
-        const url = request.nextUrl.clone();
-        url.pathname = "/";
-        url.search = "";
-        return NextResponse.redirect(url);
-      }
+    if (user.role === "admin" && isPlatform) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      url.search = "";
+      return NextResponse.redirect(url);
     }
   }
 
   if (user && path === "/login") {
-    const { data: rows } = await supabase.rpc("current_app_user");
-    const appUser = Array.isArray(rows) ? rows[0] : rows;
-    const acting = actingCompanyId(user);
     const url = request.nextUrl.clone();
-    url.pathname =
-      appUser?.role === "superadmin" && !acting ? "/platform" : "/";
+    url.pathname = user.role === "superadmin" && !acting ? "/platform" : "/";
     url.search = "";
     return NextResponse.redirect(url);
   }
 
-  return response;
+  return NextResponse.next({ request });
 }
 
 export const config = {

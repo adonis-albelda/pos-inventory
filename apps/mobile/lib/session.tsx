@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import type { User } from "@double-a/shared-types";
+import { setAdminToken } from "@/lib/api/session";
 import { verifyPin, type PinResult } from "@/lib/pin";
 
 interface SessionValue {
@@ -25,12 +26,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [cashier, setCashier] = useState<User | null>(null);
 
   const unlock = useCallback(async (user: User, pin: string) => {
-    const result = await verifyPin(user.id, pin);
-    if (result === "ok") setCashier(user);
-    return result;
+    const outcome = await verifyPin(user.id, pin);
+    if (outcome.result === "ok") {
+      setCashier(user);
+      setAdminToken(outcome.adminToken);
+    }
+    return outcome.result;
   }, []);
 
-  const lock = useCallback(() => setCashier(null), []);
+  const lock = useCallback(() => {
+    setCashier(null);
+    setAdminToken(null);
+  }, []);
 
   const value = useMemo(() => ({ cashier, unlock, lock }), [cashier, unlock, lock]);
 

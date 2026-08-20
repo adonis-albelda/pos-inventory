@@ -1,76 +1,46 @@
 import { notFound } from "next/navigation";
-import { Building2, FolderTree, Package, Receipt, Truck, Users, Warehouse } from "lucide-react";
-import { companyStats } from "@double-a/supabase";
-import { createServiceRoleClient } from "@double-a/supabase/service";
-import { toUser } from "@double-a/supabase";
-import {
-  Badge,
-  Card,
-  CardBody,
-  CardHeader,
-  PageHeader,
-  StatCard,
-} from "@/components/ui";
+import { ApiError } from "@double-a/api-client";
+import { listUsers, openCompany as apiOpenCompany } from "@double-a/api-client/queries";
 import { requireSuperadmin } from "@/lib/platform";
-import { CompanyControls, CompanyUsers } from "./company-detail";
+import { createScopedClient } from "@/lib/api/client";
+import { CompanyDetailPageClient } from "./company-detail-page-client";
 
+/**
+ * Stays a Server Component for the "open company to list its users" read —
+ * apiOpenCompany() mints a one-off bearer token scoped to this company via
+ * acting_company_id (CLAUDE.md §15) purely to satisfy IndexUsersController's
+ * company.context scoping; the token is used once, here, and discarded
+ * within this request. It must never reach client JS, so it — and the
+ * listUsers() call that uses it — cannot move into CompanyDetailPageClient.
+ *
+ * companyStats() is different: it runs on the caller's own regular
+ * superadmin session, no scoped token involved, so it's safe to convert to
+ * client-side useQuery — see CompanyDetailPageClient / lib/query/companies.ts.
+ */
 export default async function CompanyDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { supabase } = await requireSuperadmin();
-  const stats = (await companyStats(supabase)).find((row) => row.id === id);
-  if (!stats) notFound();
+  const { client } = await requireSuperadmin();
 
-  const service = createServiceRoleClient();
-  const { data: userRows, error } = await service
-    .from("users")
-    .select(
-      "id, name, email, role, is_active, can_sell, must_change_password, company_id, created_at, updated_at",
-    )
-    .eq("company_id", id)
-    .neq("role", "superadmin")
-    .order("name");
-  if (error) throw new Error(error.message);
+  let users;
+  try {
+    // No cross-company user listing endpoint for a company the superadmin
+    // hasn't opened — IndexUsersController is company.context-scoped off the
+    // token. Opens it just for this read; the resulting token isn't the
+    // caller's session (their cookie/navigation is untouched) and is simply
+    // left unrevoked rather than tracked for cleanup — acceptable superadmin
+    // token hygiene tradeoff, not a security hole.
+    const opened = await apiOpenCompany(client, id);
+    users = (
+      await listUsers(createScopedClient(opened.token), { includeInactive: true })
+    ).filter((user) => user.role !== "superadmin");
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) notFound();
+    throw error;
+  }
 
-  const users = (userRows ?? []).map(toUser);
-
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        icon={Building2}
-        title={stats.name}
-        description="Admins, terminals, and cashiers for this shop. Open company to use the shop dashboard."
-        action={
-          <Badge tone={stats.isActive ? "success" : "danger"}>
-            {stats.isActive ? "Active" : "Disabled"}
-          </Badge>
-        }
-      />
-
-      <CompanyControls companyId={id} isActive={stats.isActive} />
-
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        <StatCard icon={Package} label="Products" value={String(stats.productCount)} />
-        <StatCard icon={FolderTree} label="Categories" value={String(stats.categoryCount)} />
-        <StatCard icon={Truck} label="Suppliers" value={String(stats.supplierCount)} />
-        <StatCard icon={Users} label="Customers" value={String(stats.customerCount)} />
-        <StatCard icon={Receipt} label="Sales" value={String(stats.saleCount)} />
-        <StatCard icon={Users} label="Users" value={String(stats.userCount)} />
-        <StatCard icon={Warehouse} label="Stock units" value={String(stats.stockUnits)} />
-      </div>
-
-      <Card>
-        <CardHeader
-          title="Users"
-          description="Reset Auth passwords or PINs without opening the shop dashboard. Works even when the company is disabled."
-        />
-        <CardBody>
-          <CompanyUsers companyId={id} users={users} />
-        </CardBody>
-      </Card>
-    </div>
-  );
+  return <CompanyDetailPageClient companyId={id} users={users} />;
 }

@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { roundMoney } from "@double-a/shared-types";
-import { createPurchaseOrder, currentAppUser } from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
+import { addPurchaseOrderItem, addPurchaseOrderPayment, createPurchaseOrder } from "@double-a/api-client/queries";
+import { getAuthedClient, getCurrentUser } from "@/lib/api/session";
 import { isShopAdmin } from "@/lib/authz";
 
 export interface CreatePurchaseOrderInput {
@@ -29,6 +29,14 @@ export type CreatePurchaseOrderResult =
  * Called directly from the client builder (not bound to a <form action>), so
  * it takes a plain object rather than FormData — the item and term rows are
  * already structured on that side.
+ *
+ * GAP: the old `createPurchaseOrder` inserted header + items + terms in one
+ * call (see queries/purchase-orders.ts). `StorePurchaseOrderController` only
+ * accepts header fields — items/terms are separate nested POSTs afterward,
+ * not transactional. If a later item/term fails, the header (and whatever
+ * lines already landed) still exists and is editable from its detail page —
+ * this returns the created id either way so the caller can navigate there
+ * and finish by hand.
  */
 export async function createPurchaseOrderAction(
   input: CreatePurchaseOrderInput,
@@ -41,39 +49,43 @@ export async function createPurchaseOrderAction(
     return { ok: false, error: "Pick a valid order date." };
   }
 
-  const supabase = await getServerClient();
-  const user = await currentAppUser(supabase);
+  const user = await getCurrentUser();
   if (!isShopAdmin(user)) {
     return { ok: false, error: "Only the owner can create a purchase order." };
   }
 
+  const client = getAuthedClient();
+
   try {
-    const created = await createPurchaseOrder(supabase, {
-      header: {
-        supplier_id: input.supplierId,
-        order_date: input.orderDate,
-        expected_date: input.expectedDate,
-        reference_no: input.referenceNo,
-        notes: input.notes,
-        created_by: user.id,
-      },
-      items: input.items.map((item) => ({
+    const order = await createPurchaseOrder(client, {
+      supplierId: input.supplierId,
+      orderDate: input.orderDate,
+      expectedDate: input.expectedDate,
+      referenceNo: input.referenceNo,
+      notes: input.notes,
+    });
+
+    for (const item of input.items) {
+      await addPurchaseOrderItem(client, order.id, {
         productId: item.productId,
         productName: item.productName,
         quantityOrdered: Math.max(1, Math.round(item.quantityOrdered)),
         unitCost: roundMoney(item.unitCost),
-      })),
-      terms: input.terms.map((term) => ({
+      });
+    }
+
+    for (const term of input.terms) {
+      await addPurchaseOrderPayment(client, order.id, {
         termNumber: term.termNumber,
         dueDate: term.dueDate,
         amount: roundMoney(term.amount),
-      })),
-    });
+      });
+    }
 
     revalidatePath("/purchase-orders");
     revalidatePath("/suppliers");
     revalidatePath("/");
-    return { ok: true, id: created.id };
+    return { ok: true, id: order.id };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return { ok: false, error: `Could not create the purchase order: ${message}` };

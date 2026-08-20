@@ -7,6 +7,7 @@ import { formatPercent, marginPercent, stockLevel } from "@double-a/shared-types
 import { Badge, IconButton, Money, Table, Td, Th } from "@/components/ui";
 import { ConfirmDialog, Sheet } from "@/components/overlay";
 import type { CategoryOption } from "@/lib/category-options";
+import { useInvalidateProducts } from "@/lib/query/products";
 import { toggleProductActive } from "./actions";
 import { ProductForm } from "./product-form";
 
@@ -20,6 +21,7 @@ export function ProductsTable({
   const [editing, setEditing] = useState<Product | null>(null);
   const [hiding, setHiding] = useState<Product | null>(null);
   const [pending, startTransition] = useTransition();
+  const invalidate = useInvalidateProducts();
 
   function confirmHide() {
     if (!hiding) return;
@@ -28,6 +30,7 @@ export function ProductsTable({
     form.set("is_active", String(!hiding.isActive));
     startTransition(async () => {
       await toggleProductActive(form);
+      invalidate();
       setHiding(null);
     });
   }

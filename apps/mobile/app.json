@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "DOUBLE A POS",
+    "name": "POSPro",
     "slug": "double-a-pos",
     "version": "1.0.0",
     "orientation": "default",
@@ -35,7 +35,14 @@
     "plugins": [
       "expo-router",
       "expo-sqlite",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Used to search products by voice.",
+          "speechRecognitionPermission": "Used to search products by voice."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

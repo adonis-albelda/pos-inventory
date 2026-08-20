@@ -1,26 +1,17 @@
 import { Truck, TriangleAlert } from "lucide-react";
-import {
-  currentAppUser,
-  listAllSupplierProductIds,
-  listProducts,
-  listSupplierBalances,
-  listSuppliers,
-} from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/api/session";
 import { isShopAdmin } from "@/lib/authz";
-import { matchesQuery, paginateItems, parseListQuery } from "@/lib/list-query";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
-import { SuppliersPanel } from "./suppliers-panel";
+import { SuppliersPageClient } from "./suppliers-page-client";
 
-export default async function SuppliersPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string; page?: string }>;
-}) {
-  const params = await searchParams;
-  const { q, page } = parseListQuery(params);
-  const supabase = await getServerClient();
-  const user = await currentAppUser(supabase);
+/**
+ * Stays a (thin) Server Component so the admin-only gate runs before any of
+ * the client bundle/data below it ever mounts — same split as
+ * purchase-orders/page.tsx. Everything past the gate — search, filters,
+ * pagination — is client-side TanStack Query, in SuppliersPageClient.
+ */
+export default async function SuppliersPage() {
+  const user = await getCurrentUser();
 
   if (!isShopAdmin(user)) {
     return (
@@ -37,43 +28,5 @@ export default async function SuppliersPage({
     );
   }
 
-  const [suppliers, products, balances, productIdsBySupplier] = await Promise.all([
-    listSuppliers(supabase, { includeInactive: true }),
-    listProducts(supabase, { includeInactive: true }),
-    listSupplierBalances(supabase),
-    listAllSupplierProductIds(supabase),
-  ]);
-
-  const filtered = suppliers.filter((supplier) =>
-    matchesQuery(
-      [supplier.name, supplier.contactPerson, supplier.phone, supplier.email],
-      q,
-    ),
-  );
-  const { pageItems, page: safePage, pageCount, total, pageSize } = paginateItems(
-    filtered,
-    page,
-  );
-
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        icon={Truck}
-        title="Suppliers"
-        description="Who the shop buys stock from, what they carry, and what's owed on each order."
-      />
-
-      <SuppliersPanel
-        suppliers={pageItems}
-        balances={balances}
-        productIdsBySupplier={productIdsBySupplier}
-        products={products}
-        query={q}
-        page={safePage}
-        pageCount={pageCount}
-        total={total}
-        pageSize={pageSize}
-      />
-    </div>
-  );
+  return <SuppliersPageClient />;
 }

@@ -1,5 +1,5 @@
 import { marginPercent } from "@double-a/shared-types";
-import { listProducts } from "@double-a/supabase";
+import { listProducts } from "@double-a/api-client/queries";
 import { csvExport } from "@/lib/export-route";
 
 /**
@@ -8,8 +8,8 @@ import { csvExport } from "@/lib/export-route";
  * ignores it, because stock moves through Inventory alone.
  */
 export async function GET(): Promise<Response> {
-  return csvExport("products", async (supabase) => {
-    const products = await listProducts(supabase, { includeInactive: true });
+  return csvExport("products", async (client) => {
+    const products = await listProducts(client, { includeInactive: true });
 
     return {
       headers: [

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useTransition } from "react";
 import { KeyRound, Lock, Mail, UserRound } from "lucide-react";
 import type { User } from "@double-a/shared-types";
 import {
@@ -15,6 +15,7 @@ import {
   Th,
 } from "@/components/ui";
 import { EMPTY_FORM_STATE } from "@/lib/form-state";
+import { useInvalidateCompanyStats } from "@/lib/query/companies";
 import {
   addCompanyAdmin,
   openCompany,
@@ -41,7 +42,7 @@ export function AddAdminForm({ companyId }: { companyId: string }) {
           name="password"
           type="password"
           autoComplete="new-password"
-          minLength={6}
+          minLength={8}
           required
         />
       </Field>
@@ -73,7 +74,7 @@ export function AddAdminForm({ companyId }: { companyId: string }) {
   );
 }
 
-function ResetPasswordForm({ user }: { user: User }) {
+function ResetPasswordForm({ user, companyId }: { user: User; companyId: string }) {
   const [state, action, pending] = useActionState(
     resetCompanyUserPassword,
     EMPTY_FORM_STATE,
@@ -82,14 +83,14 @@ function ResetPasswordForm({ user }: { user: User }) {
   return (
     <form action={action} className="flex flex-col gap-2 sm:flex-row sm:items-end">
       <input type="hidden" name="id" value={user.id} />
-      <input type="hidden" name="must_change_password" value="true" />
+      <input type="hidden" name="company_id" value={companyId} />
       <Field label={`Password for ${user.name}`}>
         <Input
           icon={Lock}
           name="password"
           type="password"
           autoComplete="new-password"
-          minLength={6}
+          minLength={8}
           required
         />
       </Field>
@@ -102,7 +103,7 @@ function ResetPasswordForm({ user }: { user: User }) {
   );
 }
 
-function ResetPinForm({ user }: { user: User }) {
+function ResetPinForm({ user, companyId }: { user: User; companyId: string }) {
   const [state, action, pending] = useActionState(
     resetCompanyUserPin,
     EMPTY_FORM_STATE,
@@ -111,6 +112,7 @@ function ResetPinForm({ user }: { user: User }) {
   return (
     <form action={action} className="flex flex-col gap-2 sm:flex-row sm:items-end">
       <input type="hidden" name="id" value={user.id} />
+      <input type="hidden" name="company_id" value={companyId} />
       <Field label={`PIN for ${user.name}`}>
         <Input
           icon={KeyRound}
@@ -167,10 +169,10 @@ export function CompanyUsers({
                 <Td>
                   <div className="space-y-3 py-2">
                     {user.role === "admin" || user.role === "device" ? (
-                      <ResetPasswordForm user={user} />
+                      <ResetPasswordForm user={user} companyId={companyId} />
                     ) : null}
                     {user.role === "cashier" || user.role === "admin" ? (
-                      <ResetPinForm user={user} />
+                      <ResetPinForm user={user} companyId={companyId} />
                     ) : null}
                   </div>
                 </Td>
@@ -180,6 +182,29 @@ export function CompanyUsers({
         </Table>
       )}
     </div>
+  );
+}
+
+/** setCompanyActive (Server Action) doesn't redirect, so — unlike createCompany
+ * (see lib/query/companies.ts) — it's safe to await then invalidate directly. */
+function ToggleActiveButton({ companyId, isActive }: { companyId: string; isActive: boolean }) {
+  const [pending, startTransition] = useTransition();
+  const invalidate = useInvalidateCompanyStats();
+
+  function submit() {
+    const form = new FormData();
+    form.set("company_id", companyId);
+    form.set("is_active", isActive ? "false" : "true");
+    startTransition(async () => {
+      await setCompanyActive(form);
+      invalidate();
+    });
+  }
+
+  return (
+    <Button type="button" variant="secondary" loading={pending} onClick={submit}>
+      {isActive ? "Disable company" : "Enable company"}
+    </Button>
   );
 }
 
@@ -196,13 +221,7 @@ export function CompanyControls({
         <input type="hidden" name="company_id" value={companyId} />
         <Button type="submit">Open company</Button>
       </form>
-      <form action={setCompanyActive}>
-        <input type="hidden" name="company_id" value={companyId} />
-        <input type="hidden" name="is_active" value={isActive ? "false" : "true"} />
-        <Button type="submit" variant="secondary">
-          {isActive ? "Disable company" : "Enable company"}
-        </Button>
-      </form>
+      <ToggleActiveButton companyId={companyId} isActive={isActive} />
     </div>
   );
 }

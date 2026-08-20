@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Check, ImageOff, MapPin, Phone, Store } from "lucide-react";
 import { storeInitial, type StoreSettings } from "@double-a/shared-types";
 import {
@@ -13,10 +13,18 @@ import {
   Textarea,
 } from "@/components/ui";
 import { EMPTY_FORM_STATE } from "@/lib/form-state";
+import { useInvalidateSettings } from "@/lib/query/settings";
 import { saveStoreSettings } from "./actions";
 
 export function StoreForm({ settings }: { settings: StoreSettings }) {
   const [state, action, pending] = useActionState(saveStoreSettings, EMPTY_FORM_STATE);
+  const invalidate = useInvalidateSettings();
+
+  useEffect(() => {
+    if (state.ok) invalidate();
+    // invalidate is stable enough for this effect; only state.ok gates re-entry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.ok]);
 
   // Previewed from the chosen file rather than after the round trip, so the
   // owner sees the mark they picked before committing to it.

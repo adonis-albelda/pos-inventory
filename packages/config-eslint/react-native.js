@@ -1,3 +1,4 @@
+import reactHooks from "eslint-plugin-react-hooks";
 import { base } from "./base.js";
 
 export const reactNative = [
@@ -30,6 +31,14 @@ export const reactNative = [
         setInterval: "readonly",
         clearInterval: "readonly",
       },
+    },
+    plugins: { "react-hooks": reactHooks },
+    rules: {
+      // Same minimal pair as config-eslint/next.js — not v7's full
+      // "recommended" set, which adds several new React-Compiler-era rules
+      // unevaluated against this codebase.
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
     },
   },
 ];

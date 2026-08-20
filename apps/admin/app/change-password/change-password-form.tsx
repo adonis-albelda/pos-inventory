@@ -1,24 +1,73 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useMutation } from "@tanstack/react-query";
 import { Check, Lock } from "lucide-react";
+import { ApiError } from "@double-a/api-client";
+import { changePassword } from "@double-a/api-client/queries";
 import { Button, ErrorNote, Field, Input } from "@/components/ui";
-import { changeOwnPassword, type ChangePasswordState } from "./actions";
-
-const EMPTY: ChangePasswordState = { error: null };
+import { getBrowserApiClient } from "@/lib/api/browser-client";
 
 export function ChangePasswordForm() {
-  const [state, action, pending] = useActionState(changeOwnPassword, EMPTY);
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: (input: { currentPassword: string; password: string }) =>
+      changePassword(getBrowserApiClient(), input),
+    onSuccess: () => router.push("/"),
+    onError: (cause) => {
+      if (cause instanceof ApiError && cause.isValidation) {
+        setError(cause.errors?.current_password?.[0] ?? "That current password is incorrect.");
+        return;
+      }
+      setError(cause instanceof Error ? cause.message : "Could not reach the server.");
+    },
+  });
+
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    const formData = new FormData(event.currentTarget);
+    const currentPassword = String(formData.get("current_password") ?? "");
+    const password = String(formData.get("password") ?? "");
+    const confirm = String(formData.get("confirm") ?? "");
+
+    if (!currentPassword) {
+      setError("Enter your current password.");
+      return;
+    }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    if (password !== confirm) {
+      setError("Those passwords do not match.");
+      return;
+    }
+
+    mutation.mutate({ currentPassword, password });
+  }
 
   return (
-    <form action={action} className="mt-5 space-y-4">
+    <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+      <Field label="Current password">
+        <Input
+          icon={Lock}
+          name="current_password"
+          type="password"
+          autoComplete="current-password"
+          required
+        />
+      </Field>
       <Field label="New password">
         <Input
           icon={Lock}
           name="password"
           type="password"
           autoComplete="new-password"
-          minLength={6}
+          minLength={8}
           required
         />
       </Field>
@@ -28,13 +77,13 @@ export function ChangePasswordForm() {
           name="confirm"
           type="password"
           autoComplete="new-password"
-          minLength={6}
+          minLength={8}
           required
         />
       </Field>
-      {state.error ? <ErrorNote>{state.error}</ErrorNote> : null}
-      <Button type="submit" loading={pending} icon={Check} className="w-full">
-        {pending ? "Saving..." : "Save and continue"}
+      {error ? <ErrorNote>{error}</ErrorNote> : null}
+      <Button type="submit" loading={mutation.isPending} icon={Check} className="w-full">
+        {mutation.isPending ? "Saving..." : "Save and continue"}
       </Button>
     </form>
   );

@@ -1,17 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { PurchaseOrderStatus } from "@double-a/shared-types";
+import type { PurchaseOrderStatus, User } from "@double-a/shared-types";
 import { isValidQuantity, QUANTITY_DECIMALS } from "@double-a/shared-types";
 import {
-  currentAppUser,
   getProduct,
   markPaymentPaid,
   markPaymentUnpaid,
   receivePurchaseOrderItem,
   setPurchaseOrderStatus,
-} from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
+} from "@double-a/api-client/queries";
+import type { ApiClient } from "@double-a/api-client";
+import { getAuthedClient, getCurrentUser } from "@/lib/api/session";
 import { isShopAdmin } from "@/lib/authz";
 
 /** draft -> ordered and (draft | ordered) -> cancelled are the only manual jumps. */
@@ -24,19 +24,20 @@ function revalidatePurchaseOrderViews(id: string) {
   revalidatePath("/");
 }
 
-async function adminContext() {
-  const supabase = await getServerClient();
-  const user = await currentAppUser(supabase);
+async function adminContext(): Promise<{ client: ApiClient; user: User } | null> {
+  const user = await getCurrentUser();
   if (!isShopAdmin(user)) return null;
-  return { supabase, user };
+  return { client: getAuthedClient(), user };
 }
 
+/** currentReceived comes off the already-loaded PO detail — no GET to refetch it from (see queries/purchase-orders.ts). */
 export async function receivePurchaseOrderItemAction(
   formData: FormData,
 ): Promise<{ error: string | null }> {
   const itemId = String(formData.get("item_id") ?? "");
   const purchaseOrderId = String(formData.get("purchase_order_id") ?? "");
   const productId = String(formData.get("product_id") ?? "") || null;
+  const currentReceived = Number(formData.get("current_received") ?? 0);
   const quantity = Number(formData.get("quantity") ?? 0);
 
   if (!itemId || !purchaseOrderId) return { error: "Missing line item." };
@@ -49,7 +50,7 @@ export async function receivePurchaseOrderItemAction(
 
   // The product decides whether a fraction is allowed. Whole-number products
   // reject a decimal rather than silently rounding what actually arrived.
-  const product = productId ? await getProduct(ctx.supabase, productId) : null;
+  const product = productId ? await getProduct(ctx.client, productId) : null;
   const allowDecimal = product?.allowDecimal ?? false;
   const received = Number(quantity.toFixed(QUANTITY_DECIMALS));
   if (!isValidQuantity(received, allowDecimal, 0.001)) {
@@ -61,12 +62,11 @@ export async function receivePurchaseOrderItemAction(
   }
 
   try {
-    await receivePurchaseOrderItem(ctx.supabase, {
+    await receivePurchaseOrderItem(ctx.client, {
       itemId,
       purchaseOrderId,
-      productId,
+      currentQuantityReceived: currentReceived,
       quantity: received,
-      createdBy: ctx.user.id,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -85,7 +85,7 @@ export async function markPaymentPaidAction(formData: FormData): Promise<void> {
   const ctx = await adminContext();
   if (!ctx) return;
 
-  await markPaymentPaid(ctx.supabase, paymentId);
+  await markPaymentPaid(ctx.client, paymentId, purchaseOrderId);
   revalidatePurchaseOrderViews(purchaseOrderId);
 }
 
@@ -97,7 +97,7 @@ export async function markPaymentUnpaidAction(formData: FormData): Promise<void>
   const ctx = await adminContext();
   if (!ctx) return;
 
-  await markPaymentUnpaid(ctx.supabase, paymentId);
+  await markPaymentUnpaid(ctx.client, paymentId, purchaseOrderId);
   revalidatePurchaseOrderViews(purchaseOrderId);
 }
 
@@ -109,6 +109,6 @@ export async function updatePurchaseOrderStatusAction(formData: FormData): Promi
   const ctx = await adminContext();
   if (!ctx) return;
 
-  await setPurchaseOrderStatus(ctx.supabase, id, status as PurchaseOrderStatus);
+  await setPurchaseOrderStatus(ctx.client, id, status as PurchaseOrderStatus);
   revalidatePurchaseOrderViews(id);
 }

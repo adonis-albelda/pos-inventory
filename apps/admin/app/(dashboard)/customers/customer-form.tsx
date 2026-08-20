@@ -6,6 +6,7 @@ import { CUSTOMER_FIELD_MAX_LENGTH } from "@double-a/shared-types";
 import type { Customer } from "@double-a/shared-types";
 import { Button, ErrorNote, Field, Input, SuccessNote } from "@/components/ui";
 import { EMPTY_FORM_STATE } from "@/lib/form-state";
+import { useInvalidateCustomers } from "@/lib/query/customers";
 import { saveCustomer } from "./actions";
 
 export function CustomerForm({
@@ -16,9 +17,15 @@ export function CustomerForm({
   onDone?: () => void;
 }) {
   const [state, action, pending] = useActionState(saveCustomer, EMPTY_FORM_STATE);
+  const invalidate = useInvalidateCustomers();
 
   useEffect(() => {
-    if (state.ok) onDone?.();
+    if (state.ok) {
+      invalidate();
+      onDone?.();
+    }
+    // invalidate is stable enough for this effect; only state.ok/onDone gate re-entry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.ok, onDone]);
 
   return (

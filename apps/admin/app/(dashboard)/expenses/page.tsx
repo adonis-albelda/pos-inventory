@@ -1,21 +1,17 @@
 import { TriangleAlert, Wallet } from "lucide-react";
-import { currentAppUser, listExpenses } from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/api/session";
 import { isShopAdmin } from "@/lib/authz";
-import { matchesQuery, paginateItems, parseListQuery } from "@/lib/list-query";
-import { storeToday } from "@/lib/date-range";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
-import { ExpensesPanel } from "./expenses-panel";
+import { ExpensesPageClient } from "./expenses-page-client";
 
-export default async function ExpensesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string; page?: string }>;
-}) {
-  const params = await searchParams;
-  const { q, page } = parseListQuery(params);
-  const supabase = await getServerClient();
-  const user = await currentAppUser(supabase);
+/**
+ * Stays a (thin) Server Component so the admin-only gate runs before any of
+ * the client bundle/data below it ever mounts — same split as
+ * suppliers/page.tsx. Everything past the gate — search and pagination — is
+ * client-side TanStack Query, in ExpensesPageClient.
+ */
+export default async function ExpensesPage() {
+  const user = await getCurrentUser();
 
   if (!isShopAdmin(user)) {
     return (
@@ -32,35 +28,5 @@ export default async function ExpensesPage({
     );
   }
 
-  const expenses = await listExpenses(supabase);
-  const filtered = expenses.filter((expense) =>
-    matchesQuery(
-      [expense.description, expense.category, expense.note],
-      q,
-    ),
-  );
-  const { pageItems, page: safePage, pageCount, total, pageSize } = paginateItems(
-    filtered,
-    page,
-  );
-
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        icon={Wallet}
-        title="Expenses"
-        description="Rent, utilities, wages and other outlays. Dashboard net is revenue minus these."
-      />
-
-      <ExpensesPanel
-        expenses={pageItems}
-        defaultDate={storeToday()}
-        query={q}
-        page={safePage}
-        pageCount={pageCount}
-        total={total}
-        pageSize={pageSize}
-      />
-    </div>
-  );
+  return <ExpensesPageClient />;
 }

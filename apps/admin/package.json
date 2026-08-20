@@ -10,11 +10,10 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@double-a/api-client": "workspace:*",
     "@double-a/shared-types": "workspace:*",
-    "@double-a/supabase": "workspace:*",
     "@double-a/ui": "workspace:*",
-    "@supabase/ssr": "^0.12.4",
-    "@supabase/supabase-js": "^2.111.0",
+    "@tanstack/react-query": "^5.90.2",
     "exceljs": "^4.4.0",
     "jszip": "^3.10.1",
     "lucide-react": "^1.28.0",
@@ -23,6 +22,7 @@
     "qrcode": "^1.5.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "server-only": "^0.0.1",
     "textract": "^2.5.0"
   },
   "devDependencies": {

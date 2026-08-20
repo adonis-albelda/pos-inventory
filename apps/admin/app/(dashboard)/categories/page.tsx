@@ -1,35 +1,23 @@
+"use client";
+
+import { useSearchParams } from "next/navigation";
 import { FolderTree } from "lucide-react";
-import { countProductsByCategory, listCategories } from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
+import type { Category } from "@double-a/shared-types";
 import { rollupProductCounts, toCategoryOptions } from "@/lib/category-options";
 import { matchesQuery, paginateItems, parseListQuery } from "@/lib/list-query";
-import { PageHeader } from "@/components/ui";
+import { Card, PageHeader } from "@/components/ui";
 import { CategoriesPanel } from "./categories-panel";
+import { useCategories, useCategoryProductCounts } from "@/lib/query/categories";
 
-export default async function CategoriesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string; page?: string }>;
-}) {
-  const params = await searchParams;
-  const { q, page } = parseListQuery(params);
-  const supabase = await getServerClient();
+export default function CategoriesPage() {
+  const searchParams = useSearchParams();
+  const { q, page } = parseListQuery({
+    q: searchParams.get("q") ?? undefined,
+    page: searchParams.get("page") ?? undefined,
+  });
 
-  const [categories, ownCounts] = await Promise.all([
-    listCategories(supabase, { includeInactive: true }),
-    countProductsByCategory(supabase, { includeInactive: true }),
-  ]);
-
-  const options = toCategoryOptions(categories);
-  const productCounts = rollupProductCounts(options, ownCounts);
-
-  const filtered = options.filter((category) =>
-    matchesQuery([category.name, category.path], q),
-  );
-  const { pageItems, page: safePage, pageCount, total, pageSize } = paginateItems(
-    filtered,
-    page,
-  );
+  const categoriesQuery = useCategories({ includeInactive: true });
+  const countsQuery = useCategoryProductCounts({ includeInactive: true });
 
   return (
     <div className="space-y-6">
@@ -39,16 +27,53 @@ export default async function CategoriesPage({
         description="How the shop is laid out — Plumbing / Pipes / PVC. Products carry the full path, so a rename reaches every one of them."
       />
 
-      <CategoriesPanel
-        categories={pageItems}
-        allCategories={options}
-        productCounts={productCounts}
-        query={q}
-        page={safePage}
-        pageCount={pageCount}
-        total={total}
-        pageSize={pageSize}
-      />
+      {categoriesQuery.isPending || countsQuery.isPending ? (
+        <Card className="px-4 py-8 text-center text-body text-ink-muted">Loading…</Card>
+      ) : categoriesQuery.isError ? (
+        <Card className="px-4 py-8 text-center text-body text-danger">
+          {categoriesQuery.error instanceof Error
+            ? categoriesQuery.error.message
+            : "Could not load categories."}
+        </Card>
+      ) : (
+        <CategoriesBody
+          categories={categoriesQuery.data ?? []}
+          productCounts={countsQuery.data ?? {}}
+          q={q}
+          page={page}
+        />
+      )}
     </div>
+  );
+}
+
+function CategoriesBody({
+  categories,
+  productCounts: ownCounts,
+  q,
+  page,
+}: {
+  categories: Category[];
+  productCounts: Record<string, number>;
+  q: string;
+  page: number;
+}) {
+  const options = toCategoryOptions(categories);
+  const productCounts = rollupProductCounts(options, ownCounts);
+
+  const filtered = options.filter((category) => matchesQuery([category.name, category.path], q));
+  const { pageItems, page: safePage, pageCount, total, pageSize } = paginateItems(filtered, page);
+
+  return (
+    <CategoriesPanel
+      categories={pageItems}
+      allCategories={options}
+      productCounts={productCounts}
+      query={q}
+      page={safePage}
+      pageCount={pageCount}
+      total={total}
+      pageSize={pageSize}
+    />
   );
 }

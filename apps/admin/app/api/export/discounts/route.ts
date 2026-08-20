@@ -1,4 +1,4 @@
-import { reportDiscounts } from "@double-a/supabase";
+import { reportDiscounts } from "@double-a/api-client/queries";
 import { resolveRange } from "@/lib/date-range";
 import { csvExport } from "@/lib/export-route";
 
@@ -10,8 +10,8 @@ export async function GET(request: Request): Promise<Response> {
     to: params.get("to") ?? undefined,
   });
 
-  return csvExport("discounts", async (supabase) => {
-    const rows = await reportDiscounts(supabase, range);
+  return csvExport("discounts", async (client) => {
+    const rows = await reportDiscounts(client, range);
 
     return {
       headers: [

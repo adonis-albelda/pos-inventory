@@ -21,6 +21,7 @@ import {
   SuccessNote,
 } from "@/components/ui";
 import { EMPTY_FORM_STATE } from "@/lib/form-state";
+import { useInvalidateInventory } from "@/lib/query/inventory";
 import { loadProductForPicker, moveStock, searchProductsForPicker } from "./actions";
 
 function cx(...parts: (string | false | null | undefined)[]): string {
@@ -60,6 +61,7 @@ export function StockForm({
   onDone?: () => void;
 }) {
   const [state, action, pending] = useActionState(moveStock, EMPTY_FORM_STATE);
+  const invalidate = useInvalidateInventory();
   const [productId, setProductId] = useState(defaultProductId ?? "");
   const [product, setProduct] = useState<Product | null>(null);
   const [mode, setMode] = useState<Mode>("in");
@@ -74,7 +76,12 @@ export function StockForm({
   }, [mode]);
 
   useEffect(() => {
-    if (state.ok) onDone?.();
+    if (state.ok) {
+      invalidate();
+      onDone?.();
+    }
+    // invalidate is stable enough for this effect; only state.ok/onDone gate re-entry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.ok, onDone]);
 
   useEffect(() => {

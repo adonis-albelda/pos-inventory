@@ -1,92 +1,87 @@
 import type { PullResult } from "@double-a/shared-types";
-import {
-  countProducts,
-  fetchProductsChangedSince,
-  fetchReceiptLayout,
-  fetchStoreSettings,
-  fetchUsersChangedSince,
-  listCategories,
-  listCustomers,
-} from "@double-a/supabase";
+import { countProducts, pullSync } from "@double-a/api-client/queries";
 import { replaceCategories } from "@/db/categories";
 import { replaceSyncedCustomers } from "@/db/customers";
 import { getSyncMeta, recordSyncSuccess } from "@/db/meta";
-import { countLocalProducts, upsertProducts } from "@/db/products";
+import { countLocalProducts, replaceProducts, upsertProducts } from "@/db/products";
 import { saveLocalReceiptLayout } from "@/db/receipt-layout";
 import { saveLocalStoreSettings } from "@/db/store";
-import { upsertUsers } from "@/db/users";
-import { getSupabase } from "@/lib/supabase";
+import { replaceUsers, upsertUsers } from "@/db/users";
+import { getApiClient } from "@/lib/api/session";
 
 /**
- * Step two of sync: master data down from Supabase, overwriting local rows.
- *
- * Incremental — only rows whose `updated_at` is past the high water mark from the
- * last pull. The mark advances to the newest `updated_at` the server actually
- * returned, so a fast or slow device clock cannot cause the next pull to skip a
- * row. When nothing changed, the mark stays put.
+ * Fetching is one HTTP round trip — there is no byte-level signal to report
+ * mid-flight, so it counts as a flat slice of the bar. Writing to SQLite is
+ * genuinely row-by-row, so products (almost always the biggest table by far)
+ * carries the rest of the bar, proportional to rows actually written.
  */
-export async function pull(options: { full?: boolean } = {}): Promise<PullResult> {
-  const supabase = getSupabase();
-  const meta = await getSyncMeta();
-  let since = options.full ? null : meta.highWaterMark;
+const FETCH_WEIGHT = 20;
 
-  // A PostgREST page used to stop at 1,000 rows. A device that already pulled
-  // can sit short of the office catalogue with a high water mark that will
-  // never fetch the missing SKUs. Fall back to a full product pull when counts differ.
+/**
+ * Step two of sync: master data down from the Tally API, overwriting local
+ * rows.
+ *
+ * Incremental — only rows whose `updated_at` is past the high water mark
+ * from the last pull. The mark advances to `server_time`, a timestamp the
+ * API captures atomically as part of the same request (`PullController`) —
+ * simpler and safer than the old approach of taking the max `updated_at`
+ * across the returned rows, and it always advances (there's no "nothing
+ * changed, mark stays put" case to reason about).
+ */
+export async function pull(
+  options: {
+    full?: boolean;
+    /**
+     * Wholesale replace instead of upsert for products/users — the Sync
+     * tab's explicit "Replace everything" action. Always implies a full
+     * fetch (`since` is meaningless against a table about to be dropped).
+     */
+    replace?: boolean;
+    onProgress?: (percent: number) => void;
+  } = {},
+): Promise<PullResult> {
+  const client = getApiClient();
+  const meta = await getSyncMeta();
+  let since = options.full || options.replace ? null : meta.highWaterMark;
+
+  // The old PostgREST page cap (1,000 rows) doesn't apply to the Tally API,
+  // but a device that fell behind before this migration could still be
+  // short of the office catalogue — keep the same count-mismatch fallback
+  // to a full product pull.
   if (since) {
     const [remoteCount, localCount] = await Promise.all([
-      countProducts(supabase, { includeInactive: true }),
+      countProducts(client, { includeInactive: true }),
       countLocalProducts(),
     ]);
     if (localCount < remoteCount) since = null;
   }
 
-  // Categories and customers come down whole every time, not since the high
-  // water mark. Both tables stay small, and a wholesale fetch is the only way a
-  // deleted row leaves this device — a "changed since" query returns nothing at
-  // all for a row that no longer exists.
-  //
-  // The store settings and receipt layout rows come down whole for the same
-  // reason: one row each, and the device must match what the office set today.
-  const [products, users, categories, customers, store, receiptLayout] =
-    await Promise.all([
-      fetchProductsChangedSince(supabase, since),
-      fetchUsersChangedSince(supabase, since),
-      listCategories(supabase),
-      listCustomers(supabase),
-      fetchStoreSettings(supabase),
-      fetchReceiptLayout(supabase),
-    ]);
+  const result = await pullSync(client, { since });
+  options.onProgress?.(FETCH_WEIGHT);
 
-  // PIN hashes stay on the server — unlock calls verify_pin live. Local users
-  // rows are for sale attribution after the shift starts, not credentials.
-  await upsertProducts(products);
-  await upsertUsers(users);
-  await replaceCategories(categories);
-  await replaceSyncedCustomers(customers);
-  await saveLocalStoreSettings(store);
-  await saveLocalReceiptLayout(receiptLayout);
+  const writeProducts = options.replace ? replaceProducts : upsertProducts;
+  const writeUsers = options.replace ? replaceUsers : upsertUsers;
 
-  // Categories, customers and the store row are deliberately absent from the
-  // mark: they are fetched whole regardless, and letting a rename push the mark
-  // forward would make the next pull skip product rows that changed in the same
-  // moment.
-  const timestamps = [
-    ...products.map((product) => product.updatedAt),
-    ...users.map((user) => user.updatedAt),
-  ].filter(Boolean);
+  await writeProducts(result.products, (done, total) => {
+    const span = 100 - FETCH_WEIGHT - 5;
+    options.onProgress?.(FETCH_WEIGHT + Math.round((done / total) * span));
+  });
 
-  const highWaterMark =
-    timestamps.length > 0
-      ? timestamps.reduce((latest, value) => (value > latest ? value : latest))
-      : meta.highWaterMark;
+  // PIN hashes stay on the server — unlock calls verify-pin live. Local
+  // users rows are for sale attribution after the shift starts, not
+  // credentials.
+  await writeUsers(result.users);
+  await replaceCategories(result.categories);
+  await replaceSyncedCustomers(result.customers);
+  if (result.storeSettings) await saveLocalStoreSettings(result.storeSettings);
+  if (result.receiptLayout) await saveLocalReceiptLayout(result.receiptLayout);
 
-  const finishedAt = new Date().toISOString();
-  await recordSyncSuccess(finishedAt, highWaterMark);
+  await recordSyncSuccess(new Date().toISOString(), result.serverTime);
+  options.onProgress?.(100);
 
   return {
-    products: products.length,
-    users: users.length,
-    serverTimestamp: highWaterMark ?? finishedAt,
+    products: result.products.length,
+    users: result.users.length,
+    serverTimestamp: result.serverTime,
   };
 }

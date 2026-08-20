@@ -12,6 +12,7 @@ import {
 import { Badge, IconButton, Table, Td, Th } from "@/components/ui";
 import { ConfirmDialog, Sheet } from "@/components/overlay";
 import type { CategoryOption } from "@/lib/category-options";
+import { useInvalidateCategories } from "@/lib/query/categories";
 import { removeCategory, toggleCategoryActive } from "./actions";
 import { CategoryForm } from "./category-form";
 
@@ -28,6 +29,7 @@ export function CategoriesTree({
   const [deleting, setDeleting] = useState<CategoryOption | null>(null);
   const [hiding, setHiding] = useState<CategoryOption | null>(null);
   const [pending, startTransition] = useTransition();
+  const invalidate = useInvalidateCategories();
 
   function confirmDelete() {
     if (!deleting) return;
@@ -35,6 +37,7 @@ export function CategoriesTree({
     form.set("id", deleting.id);
     startTransition(async () => {
       await removeCategory(form);
+      invalidate();
       setDeleting(null);
     });
   }
@@ -46,6 +49,7 @@ export function CategoriesTree({
     form.set("is_active", String(!hiding.isActive));
     startTransition(async () => {
       await toggleCategoryActive(form);
+      invalidate();
       setHiding(null);
     });
   }

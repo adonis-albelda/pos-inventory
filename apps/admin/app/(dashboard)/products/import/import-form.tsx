@@ -102,6 +102,22 @@ export function ImportForm() {
         </div>
       ) : null}
 
+      {state.failures && state.failures.length > 0 ? (
+        <div className="space-y-2 rounded-sm border border-danger/50 bg-danger/8 px-3 py-2">
+          <p className="flex items-start gap-2 text-body font-medium text-danger">
+            <TriangleAlert size={16} className="mt-0.5 shrink-0" />
+            Rows that were accepted but failed to save:
+          </p>
+          <ul className="space-y-1 text-caption text-ink-muted">
+            {state.failures.map((failure) => (
+              <li key={failure.line}>
+                Line {failure.line} ({failure.sku || "—"}): {failure.error}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {plan ? (
         <div className="space-y-4">
           {/* A real boundary: above is the file, below is what it would do. */}

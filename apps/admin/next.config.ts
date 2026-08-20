@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript source, not built output.
-  transpilePackages: ["@double-a/shared-types", "@double-a/supabase", "@double-a/ui"],
+  transpilePackages: ["@double-a/shared-types", "@double-a/api-client", "@double-a/ui"],
   typedRoutes: true,
   // textract shells out to tesseract — keep it external so Next does not bundle it.
   serverExternalPackages: ["textract"],

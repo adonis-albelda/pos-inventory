@@ -6,7 +6,6 @@ import {
   validateProductInput,
   type ProductUnit,
 } from "@double-a/shared-types";
-import type { TablesInsert } from "@double-a/supabase";
 import { toCategoryOptions } from "@/lib/category-options";
 import { parseCsvTable } from "@/lib/csv";
 
@@ -55,11 +54,26 @@ export const TEMPLATE_EXAMPLE = [
 
 const KNOWN_COLUMNS = new Set<string>([...REQUIRED_COLUMNS, ...OPTIONAL_COLUMNS]);
 
-/** Structurally unable to carry stock or the trigger-owned category path. */
-export type ProductImportRow = Omit<
-  TablesInsert<"products">,
-  "stock_quantity" | "category"
->;
+/**
+ * Snake_case, matching the CSV columns and the field-by-field business logic
+ * below. Structurally unable to carry stock or the trigger-owned category
+ * path. `import/actions.ts` maps each accepted row to the api-client's
+ * camelCase `ProductInput` right before calling `createProduct`/`updateProduct`.
+ */
+export interface ProductImportRow {
+  name: string;
+  sku: string;
+  price: number;
+  cost_price: number;
+  unit: string;
+  allow_decimal: boolean;
+  barcode: string | null;
+  reorder_point: number;
+  bulk_price: number | null;
+  bulk_min_quantity: number | null;
+  category_id: string | null;
+  is_active: boolean;
+}
 
 export type ImportAction = "create" | "update" | "reject";
 

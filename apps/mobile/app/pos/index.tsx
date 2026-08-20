@@ -19,8 +19,10 @@ import {
   CheckCircle2,
   ChevronRight,
   CreditCard,
+  FolderTree,
   Info,
   MapPin,
+  Mic,
   Minus,
   PackageSearch,
   Pencil,
@@ -63,7 +65,9 @@ import {
 import { listLocalCategories, type LocalCategory } from "@/db/categories";
 import { searchLocalCustomers, upsertLocalCustomer } from "@/db/customers";
 import {
+  countActiveLocalProducts,
   findLocalProductByBarcode,
+  listLocalProducts,
   listLocalProductsByIds,
   listLocalProductsPage,
   PRODUCT_PAGE_SIZE,
@@ -81,8 +85,9 @@ import { useSession } from "@/lib/session";
 import { printReceipt } from "@/printing/receipt";
 import { useSync } from "@/sync/sync-provider";
 import { BottomSheet } from "@/components/bottom-sheet";
-import { CategoryTabs, type CategoryFilter } from "@/components/category-tabs";
+import { CategoryDialog, type CategoryFilter } from "@/components/category-tabs";
 import { ProductTile } from "@/components/product-tile";
+import { VoiceSearchModal } from "@/components/voice-search-modal";
 import {
   Badge,
   Button,
@@ -109,14 +114,24 @@ const PAYMENT_METHODS: { value: PaymentMethod; label: string; icon: LucideIcon }
 ];
 
 /**
+ * A backordered line has no real ceiling — the cashier already confirmed the
+ * sale with nothing on the shelf, so there is nothing left to cap against.
+ * Restocking later just adds to `stock_quantity` (apply_inventory_movement is
+ * a plain sum), which settles the negative automatically — no separate
+ * fulfillment step needed.
+ */
+const BACKORDER_CAP = 9999;
+
+/**
  * The most a line may sell. A whole-number product floors its estimated stock
  * (you cannot sell half a box); a decimal one keeps the fraction (2.5 kg is a
- * real amount on the shelf). Oversell past this is still possible by typing —
- * that is a known, flagged tradeoff, not something blocked here.
+ * real amount on the shelf). At zero or below, the product is out of stock —
+ * see BACKORDER_CAP.
  */
 function stockCapFor(estimatedStock: number, allowDecimal: boolean): number {
-  if (allowDecimal) return Math.max(0, Number(estimatedStock.toFixed(QUANTITY_DECIMALS)));
-  return Math.max(0, Math.floor(estimatedStock));
+  if (estimatedStock <= 0) return BACKORDER_CAP;
+  if (allowDecimal) return Number(estimatedStock.toFixed(QUANTITY_DECIMALS));
+  return Math.floor(estimatedStock);
 }
 
 export default function SellScreen() {
@@ -162,6 +177,16 @@ export default function SellScreen() {
   const [draftPickerOpen, setDraftPickerOpen] = useState(false);
   const [categories, setCategories] = useState<LocalCategory[]>([]);
   const [category, setCategory] = useState<CategoryFilter>(null);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [voiceSearchOpen, setVoiceSearchOpen] = useState(false);
+  const [voiceVocabulary, setVoiceVocabulary] = useState<string[]>([]);
+
+  /** Product names, fetched fresh each time the mic opens — biases recognition toward this shop's actual catalogue. */
+  function openVoiceSearch() {
+    void listLocalProducts().then((rows) => setVoiceVocabulary(rows.map((row) => row.name)));
+    setVoiceSearchOpen(true);
+  }
 
   const refreshDrafts = useCallback(async () => {
     const next = await listCartDrafts();
@@ -177,8 +202,12 @@ export default function SellScreen() {
   }, []);
 
   const loadCategories = useCallback(async () => {
-    const nextCategories = await listLocalCategories();
+    const [nextCategories, nextTotal] = await Promise.all([
+      listLocalCategories(),
+      countActiveLocalProducts(),
+    ]);
     setCategories(nextCategories);
+    setTotalProducts(nextTotal);
     // A pull can retire the shelf the cashier is standing on. Falling back to
     // everything is the honest thing: a lit tab for a category that no longer
     // exists, filtering nothing, would read as an empty catalogue.
@@ -320,11 +349,32 @@ export default function SellScreen() {
     return { ...line, quantity, unitPrice: priceForQuantity(product, quantity) };
   }
 
-  /** No confirmation here on purpose — adding to a cart is speed critical. */
+  /**
+   * No confirmation once a line exists — adding to a cart is speed critical.
+   * The one exception is the first tap on a product sitting at zero: that's a
+   * backorder decision, not a speed-critical tap, so it gets asked once.
+   */
   function addToCart(product: ProductWithEstimatedStock) {
     rememberProducts([product]);
+    const alreadyInCart = lines.some((line) => line.productId === product.id);
+
+    if (product.estimatedStock <= 0 && !alreadyInCart) {
+      Alert.alert(
+        "Out of stock",
+        `${product.name} shows none on hand. Sell it anyway? New stock added later settles this automatically.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Sell anyway", onPress: () => commitAddToCart(product) },
+        ],
+      );
+      return;
+    }
+
+    commitAddToCart(product);
+  }
+
+  function commitAddToCart(product: ProductWithEstimatedStock) {
     const stockCap = stockCapFor(product.estimatedStock, product.allowDecimal);
-    if (stockCap <= 0) return;
 
     setLines((current) => {
       const existing = current.find((line) => line.productId === product.id);
@@ -371,6 +421,21 @@ export default function SellScreen() {
 
     const line = lines.find((entry) => entry.productId === productId);
     if (line && line.quantity + delta <= 0) forgetOverride(productId);
+  }
+
+  /** Holding a cart row asks once, then drops the whole line regardless of quantity. */
+  function confirmRemoveLine(productId: string, productName: string) {
+    Alert.alert(`Remove ${productName}?`, "This takes it off the cart entirely.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => {
+          setLines((current) => current.filter((line) => line.productId !== productId));
+          forgetOverride(productId);
+        },
+      },
+    ]);
   }
 
   /** Absolute qty — type a number instead of tapping +/− one at a time. */
@@ -617,13 +682,13 @@ export default function SellScreen() {
             gap: space.sm,
             minHeight: compact ? 48 : 56,
             borderWidth: 1,
-            borderColor: color.primarySoft,
+            borderColor: "rgba(255,255,255,0.25)",
             borderRadius: radius.sm,
-            backgroundColor: color.surface,
+            backgroundColor: color.primary,
             paddingHorizontal: space.md,
           }}
         >
-          <Search size={18} color={color.primary} strokeWidth={2} />
+          <Search size={18} color={color.onPrimary} strokeWidth={2} />
           <TextInput
             value={search}
             onChangeText={setSearch}
@@ -634,34 +699,65 @@ export default function SellScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             placeholder={compact ? "Search or scan" : "Search by name or SKU, or scan a barcode"}
-            placeholderTextColor={color.inkMuted}
+            placeholderTextColor="rgba(255,255,255,0.7)"
             numberOfLines={1}
             style={{
               flex: 1,
               minHeight: compact ? 48 : 56,
               fontSize: fontSize.bodyLg,
-              color: color.ink,
+              color: color.onPrimary,
             }}
           />
           {search ? (
-            <IconButton
-              icon={X}
-              label="Clear search"
-              size={36}
-              style={{ borderWidth: 0, backgroundColor: "transparent" }}
+            <Pressable
               onPress={() => setSearch("")}
-            />
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+              hitSlop={4}
+              style={{ width: 36, height: 36, alignItems: "center", justifyContent: "center" }}
+            >
+              <X size={20} color={color.onPrimary} strokeWidth={2} />
+            </Pressable>
           ) : null}
+          <Pressable
+            onPress={openVoiceSearch}
+            accessibilityRole="button"
+            accessibilityLabel="Search by voice"
+            hitSlop={4}
+            style={{ width: 36, height: 36, alignItems: "center", justifyContent: "center" }}
+          >
+            <Mic size={20} color={color.onPrimary} strokeWidth={2} />
+          </Pressable>
         </View>
 
         {/* Hidden while searching: the results already ignore the filter, so a
-            lit-up tab beside them would be a lie. */}
+            lit-up button beside them would be a lie. */}
         {search.trim() ? null : (
-          <CategoryTabs
-            categories={categories}
-            value={category}
-            onChange={setCategory}
-          />
+          <View style={{ flexDirection: "row", gap: space.sm }}>
+            <Button
+              label={
+                category
+                  ? (() => {
+                      const selected = categories.find((entry) => entry.id === category);
+                      return selected
+                        ? `${selected.name} (${selected.productCount} items)`
+                        : "Filter by category";
+                    })()
+                  : `All products (${totalProducts} items)`
+              }
+              icon={FolderTree}
+              variant={category ? "primary" : "secondary"}
+              style={{ flex: 1 }}
+              onPress={() => setCategoryDialogOpen(true)}
+            />
+            <Button
+              label={hasDraft ? `Drafts (${drafts.length})` : "Draft sales"}
+              icon={BookmarkCheck}
+              variant={hasDraft ? "primary" : "secondary"}
+              style={{ flex: 1 }}
+              onPress={openDraftPicker}
+            />
+          </View>
         )}
 
         <View style={{ flex: 1, minHeight: 0, gap: space.sm }}>
@@ -850,6 +946,7 @@ export default function SellScreen() {
                     onChange={(delta) => changeQuantity(item.productId, delta)}
                     onEditQuantity={() => setQtyEditingId(item.productId)}
                     onEditPrice={() => setEditingId(item.productId)}
+                    onRemove={() => confirmRemoveLine(item.productId, item.productName)}
                   />
                 )}
               />
@@ -890,15 +987,18 @@ export default function SellScreen() {
             {/* The one number the cashier reads out loud, so it sits on its own
                 tinted band rather than blending into the line items. */}
             <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "baseline",
-                gap: space.sm,
-                padding: space.md,
-                borderRadius: radius.sm,
-                backgroundColor: color.primaryTint,
-              }}
+              style={[
+                {
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  gap: space.sm,
+                  padding: space.md,
+                  borderRadius: radius.sm,
+                  backgroundColor: color.primaryTint,
+                },
+                styles.floatShadow,
+              ]}
             >
               <View>
                 <Text
@@ -1097,13 +1197,6 @@ export default function SellScreen() {
           onConfirm={() => void finishSale()}
         />
 
-        <DraftPickerSheet
-          open={draftPickerOpen}
-          drafts={drafts}
-          onClose={() => setDraftPickerOpen(false)}
-          onPick={resumeDraft}
-          onDiscard={discardDraft}
-        />
       </CartShell>
 
       {compact ? (
@@ -1113,6 +1206,35 @@ export default function SellScreen() {
           onPress={() => setCartOpen(true)}
         />
       ) : null}
+
+      {/* Moved out of CartShell — the "Draft sales" toolbar button triggers this
+          directly from the main screen, not from inside the cart modal. */}
+      <DraftPickerSheet
+        open={draftPickerOpen}
+        drafts={drafts}
+        onClose={() => setDraftPickerOpen(false)}
+        onPick={resumeDraft}
+        onDiscard={discardDraft}
+      />
+
+      <CategoryDialog
+        open={categoryDialogOpen}
+        categories={categories}
+        totalProducts={totalProducts}
+        value={category}
+        onClose={() => setCategoryDialogOpen(false)}
+        onPick={(next) => {
+          setCategory(next);
+          setCategoryDialogOpen(false);
+        }}
+      />
+
+      <VoiceSearchModal
+        open={voiceSearchOpen}
+        onClose={() => setVoiceSearchOpen(false)}
+        onResult={(text) => setSearch(text)}
+        contextualStrings={voiceVocabulary}
+      />
     </View>
   );
 }
@@ -1124,6 +1246,7 @@ function CartRow({
   onChange,
   onEditQuantity,
   onEditPrice,
+  onRemove,
 }: {
   line: CartLine;
   product: ProductWithEstimatedStock | undefined;
@@ -1131,6 +1254,7 @@ function CartRow({
   onChange: (delta: number) => void;
   onEditQuantity: () => void;
   onEditPrice: () => void;
+  onRemove: () => void;
 }) {
   const stockCap = stockCapFor(line.availableStock, line.allowDecimal);
   const remaining = Math.max(0, stockCap - line.quantity);
@@ -1150,7 +1274,10 @@ function CartRow({
       : color.inkMuted;
 
   return (
-    <View
+    <Pressable
+      onLongPress={onRemove}
+      accessibilityRole="button"
+      accessibilityLabel={`${line.productName}, hold to remove from cart`}
       style={{
         flexDirection: "row",
         alignItems: "center",
@@ -1349,7 +1476,7 @@ function CartRow({
           />
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

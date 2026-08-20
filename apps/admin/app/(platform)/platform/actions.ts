@@ -1,130 +1,62 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
-import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Route } from "next";
-import { isValidPin, pinHashInput } from "@double-a/shared-types";
-import { createUser, updateUser } from "@double-a/supabase";
-import { createServiceRoleClient } from "@double-a/supabase/service";
+import { isValidPin } from "@double-a/shared-types";
+import { ApiError } from "@double-a/api-client";
+import {
+  createCompany as apiCreateCompany,
+  createUser,
+  listUsers,
+  openCompany as apiOpenCompany,
+  resetUserPassword,
+  resetUserPin,
+  updateCompany,
+} from "@double-a/api-client/queries";
 import type { FormState } from "@/lib/form-state";
-import { getServerClient } from "@/lib/supabase/server";
 import { requireSuperadmin } from "@/lib/platform";
-
-function hashPin(userId: string, pin: string): string {
-  return createHash("sha256").update(pinHashInput(userId, pin)).digest("hex");
-}
+import { createScopedClient } from "@/lib/api/client";
+import { exitActingSession, setActingSession } from "@/lib/api/session";
 
 function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (
-    error &&
-    typeof error === "object" &&
-    "message" in error &&
-    typeof (error as { message: unknown }).message === "string"
-  ) {
-    return (error as { message: string }).message;
+  if (error instanceof ApiError) {
+    const firstFieldError = error.errors ? Object.values(error.errors)[0]?.[0] : undefined;
+    return firstFieldError ?? error.message;
   }
+  if (error instanceof Error) return error.message;
   return "Unknown error";
 }
 
-function isAlreadyRegistered(message: string): boolean {
-  const lower = message.toLowerCase();
-  return (
-    lower.includes("already been registered") ||
-    lower.includes("already registered") ||
-    lower.includes("user already exists")
-  );
-}
+/**
+ * StoreCompanyController creates the company's first admin atomically but
+ * has no `must_change_password`/PIN fields (GAP — see migration notes) and
+ * returns only the company, not the admin's id. This opens the freshly
+ * created company (a superadmin action, not user-visible navigation — the
+ * caller's own session/acting-company cookie is untouched), finds the admin
+ * it just created, then rides `resetUserPassword`'s side effect of forcing
+ * `must_change_password = true` (setting it to the SAME password already
+ * chosen) and `resetUserPin` to apply the PIN — both superadmin-only
+ * endpoints, valid on this one-off scoped token regardless of company.
+ */
+async function bootstrapCompanyAdmin(companyId: string, password: string, pin: string): Promise<void> {
+  const { client: superadminClient } = await requireSuperadmin();
+  const opened = await apiOpenCompany(superadminClient, companyId);
+  const scoped = createScopedClient(opened.token);
 
-async function findAuthUserIdByEmail(
-  service: ReturnType<typeof createServiceRoleClient>,
-  email: string,
-): Promise<string | null> {
-  const needle = email.toLowerCase();
-  for (let page = 1; page <= 10; page += 1) {
-    const { data, error } = await service.auth.admin.listUsers({
-      page,
-      perPage: 200,
-    });
-    if (error) throw new Error(error.message);
-    const match = data.users.find((user) => user.email?.toLowerCase() === needle);
-    if (match) return match.id;
-    if (data.users.length < 200) break;
-  }
-  return null;
-}
+  const users = await listUsers(scoped, { includeInactive: true });
+  const admin = users.find((u) => u.role === "admin");
+  if (!admin) throw new Error("Company was created but its admin user could not be found to finish setup.");
 
-async function syncAuthPassword(opts: {
-  userId: string;
-  email: string;
-  password: string;
-  authUserId: string | null;
-}): Promise<void> {
-  const service = createServiceRoleClient();
-  let authUserId = opts.authUserId;
-
-  if (authUserId) {
-    const { error } = await service.auth.admin.updateUserById(authUserId, {
-      password: opts.password,
-      email: opts.email,
-      email_confirm: true,
-    });
-    if (error) {
-      authUserId = null;
-    } else {
-      return;
-    }
-  }
-
-  const created = await service.auth.admin.createUser({
-    email: opts.email,
-    password: opts.password,
-    email_confirm: true,
-  });
-
-  if (created.error) {
-    if (!isAlreadyRegistered(created.error.message)) {
-      throw new Error(created.error.message);
-    }
-    const existingId = await findAuthUserIdByEmail(service, opts.email);
-    if (!existingId) {
-      throw new Error(
-        "That email already has an Auth login, but it could not be found to link.",
-      );
-    }
-    const { error: updateError } = await service.auth.admin.updateUserById(
-      existingId,
-      { password: opts.password, email_confirm: true },
-    );
-    if (updateError) throw new Error(updateError.message);
-    authUserId = existingId;
-  } else {
-    if (!created.data.user) {
-      throw new Error("Auth did not return a user for this login.");
-    }
-    authUserId = created.data.user.id;
-  }
-
-  await service
-    .from("users")
-    .update({ auth_user_id: null })
-    .eq("auth_user_id", authUserId)
-    .neq("id", opts.userId);
-
-  const { error: linkError } = await service
-    .from("users")
-    .update({ auth_user_id: authUserId })
-    .eq("id", opts.userId);
-  if (linkError) throw new Error(linkError.message);
+  await resetUserPassword(scoped, admin.id, password);
+  await resetUserPin(scoped, admin.id, pin);
 }
 
 export async function createCompany(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  await requireSuperadmin();
+  const { client } = await requireSuperadmin();
 
   const name = String(formData.get("name") ?? "").trim();
   const adminName = String(formData.get("admin_name") ?? "").trim();
@@ -135,8 +67,8 @@ export async function createCompany(
   if (!name) return { error: "Company name is required.", ok: false };
   if (!adminName) return { error: "Admin name is required.", ok: false };
   if (!adminEmail) return { error: "Admin email is required.", ok: false };
-  if (adminPassword.length < 6) {
-    return { error: "Admin password must be at least 6 characters.", ok: false };
+  if (adminPassword.length < 8) {
+    return { error: "Admin password must be at least 8 characters.", ok: false };
   }
   if (!isValidPin(adminPin)) {
     return {
@@ -145,47 +77,14 @@ export async function createCompany(
     };
   }
 
-  const service = createServiceRoleClient();
-
   try {
-    const { data: company, error: companyError } = await service
-      .from("companies")
-      .insert({ name, is_active: true })
-      .select("id")
-      .single();
-    if (companyError) throw new Error(companyError.message);
-
-    const companyId = company.id;
-
-    const { error: settingsError } = await service.from("store_settings").insert({
-      company_id: companyId,
+    const company = await apiCreateCompany(client, {
       name,
+      adminName,
+      adminEmail,
+      adminPassword,
     });
-    if (settingsError) throw new Error(settingsError.message);
-
-    const { error: layoutError } = await service.from("receipt_layout").insert({
-      company_id: companyId,
-    });
-    if (layoutError) throw new Error(layoutError.message);
-
-    const adminId = randomUUID();
-    await createUser(service, {
-      id: adminId,
-      name: adminName,
-      email: adminEmail,
-      role: "admin",
-      company_id: companyId,
-      auth_user_id: null,
-      pin_hash: hashPin(adminId, adminPin),
-      can_sell: true,
-      must_change_password: true,
-    });
-    await syncAuthPassword({
-      userId: adminId,
-      email: adminEmail,
-      password: adminPassword,
-      authUserId: null,
-    });
+    await bootstrapCompanyAdmin(company.id, adminPassword, adminPin);
   } catch (error) {
     return { error: errorMessage(error), ok: false };
   }
@@ -194,11 +93,17 @@ export async function createCompany(
   redirect("/platform" as Route);
 }
 
+/**
+ * Creating a user under a company the superadmin has not "opened" for
+ * navigation needs a one-off scoped token (POST /users relies on
+ * company.context, which only resolves from the token) — issued and used
+ * here without touching the caller's own session/acting-company cookie.
+ */
 export async function addCompanyAdmin(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  await requireSuperadmin();
+  const { client } = await requireSuperadmin();
 
   const companyId = String(formData.get("company_id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -209,34 +114,21 @@ export async function addCompanyAdmin(
   if (!companyId) return { error: "Missing company.", ok: false };
   if (!name) return { error: "Name is required.", ok: false };
   if (!email) return { error: "Email is required.", ok: false };
-  if (password.length < 6) {
-    return { error: "Password must be at least 6 characters.", ok: false };
+  if (password.length < 8) {
+    return { error: "Password must be at least 8 characters.", ok: false };
   }
   if (pin && !isValidPin(pin)) {
     return { error: "PIN must be 4 to 6 digits.", ok: false };
   }
 
-  const service = createServiceRoleClient();
-
   try {
-    const adminId = randomUUID();
-    await createUser(service, {
-      id: adminId,
-      name,
-      email,
-      role: "admin",
-      company_id: companyId,
-      auth_user_id: null,
-      pin_hash: pin ? hashPin(adminId, pin) : null,
-      can_sell: true,
-      must_change_password: true,
-    });
-    await syncAuthPassword({
-      userId: adminId,
-      email,
-      password,
-      authUserId: null,
-    });
+    const opened = await apiOpenCompany(client, companyId);
+    const scoped = createScopedClient(opened.token);
+
+    const admin = await createUser(scoped, { name, email, role: "admin", password });
+    // Forces must_change_password = true — see bootstrapCompanyAdmin.
+    await resetUserPassword(scoped, admin.id, password);
+    if (pin) await resetUserPin(scoped, admin.id, pin);
   } catch (error) {
     return { error: errorMessage(error), ok: false };
   }
@@ -247,70 +139,31 @@ export async function addCompanyAdmin(
 }
 
 export async function setCompanyActive(formData: FormData): Promise<void> {
-  await requireSuperadmin();
+  const { client } = await requireSuperadmin();
   const companyId = String(formData.get("company_id") ?? "");
   const isActive = String(formData.get("is_active") ?? "") === "true";
   if (!companyId) return;
 
-  const service = createServiceRoleClient();
-  const { error } = await service
-    .from("companies")
-    .update({ is_active: isActive })
-    .eq("id", companyId);
-  if (error) throw new Error(error.message);
+  await updateCompany(client, companyId, { isActive });
 
   revalidatePath("/platform");
   revalidatePath(`/platform/companies/${companyId}`);
 }
 
 export async function openCompany(formData: FormData): Promise<void> {
-  const { user } = await requireSuperadmin();
+  const { client } = await requireSuperadmin();
   const companyId = String(formData.get("company_id") ?? "");
   if (!companyId) return;
 
-  const supabase = await getServerClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser) redirect("/login");
+  const opened = await apiOpenCompany(client, companyId);
+  await setActingSession(opened.token, { id: opened.company.id, name: opened.company.name });
 
-  const service = createServiceRoleClient();
-  const { error } = await service.auth.admin.updateUserById(authUser.id, {
-    app_metadata: {
-      ...authUser.app_metadata,
-      acting_company_id: companyId,
-    },
-  });
-  if (error) throw new Error(error.message);
-
-  const { error: refreshError } = await supabase.auth.refreshSession();
-  if (refreshError) throw new Error(refreshError.message);
-
-  void user;
   redirect("/");
 }
 
 export async function exitCompany(): Promise<void> {
   await requireSuperadmin();
-
-  const supabase = await getServerClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser) redirect("/login");
-
-  const rest = { ...authUser.app_metadata };
-  delete rest.acting_company_id;
-
-  const service = createServiceRoleClient();
-  const { error } = await service.auth.admin.updateUserById(authUser.id, {
-    app_metadata: rest,
-  });
-  if (error) throw new Error(error.message);
-
-  const { error: refreshError } = await supabase.auth.refreshSession();
-  if (refreshError) throw new Error(refreshError.message);
-
+  await exitActingSession();
   redirect("/platform" as Route);
 }
 
@@ -318,48 +171,31 @@ export async function resetCompanyUserPassword(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  await requireSuperadmin();
+  const { client } = await requireSuperadmin();
 
   const id = String(formData.get("id") ?? "");
   const password = String(formData.get("password") ?? "");
-  const mustChangePassword = formData.get("must_change_password") === "true";
+  // resetUserPassword always forces must_change_password = true server-side —
+  // the old "leave it false" option (mustChangePassword=false in the form)
+  // has no Tally API equivalent; the checkbox is dropped, always-true is the
+  // safer default for a superadmin-initiated reset anyway.
+  const companyId = String(formData.get("company_id") ?? "");
 
   if (!id) return { error: "Missing user.", ok: false };
-  if (password.length < 6) {
-    return { error: "Password must be at least 6 characters.", ok: false };
+  if (password.length < 8) {
+    return { error: "Password must be at least 8 characters.", ok: false };
   }
 
-  const service = createServiceRoleClient();
-
   try {
-    const { data: row, error } = await service
-      .from("users")
-      .select("id, email, role, auth_user_id, company_id")
-      .eq("id", id)
-      .single();
-    if (error) throw new Error(error.message);
-    if (row.role === "superadmin") {
+    await resetUserPassword(client, id, password);
+  } catch (error) {
+    if (error instanceof ApiError && error.isForbidden) {
       return { error: "Cannot reset another superadmin.", ok: false };
     }
-    if (row.role !== "admin" && row.role !== "device") {
-      return {
-        error: "Only admins and terminals have an Auth password. Cashiers use a PIN.",
-        ok: false,
-      };
-    }
-
-    await syncAuthPassword({
-      userId: row.id,
-      email: row.email,
-      password,
-      authUserId: row.auth_user_id,
-    });
-    await updateUser(service, id, { must_change_password: mustChangePassword });
-    if (row.company_id) revalidatePath(`/platform/companies/${row.company_id}`);
-  } catch (error) {
     return { error: errorMessage(error), ok: false };
   }
 
+  if (companyId) revalidatePath(`/platform/companies/${companyId}`);
   return { error: null, ok: true };
 }
 
@@ -367,37 +203,26 @@ export async function resetCompanyUserPin(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  await requireSuperadmin();
+  const { client } = await requireSuperadmin();
 
   const id = String(formData.get("id") ?? "");
   const pin = String(formData.get("pin") ?? "").trim();
+  const companyId = String(formData.get("company_id") ?? "");
 
   if (!id) return { error: "Missing user.", ok: false };
   if (!isValidPin(pin)) {
     return { error: "The PIN must be 4 to 6 digits.", ok: false };
   }
 
-  const service = createServiceRoleClient();
-
   try {
-    const { data: row, error } = await service
-      .from("users")
-      .select("id, role, company_id")
-      .eq("id", id)
-      .single();
-    if (error) throw new Error(error.message);
-    if (row.role === "superadmin") {
+    await resetUserPin(client, id, pin);
+  } catch (error) {
+    if (error instanceof ApiError && error.isForbidden) {
       return { error: "Cannot reset another superadmin.", ok: false };
     }
-    if (row.role !== "cashier" && row.role !== "admin") {
-      return { error: "Terminals unlock with an Auth password, not a PIN.", ok: false };
-    }
-
-    await updateUser(service, id, { pin_hash: hashPin(id, pin) });
-    if (row.company_id) revalidatePath(`/platform/companies/${row.company_id}`);
-  } catch (error) {
     return { error: errorMessage(error), ok: false };
   }
 
+  if (companyId) revalidatePath(`/platform/companies/${companyId}`);
   return { error: null, ok: true };
 }

@@ -1,13 +1,17 @@
 import { QrCode, TriangleAlert } from "lucide-react";
-import { currentAppUser, listProducts } from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/api/session";
 import { isShopAdmin } from "@/lib/authz";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
-import { ProductQrPanel } from "./product-qr-panel";
+import { ProductQrPageClient } from "./product-qr-page-client";
 
+/**
+ * Stays a (thin) Server Component so the admin-only gate runs before any of
+ * the client bundle/data below it ever mounts — same split as
+ * suppliers/page.tsx. The product lookup is client-side TanStack Query, in
+ * ProductQrPageClient.
+ */
 export default async function ProductQrPage() {
-  const supabase = await getServerClient();
-  const user = await currentAppUser(supabase);
+  const user = await getCurrentUser();
 
   if (!isShopAdmin(user)) {
     return (
@@ -24,36 +28,5 @@ export default async function ProductQrPage() {
     );
   }
 
-  const products = await listProducts(supabase);
-  const withSku = products
-    .filter((product) => product.sku?.trim())
-    .map((product) => ({
-      id: product.id,
-      sku: product.sku!.trim(),
-      name: product.name,
-      category: product.category,
-      categoryId: product.categoryId,
-    }));
-
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        icon={QrCode}
-        title="Product QR codes"
-        description="Print a sheet of SKU QR codes for the counter scanner. One page, A4 or Legal."
-      />
-
-      {withSku.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon={QrCode}
-            title="No products with a SKU"
-            instruction="Add a SKU on each product first — the QR encodes that value."
-          />
-        </Card>
-      ) : (
-        <ProductQrPanel products={withSku} />
-      )}
-    </div>
-  );
+  return <ProductQrPageClient />;
 }

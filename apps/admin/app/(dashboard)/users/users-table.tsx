@@ -27,6 +27,7 @@ import {
 } from "@/components/ui";
 import { ConfirmDialog, Dialog, Sheet } from "@/components/overlay";
 import { EMPTY_FORM_STATE } from "@/lib/form-state";
+import { useInvalidateUsers } from "@/lib/query/users";
 import { resetUserPassword, toggleUserCanSell } from "./actions";
 import { UserForm } from "./user-form";
 
@@ -95,6 +96,7 @@ export function UsersTable({ users }: { users: User[] }) {
   const [resetting, setResetting] = useState<User | null>(null);
   const [toggling, setToggling] = useState<User | null>(null);
   const [pending, startTransition] = useTransition();
+  const invalidateUsers = useInvalidateUsers();
 
   function confirmToggleSell() {
     if (!toggling) return;
@@ -103,6 +105,7 @@ export function UsersTable({ users }: { users: User[] }) {
     form.set("can_sell", String(!toggling.canSell));
     startTransition(async () => {
       await toggleUserCanSell(form);
+      invalidateUsers();
       setToggling(null);
     });
   }

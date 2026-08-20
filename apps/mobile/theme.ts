@@ -27,14 +27,16 @@ export const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: color.surface,
-    borderRadius: radius.md,
+    // A literal, not radius.md — this app's own rounder-corner direction,
+    // kept local to mobile rather than changing the shared token admin reads too.
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: color.border,
   },
   /** A card that should read as brand surface rather than plain paper. */
   cardTinted: {
     backgroundColor: color.primaryTint,
-    borderRadius: radius.md,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: color.primarySoft,
   },
@@ -94,5 +96,19 @@ export const styles = StyleSheet.create({
     minWidth: MIN_TAP_TARGET,
     alignItems: "center",
     justifyContent: "center",
+  },
+  /**
+   * Opt-in shadow for a lone or small handful of cards on a screen (e.g. sync,
+   * settings) — matches setup/unlock's floating-card look. Never apply this to
+   * a repeating list/grid (product tiles, cashier picker): shadows on many
+   * simultaneous items cost real battery on the shop floor, which is exactly
+   * why styles.card itself stays flat.
+   */
+  floatShadow: {
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
 });

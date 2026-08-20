@@ -1,24 +1,12 @@
 import { redirect } from "next/navigation";
-import { currentAppUser } from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
+import type { ApiClient } from "@double-a/api-client";
 import type { User } from "@double-a/shared-types";
-import type { DoubleAClient } from "@double-a/supabase";
+import { getAuthedClient, getCurrentUser } from "@/lib/api/session";
 
-export function actingCompanyIdFromAuth(
-  appMetadata: Record<string, unknown> | undefined,
-): string | null {
-  const value = appMetadata?.acting_company_id;
-  return typeof value === "string" && value.length > 0 ? value : null;
-}
-
-export async function requireSuperadmin(): Promise<{
-  supabase: DoubleAClient;
-  user: User;
-}> {
-  const supabase = await getServerClient();
-  const user = await currentAppUser(supabase);
+export async function requireSuperadmin(): Promise<{ client: ApiClient; user: User }> {
+  const user = await getCurrentUser();
   if (!user || user.role !== "superadmin") {
     redirect("/");
   }
-  return { supabase, user };
+  return { client: getAuthedClient(), user };
 }

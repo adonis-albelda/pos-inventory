@@ -3,22 +3,27 @@
 import { useState, useTransition } from "react";
 import { PackageCheck } from "lucide-react";
 import { Button, Input } from "@/components/ui";
+import { useInvalidatePurchaseOrders } from "@/lib/query/purchase-orders";
 import { receivePurchaseOrderItemAction } from "./actions";
 
 export function ReceiveLineForm({
   itemId,
   purchaseOrderId,
   productId,
+  currentReceived,
   remaining,
 }: {
   itemId: string;
   purchaseOrderId: string;
   productId: string | null;
+  /** The line's quantityReceived before this receipt — the API takes an absolute value, not a delta. */
+  currentReceived: number;
   remaining: number;
 }) {
   const [quantity, setQuantity] = useState(String(remaining));
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const invalidate = useInvalidatePurchaseOrders();
 
   function submit() {
     setError(null);
@@ -26,11 +31,16 @@ export function ReceiveLineForm({
     form.set("item_id", itemId);
     form.set("purchase_order_id", purchaseOrderId);
     form.set("product_id", productId ?? "");
+    form.set("current_received", String(currentReceived));
     form.set("quantity", quantity);
 
     startTransition(async () => {
       const result = await receivePurchaseOrderItemAction(form);
-      if (result.error) setError(result.error);
+      if (result.error) {
+        setError(result.error);
+      } else {
+        invalidate();
+      }
     });
   }
 

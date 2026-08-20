@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { ArrowLeft, Camera } from "lucide-react";
-import { listCategories } from "@double-a/supabase";
+import { listCategories } from "@double-a/api-client/queries";
 import { PageHeader } from "@/components/ui";
 import { toCategoryOptions } from "@/lib/category-options";
-import { getServerClient } from "@/lib/supabase/server";
+import { getAuthedClient } from "@/lib/api/session";
 import { FromPhotoPanel } from "./from-photo-panel";
 
 export default async function FromPhotoPage() {
-  const supabase = await getServerClient();
-  const categories = await listCategories(supabase, { includeInactive: true });
+  const client = getAuthedClient();
+  const categories = await listCategories(client, { includeInactive: true });
 
   return (
     <div className="space-y-6">

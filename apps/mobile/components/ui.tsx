@@ -95,7 +95,9 @@ export function Button({
         <Icon size={iconSize} color={tint} strokeWidth={2} />
       ) : null}
       <Text
+        numberOfLines={1}
         style={{
+          flexShrink: 1,
           color: tint,
           fontSize: large ? fontSize.bodyLg : fontSize.body,
           fontWeight: "600",

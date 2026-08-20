@@ -11,7 +11,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { color, radius, space } from "@/theme";
+import { color, space } from "@/theme";
 
 /** Live keyboard height — Modals on Android ignore activity adjustResize. */
 export function useKeyboardHeight() {
@@ -95,8 +95,8 @@ export function BottomSheet({
           <View
             style={{
               backgroundColor: color.surface,
-              borderTopLeftRadius: radius.lg,
-              borderTopRightRadius: radius.lg,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
               padding: space.lg,
               paddingBottom: Math.max(insets.bottom, space.lg),
               width: "100%",
@@ -104,6 +104,12 @@ export function BottomSheet({
               alignSelf: "center",
               // Leave room for the field + actions when the keyboard is up.
               maxHeight: keyboardHeight > 0 ? "88%" : "92%",
+              // Floats up from the scrim now, same treatment as setup/unlock's cards.
+              shadowColor: "#000",
+              shadowOpacity: 0.18,
+              shadowRadius: 24,
+              shadowOffset: { width: 0, height: -10 },
+              elevation: 16,
             }}
           >
             {body}

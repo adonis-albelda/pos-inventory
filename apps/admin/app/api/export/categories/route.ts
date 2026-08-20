@@ -1,11 +1,11 @@
-import { listCategories } from "@double-a/supabase";
+import { listCategories } from "@double-a/api-client/queries";
 import { toCategoryOptions } from "@/lib/category-options";
 import { csvExport } from "@/lib/export-route";
 
 export async function GET(): Promise<Response> {
-  return csvExport("categories", async (supabase) => {
+  return csvExport("categories", async (client) => {
     const categories = toCategoryOptions(
-      await listCategories(supabase, { includeInactive: true }),
+      await listCategories(client, { includeInactive: true }),
     );
 
     return {

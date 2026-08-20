@@ -23,6 +23,7 @@ import {
 } from "@/components/ui";
 import { indentLabel, type CategoryOption } from "@/lib/category-options";
 import { EMPTY_FORM_STATE } from "@/lib/form-state";
+import { useInvalidateProducts } from "@/lib/query/products";
 import { saveProduct } from "./actions";
 
 export function ProductForm({
@@ -35,6 +36,7 @@ export function ProductForm({
   onDone?: () => void;
 }) {
   const [state, action, pending] = useActionState(saveProduct, EMPTY_FORM_STATE);
+  const invalidate = useInvalidateProducts();
 
   // Held in state only so the owner can see what they make on the item while
   // they are still typing the price.
@@ -57,7 +59,12 @@ export function ProductForm({
   }
 
   useEffect(() => {
-    if (state.ok) onDone?.();
+    if (state.ok) {
+      invalidate();
+      onDone?.();
+    }
+    // invalidate is stable enough for this effect; only state.ok/onDone gate re-entry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.ok, onDone]);
 
   const priceValue = Number(price);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Shield, Smartphone, UserPlus, UserRound } from "lucide-react";
+import { Shield, Smartphone, UserRound } from "lucide-react";
 import type { User, UserRole } from "@double-a/shared-types";
 import { Card, EmptyState } from "@/components/ui";
 import { Sheet } from "@/components/overlay";

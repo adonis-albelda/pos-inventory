@@ -10,7 +10,7 @@ import {
 import { SYNC_MESSAGES, type SyncPhase, type SyncState } from "@double-a/shared-types";
 import { getSyncMeta } from "@/db/meta";
 import { countPendingSales } from "@/db/sales";
-import { runPullOnly, runSync } from "./index";
+import { runPullOnly, runReplaceAll, runSync } from "./index";
 
 interface SyncContextValue extends SyncState {
   /**
@@ -20,8 +20,15 @@ interface SyncContextValue extends SyncState {
    * at the list that was loaded when the screen opened.
    */
   dataVersion: number;
+  /**
+   * 0-100 while a pull is writing to SQLite, null otherwise — the pull
+   * progress modal (mounted once at the app root) watches this so it shows
+   * over whichever screen actually triggered the pull.
+   */
+  pullProgress: number | null;
   sync: () => Promise<void>;
   pullOnly: () => Promise<void>;
+  replaceAll: () => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -38,6 +45,7 @@ const INITIAL: SyncState = {
 export function SyncProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SyncState>(INITIAL);
   const [dataVersion, setDataVersion] = useState(0);
+  const [pullProgress, setPullProgress] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
     const [meta, pendingSales] = await Promise.all([
@@ -65,13 +73,17 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     }));
 
     try {
-      await runSync((phase: SyncPhase) => {
-        setState((previous) => ({
-          ...previous,
-          phase,
-          message: SYNC_MESSAGES[phase],
-        }));
-      });
+      await runSync(
+        (phase: SyncPhase) => {
+          setState((previous) => ({
+            ...previous,
+            phase,
+            message: SYNC_MESSAGES[phase],
+          }));
+          setPullProgress(phase === "pulling" ? 0 : null);
+        },
+        (percent) => setPullProgress(percent),
+      );
 
       await refresh();
       setDataVersion((version) => version + 1);
@@ -94,6 +106,8 @@ export function SyncProvider({ children }: { children: ReactNode }) {
             ? error.message
             : "Sync failed - check your connection and try again",
       }));
+    } finally {
+      setPullProgress(null);
     }
   }, [refresh]);
 
@@ -108,9 +122,10 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       message: SYNC_MESSAGES.pulling,
       error: null,
     }));
+    setPullProgress(0);
 
     try {
-      await runPullOnly();
+      await runPullOnly(undefined, (percent) => setPullProgress(percent));
 
       await refresh();
       setDataVersion((version) => version + 1);
@@ -131,12 +146,56 @@ export function SyncProvider({ children }: { children: ReactNode }) {
             ? error.message
             : "Refresh failed - check your connection and try again",
       }));
+    } finally {
+      setPullProgress(null);
+    }
+  }, [refresh]);
+
+  /**
+   * The nuclear option: drops and rebuilds products/users from a full
+   * fetch instead of upserting the delta. Never pushes — same pull-only
+   * contract as Refresh. For a device whose local data looks wrong, not a
+   * routine action.
+   */
+  const replaceAll = useCallback(async () => {
+    setState((previous) => ({
+      ...previous,
+      phase: "pulling",
+      message: SYNC_MESSAGES.pulling,
+      error: null,
+    }));
+    setPullProgress(0);
+
+    try {
+      await runReplaceAll(undefined, (percent) => setPullProgress(percent));
+
+      await refresh();
+      setDataVersion((version) => version + 1);
+      setState((previous) => ({
+        ...previous,
+        phase: "done",
+        message: SYNC_MESSAGES.done,
+        error: null,
+      }));
+    } catch (error) {
+      await refresh();
+      setState((previous) => ({
+        ...previous,
+        phase: "failed",
+        message: SYNC_MESSAGES.failed,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Replace failed - check your connection and try again",
+      }));
+    } finally {
+      setPullProgress(null);
     }
   }, [refresh]);
 
   const value = useMemo(
-    () => ({ ...state, dataVersion, sync, pullOnly, refresh }),
-    [state, dataVersion, sync, pullOnly, refresh],
+    () => ({ ...state, dataVersion, pullProgress, sync, pullOnly, replaceAll, refresh }),
+    [state, dataVersion, pullProgress, sync, pullOnly, replaceAll, refresh],
   );
 
   return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;

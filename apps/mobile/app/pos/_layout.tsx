@@ -1,7 +1,6 @@
 import { Redirect, Stack } from "expo-router";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { PoweredByLabel } from "@/components/brand-auth-shell";
 import { useSession } from "@/lib/session";
 import { StoreHeader } from "@/components/store-header";
 import { styles } from "@/theme";
@@ -29,7 +28,6 @@ export default function PosLayout() {
           }}
         />
       </View>
-      <PoweredByLabel />
     </View>
   );
 }

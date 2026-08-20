@@ -1,5 +1,5 @@
 import type { PullResult, SyncPhase, SyncResult } from "@double-a/shared-types";
-import { ensureFreshSession } from "@/lib/supabase";
+import { ensureFreshSession } from "@/lib/api/session";
 import { pull } from "./pull";
 import { push } from "./push";
 
@@ -17,6 +17,7 @@ export { push } from "./push";
  */
 export async function runSync(
   onPhase?: (phase: SyncPhase) => void,
+  onProgress?: (percent: number) => void,
 ): Promise<SyncResult> {
   onPhase?.("pushing");
   await ensureFreshSession();
@@ -24,7 +25,7 @@ export async function runSync(
   const pushResult = await push();
 
   onPhase?.("pulling");
-  const pullResult = await pull();
+  const pullResult = await pull({ onProgress });
 
   onPhase?.("done");
 
@@ -39,21 +40,43 @@ export async function runSync(
  * Pull without pushing first, for taking a price or product change mid-shift
  * without sending sales. Pending sales stay pending and still go out on the
  * next full sync, so this never loses a sale — it only skips sending one.
+ * Incremental, same as runSync's pull — only what changed since last time.
  */
 export async function runPullOnly(
   onPhase?: (phase: SyncPhase) => void,
+  onProgress?: (percent: number) => void,
 ): Promise<PullResult> {
   onPhase?.("pulling");
   await ensureFreshSession();
 
-  const result = await pull();
+  const result = await pull({ onProgress });
+
+  onPhase?.("done");
+  return result;
+}
+
+/**
+ * Rebuilds the local catalogue from scratch: full fetch, wholesale replace
+ * of products/users rather than an upsert. Never sends pending sales, same
+ * as Refresh — this is a pull-only action. For troubleshooting a device
+ * whose local data looks wrong, not a replacement for the regular Sync/
+ * Refresh pair, which stay incremental and far cheaper on data/battery.
+ */
+export async function runReplaceAll(
+  onPhase?: (phase: SyncPhase) => void,
+  onProgress?: (percent: number) => void,
+): Promise<PullResult> {
+  onPhase?.("pulling");
+  await ensureFreshSession();
+
+  const result = await pull({ replace: true, onProgress });
 
   onPhase?.("done");
   return result;
 }
 
 /** First launch: everything comes down before the POS is usable. */
-export async function runFirstPull(): Promise<void> {
+export async function runFirstPull(onProgress?: (percent: number) => void): Promise<void> {
   await ensureFreshSession();
-  await pull({ full: true });
+  await pull({ full: true, onProgress });
 }

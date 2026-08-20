@@ -1,12 +1,12 @@
+"use client";
+
 import { Settings, Store } from "lucide-react";
-import { fetchStoreSettings } from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
 import { Card, CardHeader, PageHeader } from "@/components/ui";
 import { StoreForm } from "./store-form";
+import { useStoreSettings } from "@/lib/query/settings";
 
-export default async function SettingsPage() {
-  const supabase = await getServerClient();
-  const settings = await fetchStoreSettings(supabase);
+export default function SettingsPage() {
+  const settingsQuery = useStoreSettings();
 
   return (
     <div className="space-y-6">
@@ -23,7 +23,17 @@ export default async function SettingsPage() {
           description="Terminals show the name and logo, and pick up changes on their next sync."
         />
         <div className="px-4 py-5 sm:px-6">
-          <StoreForm settings={settings} />
+          {settingsQuery.isPending ? (
+            <p className="py-8 text-center text-body text-ink-muted">Loading…</p>
+          ) : settingsQuery.isError ? (
+            <p className="py-8 text-center text-body text-danger">
+              {settingsQuery.error instanceof Error
+                ? settingsQuery.error.message
+                : "Could not load settings."}
+            </p>
+          ) : (
+            <StoreForm settings={settingsQuery.data} />
+          )}
         </div>
       </Card>
     </div>

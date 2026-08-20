@@ -1,6 +1,8 @@
+"use client";
+
 import type { Route } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, useParams } from "next/navigation";
 import {
   ArrowLeft,
   Banknote,
@@ -16,8 +18,6 @@ import {
   roundMoney,
   saleCustomer,
 } from "@double-a/shared-types";
-import { getSale, listMovements } from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
 import {
   Badge,
   Card,
@@ -28,22 +28,35 @@ import {
   Td,
   Th,
 } from "@/components/ui";
+import { useSale, useSaleMovements } from "@/lib/query/sales";
 import { VoidSale } from "./void-sale";
 import { SaleFlags } from "./sale-flags";
 
-export default async function SaleDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const supabase = await getServerClient();
+export default function SaleDetailPage() {
+  const params = useParams<{ id: string }>();
+  const id = params.id;
 
-  const sale = await getSale(supabase, id);
+  const saleQuery = useSale(id);
+  const movementsQuery = useSaleMovements(id);
+
+  if (saleQuery.isPending || movementsQuery.isPending) {
+    return (
+      <Card className="px-4 py-8 text-center text-body text-ink-muted">Loading…</Card>
+    );
+  }
+
+  if (saleQuery.isError) {
+    return (
+      <Card className="px-4 py-8 text-center text-body text-danger">
+        {saleQuery.error instanceof Error ? saleQuery.error.message : "Could not load sale."}
+      </Card>
+    );
+  }
+
+  const sale = saleQuery.data;
   if (!sale) notFound();
 
-  const movements = await listMovements(supabase, { referenceId: id, limit: 400 });
-
+  const movements = movementsQuery.data ?? [];
   const customer = saleCustomer(sale);
 
   return (

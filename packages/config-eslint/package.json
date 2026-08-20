@@ -8,5 +8,7 @@
     "./next": "./next.js",
     "./react-native": "./react-native.js"
   },
-  "dependencies": {}
+  "dependencies": {
+    "eslint-plugin-react-hooks": "^7.1.1"
+  }
 }

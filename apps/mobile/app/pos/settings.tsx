@@ -37,6 +37,7 @@ import {
   Smartphone,
   Store,
 } from "lucide-react-native";
+import { WaveBackdrop } from "@/components/wave-backdrop";
 import { Badge, Button, Card, ErrorNote, SectionTitle, SuccessNote } from "@/components/ui";
 import { color, fontSize, radius, space, styles } from "@/theme";
 
@@ -257,16 +258,18 @@ export default function SettingsScreen() {
   }
 
   return (
-    <ScrollView
-      contentContainerStyle={{
-        padding: layout.gutter,
-        gap: space.lg,
-        width: "100%",
-        maxWidth: layout.readableMaxWidth,
-        alignSelf: "center",
-      }}
-    >
-      <Card style={{ gap: space.sm }}>
+    <View style={styles.screen}>
+      <WaveBackdrop />
+      <ScrollView
+        contentContainerStyle={{
+          padding: layout.gutter,
+          gap: space.lg,
+          width: "100%",
+          maxWidth: layout.readableMaxWidth,
+          alignSelf: "center",
+        }}
+      >
+      <Card style={[{ gap: space.sm }, styles.floatShadow, { borderRadius: radius.sm }]}>
         <SectionTitle icon={Smartphone} title="This terminal" />
         <Row label="Name" value={info.label || "Not named"} />
         <Row label="Terminal id" value={info.deviceId.slice(0, 8)} />
@@ -280,7 +283,7 @@ export default function SettingsScreen() {
         )}
       </Card>
 
-      <Card style={{ gap: space.sm }}>
+      <Card style={[{ gap: space.sm }, styles.floatShadow, { borderRadius: radius.sm }]}>
         <SectionTitle
           icon={Store}
           title="Shop"
@@ -291,7 +294,7 @@ export default function SettingsScreen() {
         <Row label="Phone" value={store.phone ?? "Not set"} />
       </Card>
 
-      <Card style={{ gap: space.md }}>
+      <Card style={[{ gap: space.md }, styles.floatShadow, { borderRadius: radius.sm }]}>
         <SectionTitle
           icon={Bluetooth}
           title="Bluetooth printer"
@@ -334,7 +337,7 @@ export default function SettingsScreen() {
                     minHeight: 48,
                     borderWidth: 1,
                     borderColor: active ? color.primary : color.border,
-                    borderRadius: radius.sm,
+                    borderRadius: 12,
                     backgroundColor: active ? color.primarySoft : color.surface,
                     paddingHorizontal: space.md,
                     paddingVertical: space.sm,
@@ -354,7 +357,7 @@ export default function SettingsScreen() {
         ) : null}
       </Card>
 
-      <Card style={{ gap: space.md }}>
+      <Card style={[{ gap: space.md }, styles.floatShadow, { borderRadius: radius.sm }]}>
         <SectionTitle icon={Printer} title="Network printer (optional)" />
         <Text style={styles.muted}>
           LAN ESC/POS on wifi. Prefer Bluetooth for the PT-210 on the counter.
@@ -389,7 +392,7 @@ export default function SettingsScreen() {
         />
       </Card>
 
-      <Card style={{ gap: space.md }}>
+      <Card style={[{ gap: space.md }, styles.floatShadow, { borderRadius: radius.sm }]}>
         <SectionTitle icon={Printer} title="Print test" />
         {error ? <ErrorNote>{error}</ErrorNote> : null}
         {message ? <SuccessNote>{message}</SuccessNote> : null}
@@ -408,7 +411,7 @@ export default function SettingsScreen() {
         />
       </Card>
 
-      <Card style={{ gap: space.md }}>
+      <Card style={[{ gap: space.md }, styles.floatShadow, { borderRadius: radius.sm }]}>
         <SectionTitle icon={LogOut} title="Shift" />
         <Button
           label="End shift"
@@ -420,7 +423,8 @@ export default function SettingsScreen() {
           }}
         />
       </Card>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -428,7 +432,7 @@ const inputStyle = {
   minHeight: 48,
   borderWidth: 1,
   borderColor: color.border,
-  borderRadius: radius.sm,
+  borderRadius: 12,
   backgroundColor: color.surface,
   paddingHorizontal: space.md,
   fontSize: fontSize.bodyLg,

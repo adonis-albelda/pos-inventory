@@ -1,8 +1,11 @@
+"use client";
+
 import Link from "next/link";
-import { fetchStoreSettings, countProducts, listUsers } from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
 import { NAV_ITEMS } from "@/lib/nav";
 import { Card } from "@/components/ui";
+import { useStoreSettings } from "@/lib/query/settings";
+import { useProductCount } from "@/lib/query/products";
+import { useUsers } from "@/lib/query/users";
 
 const TILE_STYLES: Record<string, string> = {
   primary: "bg-primary/10 text-primary",
@@ -17,13 +20,13 @@ const TILE_STYLES: Record<string, string> = {
  * The classic launcher: one screen of labelled icons, the way back-office till
  * software has always opened. Same routes as the sidebar, different doorway.
  */
-export default async function MenuPage() {
-  const supabase = await getServerClient();
-  const [store, productCount, users] = await Promise.all([
-    fetchStoreSettings(supabase),
-    countProducts(supabase, { includeInactive: true }),
-    listUsers(supabase, { includeInactive: true }),
-  ]);
+export default function MenuPage() {
+  const storeQuery = useStoreSettings();
+  const productCountQuery = useProductCount({ includeInactive: true });
+  const usersQuery = useUsers({ includeInactive: true });
+
+  const isPending = storeQuery.isPending || productCountQuery.isPending || usersQuery.isPending;
+  const error = storeQuery.error ?? productCountQuery.error ?? usersQuery.error;
 
   const now = new Date();
 
@@ -72,24 +75,32 @@ export default async function MenuPage() {
           </p>
         </div>
 
-        <dl className="mt-3 grid gap-x-6 gap-y-2 text-caption sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <dt className="text-ink-muted">Shop</dt>
-            <dd className="font-medium text-ink">{store.name}</dd>
-          </div>
-          <div>
-            <dt className="text-ink-muted">Products on file</dt>
-            <dd className="num font-medium text-ink">{productCount}</dd>
-          </div>
-          <div>
-            <dt className="text-ink-muted">Users on file</dt>
-            <dd className="num font-medium text-ink">{users.length}</dd>
-          </div>
-          <div>
-            <dt className="text-ink-muted">Data</dt>
-            <dd className="font-medium text-ink">Supabase (online)</dd>
-          </div>
-        </dl>
+        {isPending ? (
+          <p className="mt-3 text-caption text-ink-muted">Loading…</p>
+        ) : error ? (
+          <p className="mt-3 text-caption text-danger">
+            {error instanceof Error ? error.message : "Could not load system information."}
+          </p>
+        ) : (
+          <dl className="mt-3 grid gap-x-6 gap-y-2 text-caption sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <dt className="text-ink-muted">Shop</dt>
+              <dd className="font-medium text-ink">{storeQuery.data!.name}</dd>
+            </div>
+            <div>
+              <dt className="text-ink-muted">Products on file</dt>
+              <dd className="num font-medium text-ink">{productCountQuery.data}</dd>
+            </div>
+            <div>
+              <dt className="text-ink-muted">Users on file</dt>
+              <dd className="num font-medium text-ink">{usersQuery.data?.length ?? 0}</dd>
+            </div>
+            <div>
+              <dt className="text-ink-muted">Data</dt>
+              <dd className="font-medium text-ink">Tally API (online)</dd>
+            </div>
+          </dl>
+        )}
       </Card>
     </div>
   );

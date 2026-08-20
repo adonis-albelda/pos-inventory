@@ -212,51 +212,85 @@ export async function searchLocalProducts(
   return rows.map(toProductWithEstimate);
 }
 
+/** Reports rows written so far against the total — drives the pull progress modal. */
+export type WriteProgress = (done: number, total: number) => void;
+
+async function insertOrReplaceProduct(
+  db: ReturnType<typeof getDb>,
+  product: Product,
+): Promise<void> {
+  await db.runAsync(
+    `INSERT INTO products
+       (id, name, sku, price, cost_price, stock_quantity, category, category_id,
+        unit, allow_decimal, barcode, reorder_point, bulk_price, bulk_min_quantity, is_active, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (id) DO UPDATE SET
+       name = excluded.name,
+       sku = excluded.sku,
+       price = excluded.price,
+       cost_price = excluded.cost_price,
+       stock_quantity = excluded.stock_quantity,
+       category = excluded.category,
+       category_id = excluded.category_id,
+       unit = excluded.unit,
+       allow_decimal = excluded.allow_decimal,
+       barcode = excluded.barcode,
+       reorder_point = excluded.reorder_point,
+       bulk_price = excluded.bulk_price,
+       bulk_min_quantity = excluded.bulk_min_quantity,
+       is_active = excluded.is_active,
+       updated_at = excluded.updated_at`,
+    product.id,
+    product.name,
+    product.sku,
+    product.price,
+    product.costPrice,
+    product.stockQuantity,
+    product.category,
+    product.categoryId,
+    product.unit,
+    product.allowDecimal ? 1 : 0,
+    product.barcode,
+    product.reorderPoint,
+    product.bulkPrice,
+    product.bulkMinQuantity,
+    product.isActive ? 1 : 0,
+    product.updatedAt,
+  );
+}
+
 /** Overwrites local rows with what the pull returned. Supabase wins, always. */
-export async function upsertProducts(products: Product[]): Promise<void> {
+export async function upsertProducts(
+  products: Product[],
+  onProgress?: WriteProgress,
+): Promise<void> {
   if (products.length === 0) return;
 
   const db = getDb();
   await db.withTransactionAsync(async () => {
-    for (const product of products) {
-      await db.runAsync(
-        `INSERT INTO products
-           (id, name, sku, price, cost_price, stock_quantity, category, category_id,
-            unit, allow_decimal, barcode, reorder_point, bulk_price, bulk_min_quantity, is_active, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (id) DO UPDATE SET
-           name = excluded.name,
-           sku = excluded.sku,
-           price = excluded.price,
-           cost_price = excluded.cost_price,
-           stock_quantity = excluded.stock_quantity,
-           category = excluded.category,
-           category_id = excluded.category_id,
-           unit = excluded.unit,
-           allow_decimal = excluded.allow_decimal,
-           barcode = excluded.barcode,
-           reorder_point = excluded.reorder_point,
-           bulk_price = excluded.bulk_price,
-           bulk_min_quantity = excluded.bulk_min_quantity,
-           is_active = excluded.is_active,
-           updated_at = excluded.updated_at`,
-        product.id,
-        product.name,
-        product.sku,
-        product.price,
-        product.costPrice,
-        product.stockQuantity,
-        product.category,
-        product.categoryId,
-        product.unit,
-        product.allowDecimal ? 1 : 0,
-        product.barcode,
-        product.reorderPoint,
-        product.bulkPrice,
-        product.bulkMinQuantity,
-        product.isActive ? 1 : 0,
-        product.updatedAt,
-      );
+    for (const [index, product] of products.entries()) {
+      await insertOrReplaceProduct(db, product);
+      onProgress?.(index + 1, products.length);
+    }
+  });
+}
+
+/**
+ * Wholesale replace, not an upsert — every local row is dropped and rebuilt
+ * from this pull. Only reached from the Sync tab's explicit "Replace
+ * everything" action; the regular Sync/Refresh path stays on the upsert
+ * above (incremental, far cheaper on data/battery for a large catalogue).
+ */
+export async function replaceProducts(
+  products: Product[],
+  onProgress?: WriteProgress,
+): Promise<void> {
+  const db = getDb();
+  await db.withTransactionAsync(async () => {
+    await db.execAsync("DELETE FROM products;");
+    for (const [index, product] of products.entries()) {
+      await insertOrReplaceProduct(db, product);
+      onProgress?.(index + 1, products.length);
     }
   });
 }
@@ -284,6 +318,14 @@ export async function getProductUnits(
 export async function countLocalProducts(): Promise<number> {
   const row = await getDb().getFirstAsync<{ count: number }>(
     "SELECT COUNT(*) AS count FROM products",
+  );
+  return row?.count ?? 0;
+}
+
+/** Matches the sell grid's own filter (is_active = 1) — what "All products" actually shows. */
+export async function countActiveLocalProducts(): Promise<number> {
+  const row = await getDb().getFirstAsync<{ count: number }>(
+    "SELECT COUNT(*) AS count FROM products WHERE is_active = 1",
   );
   return row?.count ?? 0;
 }

@@ -13,11 +13,11 @@ export default function ChangePasswordPage() {
       <div className="relative z-10 w-full max-w-sm">
         <div className="flex items-center gap-3">
           <span className="flex size-11 items-center justify-center rounded-md bg-primary font-display text-heading-sm font-bold text-white">
-            A
+            P
           </span>
           <div>
             <h1 className="text-heading-md font-semibold tracking-tight text-white">
-              DOUBLE A
+              POSPro
             </h1>
             <p className="text-caption text-white/75">Admin dashboard</p>
           </div>

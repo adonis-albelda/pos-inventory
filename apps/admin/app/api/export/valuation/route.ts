@@ -1,9 +1,9 @@
-import { reportInventoryValuation } from "@double-a/supabase";
+import { reportInventoryValuation } from "@double-a/api-client/queries";
 import { csvExport } from "@/lib/export-route";
 
 export async function GET(): Promise<Response> {
-  return csvExport("stock-value", async (supabase) => {
-    const rows = await reportInventoryValuation(supabase);
+  return csvExport("stock-value", async (client) => {
+    const rows = await reportInventoryValuation(client);
 
     return {
       headers: [

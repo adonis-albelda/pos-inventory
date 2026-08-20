@@ -8,15 +8,15 @@ import {
   SUPPLIER_NAME_MAX,
   SUPPLIER_PHONE_MAX,
 } from "@double-a/shared-types";
+import { ApiError } from "@double-a/api-client";
 import {
   createSupplier,
-  currentAppUser,
   deleteSupplier,
   setSupplierProducts,
   updateSupplier,
-} from "@double-a/supabase";
+} from "@double-a/api-client/queries";
 import type { FormState } from "@/lib/form-state";
-import { getServerClient } from "@/lib/supabase/server";
+import { getAuthedClient, getCurrentUser } from "@/lib/api/session";
 import { isShopAdmin } from "@/lib/authz";
 
 function text(formData: FormData, key: string): string {
@@ -53,26 +53,32 @@ export async function saveSupplier(
     return { error: "Give the supplier a name.", ok: false };
   }
 
-  const supabase = await getServerClient();
-  const user = await currentAppUser(supabase);
+  const client = getAuthedClient();
+  const user = await getCurrentUser();
   if (!isShopAdmin(user)) {
     return { error: "Only the owner can manage suppliers.", ok: false };
   }
 
   const row = {
     name: name.slice(0, SUPPLIER_NAME_MAX),
-    contact_person: optional(formData, "contact_person", SUPPLIER_CONTACT_PERSON_MAX),
+    contactPerson: optional(formData, "contact_person", SUPPLIER_CONTACT_PERSON_MAX),
     phone: optional(formData, "phone", SUPPLIER_PHONE_MAX),
     email: optional(formData, "email", SUPPLIER_EMAIL_MAX),
     address: optional(formData, "address", SUPPLIER_ADDRESS_MAX),
-    is_active: isActive,
+    isActive,
   };
 
   try {
     const supplierId = id
-      ? (await updateSupplier(supabase, id, row)).id
-      : (await createSupplier(supabase, row)).id;
-    await setSupplierProducts(supabase, supplierId, productIds);
+      ? (await updateSupplier(client, id, row)).id
+      : (await createSupplier(client, row)).id;
+    // GAP (see suppliers/page.tsx): there is no read-back endpoint for a
+    // supplier's linked products, so `productIds` here is only ever what the
+    // form's checkboxes carried — never pre-populated from what's actually
+    // linked server-side on an edit. `setSupplierProducts` is a replace-all,
+    // so saving an edit without re-checking every product the supplier
+    // already carries silently unlinks the rest.
+    await setSupplierProducts(client, supplierId, productIds);
     revalidateSupplierViews(supplierId);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -91,18 +97,21 @@ export async function removeSupplier(formData: FormData): Promise<{ error: strin
   const id = text(formData, "id");
   if (!id) return { error: null };
 
-  const supabase = await getServerClient();
-  const user = await currentAppUser(supabase);
+  const client = getAuthedClient();
+  const user = await getCurrentUser();
   if (!isShopAdmin(user)) {
     return { error: "Only the owner can manage suppliers." };
   }
 
   try {
-    await deleteSupplier(supabase, id);
+    await deleteSupplier(client, id);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
+    const isRestricted =
+      error instanceof ApiError &&
+      (error.isConflict || message.toLowerCase().includes("foreign key"));
     return {
-      error: message.toLowerCase().includes("foreign key")
+      error: isRestricted
         ? "This supplier has purchase orders on file and cannot be deleted. Turn off \u201cActive\u201d instead."
         : `Could not delete the supplier: ${message}`,
     };

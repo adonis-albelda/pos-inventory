@@ -3,9 +3,10 @@
 import { createRequire } from "node:module";
 import { revalidatePath } from "next/cache";
 import { validateProductInput } from "@double-a/shared-types";
-import { createProduct, listCategories } from "@double-a/supabase";
+import { createProduct, listCategories } from "@double-a/api-client/queries";
+import { ApiError } from "@double-a/api-client";
 import { toCategoryOptions } from "@/lib/category-options";
-import { getServerClient } from "@/lib/supabase/server";
+import { getAuthedClient } from "@/lib/api/session";
 import { parseOcrProductLines } from "./parse-ocr-lines";
 import type {
   ExtractProductsResult,
@@ -65,16 +66,19 @@ function extractTextFromImage(mime: string, buffer: Buffer): Promise<string> {
   });
 }
 
-function describeSaveError(message: string): string {
-  if (message.includes("products_sku_key")) {
-    return "That SKU is already used by another product.";
+// Old Postgres constraint names never reach the client through the Laravel
+// API — validation now comes back as per-field messages on ApiError.errors.
+function describeSaveError(error: unknown): string {
+  if (error instanceof ApiError && error.isValidation) {
+    if (error.errors?.sku) return "That SKU is already used by another product.";
+    if (error.errors?.barcode) return "That barcode is already on another product.";
+    if (error.errors?.bulk_price || error.errors?.bulk_min_quantity) {
+      return "Bulk pricing needs both a bulk price and a minimum quantity.";
+    }
+    const first = Object.values(error.errors ?? {})[0]?.[0];
+    if (first) return first;
   }
-  if (message.includes("products_barcode_idx")) {
-    return "That barcode is already on another product.";
-  }
-  if (message.includes("products_bulk_pair_ck")) {
-    return "Bulk pricing needs both a bulk price and a minimum quantity.";
-  }
+  const message = error instanceof Error ? error.message : "Unknown error";
   return `Could not save the product: ${message}`;
 }
 
@@ -114,23 +118,22 @@ async function insertDraft(draft: ScannedProductDraft): Promise<string | null> {
   const validation = validateProductInput(input);
   if (!validation.ok) return validation.errors.join(" ");
 
-  const supabase = await getServerClient();
+  const client = getAuthedClient();
   try {
-    await createProduct(supabase, {
+    await createProduct(client, {
       name: input.name,
       sku: input.sku,
       price: input.price,
-      cost_price: input.costPrice,
-      category_id: input.categoryId,
+      costPrice: input.costPrice,
+      categoryId: input.categoryId,
       unit: input.unit,
       barcode: input.barcode,
-      reorder_point: input.reorderPoint,
-      bulk_price: input.bulkPrice,
-      bulk_min_quantity: input.bulkMinQuantity,
+      reorderPoint: input.reorderPoint,
+      bulkPrice: input.bulkPrice,
+      bulkMinQuantity: input.bulkMinQuantity,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return describeSaveError(message);
+    return describeSaveError(error);
   }
 
   return null;
@@ -179,8 +182,8 @@ export async function extractProductsFromImage(
     };
   }
 
-  const supabase = await getServerClient();
-  const categories = await listCategories(supabase, { includeInactive: true });
+  const client = getAuthedClient();
+  const categories = await listCategories(client, { includeInactive: true });
   const options = toCategoryOptions(categories);
 
   const drafts = parseOcrProductLines(text, options);

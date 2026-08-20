@@ -1,5 +1,8 @@
+"use client";
+
 import type { Route } from "next";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   Banknote,
   ChevronRight,
@@ -9,8 +12,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { formatMoney } from "@double-a/shared-types";
-import { listSales, listUsers } from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
+import type { SaleWithItems, User } from "@double-a/shared-types";
 import { matchesQuery, paginateItems, parseListQuery } from "@/lib/list-query";
 import {
   Badge,
@@ -25,40 +27,82 @@ import {
 } from "@/components/ui";
 import { Pagination, RecordToolbar } from "@/components/record-list";
 import { SalesFilters } from "./sales-filters";
+import { useSalesList } from "@/lib/query/sales";
+import { useUsers } from "@/lib/query/users";
 
-export default async function SalesPage({
-  searchParams,
+export default function SalesPage() {
+  const searchParams = useSearchParams();
+  const { q, page } = parseListQuery({
+    q: searchParams.get("q") ?? undefined,
+    page: searchParams.get("page") ?? undefined,
+  });
+  const from = searchParams.get("from") ?? undefined;
+  const to = searchParams.get("to") ?? undefined;
+  const userId = searchParams.get("userId") ?? undefined;
+  const deviceId = searchParams.get("deviceId") ?? undefined;
+  const status = searchParams.get("status") ?? undefined;
+
+  const usersQuery = useUsers({ includeInactive: true });
+  const salesQuery = useSalesList({ from, to, userId, deviceId, status });
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        icon={Receipt}
+        title="Sales"
+        description="Every sale synced from a terminal. A sale made offline appears here only after its terminal syncs."
+      />
+
+      {salesQuery.isPending || usersQuery.isPending ? (
+        <Card className="px-4 py-8 text-center text-body text-ink-muted">Loading…</Card>
+      ) : salesQuery.isError ? (
+        <Card className="px-4 py-8 text-center text-body text-danger">
+          {salesQuery.error instanceof Error ? salesQuery.error.message : "Could not load sales."}
+        </Card>
+      ) : (
+        <SalesBody
+          sales={salesQuery.data ?? []}
+          users={usersQuery.data ?? []}
+          q={q}
+          page={page}
+          from={from}
+          to={to}
+          userId={userId}
+          deviceId={deviceId}
+          status={status}
+        />
+      )}
+    </div>
+  );
+}
+
+function SalesBody({
+  sales,
+  users,
+  q,
+  page,
+  from,
+  to,
+  userId,
+  deviceId,
+  status,
 }: {
-  searchParams: Promise<{
-    from?: string;
-    to?: string;
-    userId?: string;
-    deviceId?: string;
-    status?: string;
-    q?: string;
-    page?: string;
-  }>;
+  sales: SaleWithItems[];
+  users: User[];
+  q: string;
+  page: number;
+  from?: string;
+  to?: string;
+  userId?: string;
+  deviceId?: string;
+  status?: string;
 }) {
-  const params = await searchParams;
-  const { q, page } = parseListQuery(params);
-  const supabase = await getServerClient();
-
-  const [sales, users] = await Promise.all([
-    listSales(supabase, {
-      from: params.from ? new Date(params.from).toISOString() : undefined,
-      to: params.to ? new Date(`${params.to}T23:59:59`).toISOString() : undefined,
-      userId: params.userId || undefined,
-      deviceId: params.deviceId || undefined,
-      status: params.status || undefined,
-      limit: 300,
-    }),
-    listUsers(supabase, { includeInactive: true }),
-  ]);
+  const cashierNameById = new Map(users.map((user) => [user.id, user.name]));
 
   const filtered = sales.filter((sale) =>
     matchesQuery(
       [
-        sale.cashierName,
+        sale.userId ? cashierNameById.get(sale.userId) : null,
         sale.customerName,
         sale.deviceId,
         sale.paymentMethod,
@@ -80,27 +124,21 @@ export default async function SalesPage({
   const devices = [...new Set(sales.map((sale) => sale.deviceId).filter(Boolean))] as string[];
 
   const exportQuery = new URLSearchParams();
-  if (params.from) exportQuery.set("from", params.from);
-  if (params.to) exportQuery.set("to", params.to);
-  if (params.status) exportQuery.set("status", params.status);
+  if (from) exportQuery.set("from", from);
+  if (to) exportQuery.set("to", to);
+  if (status) exportQuery.set("status", status);
 
   const listQuery = {
     q: q || undefined,
-    from: params.from,
-    to: params.to,
-    userId: params.userId,
-    deviceId: params.deviceId,
-    status: params.status,
+    from,
+    to,
+    userId,
+    deviceId,
+    status,
   };
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        icon={Receipt}
-        title="Sales"
-        description="Every sale that has reached Supabase. A sale made offline appears here only after its terminal syncs."
-      />
-
+    <>
       <Card>
         <CardHeader icon={SlidersHorizontal} title="Filter" />
         <div className="px-4 py-5 sm:px-6">
@@ -171,7 +209,7 @@ export default async function SalesPage({
                         </span>
                       ) : null}
                     </Td>
-                    <Td>{sale.cashierName ?? "—"}</Td>
+                    <Td>{(sale.userId && cashierNameById.get(sale.userId)) ?? "—"}</Td>
                     <Td className="num text-ink-muted">{sale.deviceId ?? "—"}</Td>
                     <Td>
                       {sale.paymentMethod ? (
@@ -239,6 +277,6 @@ export default async function SalesPage({
           query={listQuery}
         />
       </Card>
-    </div>
+    </>
   );
 }

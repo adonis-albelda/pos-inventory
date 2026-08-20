@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { ConfirmDialog } from "@/components/overlay";
+import { useInvalidateCustomers } from "@/lib/query/customers";
 import { removeCustomer } from "../actions";
 
 export function DeleteCustomerButton({
@@ -13,12 +14,14 @@ export function DeleteCustomerButton({
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const invalidate = useInvalidateCustomers();
 
   function confirm() {
     const form = new FormData();
     form.set("id", customerId);
     startTransition(async () => {
       await removeCustomer(form);
+      invalidate();
       setOpen(false);
     });
   }

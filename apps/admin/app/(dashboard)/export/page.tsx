@@ -1,13 +1,11 @@
 import { Download, TriangleAlert } from "lucide-react";
-import { currentAppUser } from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/api/session";
 import { isShopAdmin } from "@/lib/authz";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { ExportPanel } from "./export-panel";
 
 export default async function ExportPage() {
-  const supabase = await getServerClient();
-  const user = await currentAppUser(supabase);
+  const user = await getCurrentUser();
 
   if (!isShopAdmin(user)) {
     return (

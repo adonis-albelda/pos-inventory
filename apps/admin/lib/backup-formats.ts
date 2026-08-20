@@ -23,7 +23,7 @@ export async function sheetsToCsvZip(sheets: BackupSheet[]): Promise<Uint8Array>
 /** One workbook, one worksheet per dataset. */
 export async function sheetsToXlsx(sheets: BackupSheet[]): Promise<Uint8Array> {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "DOUBLE A";
+  workbook.creator = "POSPro";
   workbook.created = new Date();
 
   for (const sheet of sheets) {

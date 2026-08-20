@@ -1,0 +1,114 @@
+import {
+  DEFAULT_RECEIPT_LAYOUT,
+  DEFAULT_STORE_SETTINGS,
+  type ReceiptLayout,
+  type StoreSettings,
+} from "@double-a/shared-types";
+import { ApiError, type ApiClient, type JsonApiResource } from "../http";
+import { type ReceiptLayoutAttrs, type StoreSettingAttrs, toReceiptLayout, toStoreSettings } from "../mappers";
+
+/**
+ * GAP: no file-upload/storage endpoint on the Tally API. `store_settings.logo_url`
+ * is a plain string column — unlike Supabase Storage's `store-logos` bucket, which
+ * had a dedicated `uploadStoreLogo()` call turning a File/Blob into a public URL.
+ * `updateStoreSettings` below only ever PATCHes `logoUrl` as a string field, same
+ * as any other setting; there is nothing here to call with a file. The logo-upload
+ * UI needs another way to obtain a URL first — a direct-to-S3 (or similar) upload
+ * wired up admin-side, or a future Laravel endpoint — before it can call
+ * `updateStoreSettings({ logoUrl })` with the result.
+ */
+
+export interface StoreSettingsInput {
+  name?: string;
+  logoUrl?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  receiptFooter?: string | null;
+}
+
+function toStoreSettingsPayload(input: StoreSettingsInput): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+  if (input.name !== undefined) payload.name = input.name;
+  if (input.logoUrl !== undefined) payload.logo_url = input.logoUrl;
+  if (input.address !== undefined) payload.address = input.address;
+  if (input.phone !== undefined) payload.phone = input.phone;
+  if (input.receiptFooter !== undefined) payload.receipt_footer = input.receiptFooter;
+  return payload;
+}
+
+/**
+ * The one settings row for the caller's company. ShowStoreSettingController
+ * uses `findOrFail` (404 if the company's row is missing) rather than
+ * Supabase's `.maybeSingle()` returning null — falls back to
+ * DEFAULT_STORE_SETTINGS on a 404, same contract callers had before.
+ */
+export async function getStoreSettings(client: ApiClient): Promise<StoreSettings> {
+  try {
+    const { data } = await client.get<{ data: JsonApiResource<StoreSettingAttrs> }>("/store-settings");
+    return toStoreSettings(data);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return DEFAULT_STORE_SETTINGS;
+    throw error;
+  }
+}
+
+export async function updateStoreSettings(client: ApiClient, patch: StoreSettingsInput): Promise<StoreSettings> {
+  const { data } = await client.patch<{ data: JsonApiResource<StoreSettingAttrs> }>(
+    "/store-settings",
+    toStoreSettingsPayload(patch),
+  );
+  return toStoreSettings(data);
+}
+
+export interface ReceiptLayoutInput {
+  showShopName?: boolean;
+  showAddress?: boolean;
+  showPhone?: boolean;
+  showLogoLine?: boolean;
+  showCashier?: boolean;
+  showTerminal?: boolean;
+  showCustomer?: boolean;
+  showDiscounts?: boolean;
+  showPayment?: boolean;
+  showFooter?: boolean;
+}
+
+function toReceiptLayoutPayload(input: ReceiptLayoutInput): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+  if (input.showShopName !== undefined) payload.show_shop_name = input.showShopName;
+  if (input.showAddress !== undefined) payload.show_address = input.showAddress;
+  if (input.showPhone !== undefined) payload.show_phone = input.showPhone;
+  if (input.showLogoLine !== undefined) payload.show_logo_line = input.showLogoLine;
+  if (input.showCashier !== undefined) payload.show_cashier = input.showCashier;
+  if (input.showTerminal !== undefined) payload.show_terminal = input.showTerminal;
+  if (input.showCustomer !== undefined) payload.show_customer = input.showCustomer;
+  if (input.showDiscounts !== undefined) payload.show_discounts = input.showDiscounts;
+  if (input.showPayment !== undefined) payload.show_payment = input.showPayment;
+  if (input.showFooter !== undefined) payload.show_footer = input.showFooter;
+  return payload;
+}
+
+/**
+ * Same findOrFail-then-404 shape as store settings; falls back to
+ * DEFAULT_RECEIPT_LAYOUT. `paperWidthMm`/`columns`/`printerModel` are locked
+ * literal types on the domain `ReceiptLayout` — `toReceiptLayout()` hardcodes
+ * them to match the shop's one printer, even though the API does echo them back.
+ */
+export async function getReceiptLayout(client: ApiClient): Promise<ReceiptLayout> {
+  try {
+    const { data } = await client.get<{ data: JsonApiResource<ReceiptLayoutAttrs> }>("/receipt-layout");
+    return toReceiptLayout(data);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return DEFAULT_RECEIPT_LAYOUT;
+    throw error;
+  }
+}
+
+/** Only the boolean print toggles are writable — paper width/columns/printer model are not sent, see getReceiptLayout(). */
+export async function updateReceiptLayout(client: ApiClient, patch: ReceiptLayoutInput): Promise<ReceiptLayout> {
+  const { data } = await client.patch<{ data: JsonApiResource<ReceiptLayoutAttrs> }>(
+    "/receipt-layout",
+    toReceiptLayoutPayload(patch),
+  );
+  return toReceiptLayout(data);
+}

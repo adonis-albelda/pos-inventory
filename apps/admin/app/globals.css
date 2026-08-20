@@ -53,6 +53,9 @@
    * reduced-motion preference gets the page with no movement at all.
    */
   --animate-page-enter: page-enter 180ms ease-out both;
+
+  /** Login feature list — each row fades/lifts in, staggered via inline animation-delay per item. */
+  --animate-feature-in: intro-tag-in 420ms ease-out both;
 }
 
 @keyframes page-enter {

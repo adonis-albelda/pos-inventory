@@ -13,6 +13,7 @@ import { formatMoney, type LocalSaleWithItems } from "@double-a/shared-types";
 import { listLocalSales, summariseToday, type LocalDaySummary } from "@/db/sales";
 import { useLayout } from "@/lib/layout";
 import { useSync } from "@/sync/sync-provider";
+import { WaveBackdrop } from "@/components/wave-backdrop";
 import {
   Badge,
   Card,
@@ -23,7 +24,7 @@ import {
   Stat,
   WarningNote,
 } from "@/components/ui";
-import { color, fontSize, space, styles } from "@/theme";
+import { color, fontSize, radius, space, styles } from "@/theme";
 
 /**
  * This device's own sales, read straight from SQLite. Deeper reporting lives in
@@ -75,7 +76,9 @@ export default function HistoryScreen() {
         alignSelf: "center",
       }}
     >
-      <Card style={{ gap: space.md }}>
+      <WaveBackdrop />
+
+      <Card style={[{ gap: space.md }, styles.floatShadow, { borderRadius: radius.sm }]}>
         <SectionTitle
           icon={TrendingUp}
           title="Today on this terminal"
@@ -99,7 +102,7 @@ export default function HistoryScreen() {
       </Card>
 
       {ordered.length === 0 ? (
-        <Card>
+        <Card style={[styles.floatShadow, { borderRadius: radius.sm }]}>
           <EmptyState
             icon={Receipt}
             title="No sales on this terminal yet"

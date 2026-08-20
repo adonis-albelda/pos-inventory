@@ -1,11 +1,13 @@
+"use client";
+
+import { useSearchParams } from "next/navigation";
 import { Shield, Smartphone, UserRound, Users } from "lucide-react";
-import type { UserRole } from "@double-a/shared-types";
-import { listUsers } from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
+import type { User, UserRole } from "@double-a/shared-types";
 import { matchesQuery, paginateItems, parseListQuery } from "@/lib/list-query";
-import { PageHeader } from "@/components/ui";
+import { Card, PageHeader } from "@/components/ui";
 import { TabNav } from "@/components/tab-nav";
 import { UsersPanel } from "./users-panel";
+import { useUsers } from "@/lib/query/users";
 
 const USER_TABS: { key: Exclude<UserRole, "superadmin">; label: string }[] = [
   { key: "admin", label: "Admins" },
@@ -27,17 +29,48 @@ function parseTab(raw: string | undefined): Exclude<UserRole, "superadmin"> {
   return "cashier";
 }
 
-export default async function UsersPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ tab?: string; q?: string; page?: string }>;
-}) {
-  const params = await searchParams;
-  const { q, page } = parseListQuery(params);
-  const tab = parseTab(params.tab);
-  const supabase = await getServerClient();
-  const users = await listUsers(supabase, { includeInactive: true });
+export default function UsersPage() {
+  const searchParams = useSearchParams();
+  const { q, page } = parseListQuery({
+    q: searchParams.get("q") ?? undefined,
+    page: searchParams.get("page") ?? undefined,
+  });
+  const tab = parseTab(searchParams.get("tab") ?? undefined);
 
+  const usersQuery = useUsers({ includeInactive: true });
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        icon={Users}
+        title="Users"
+        description="Admins sign in here. Cashiers unlock with a PIN. Terminals enroll once per device."
+      />
+
+      {usersQuery.isPending ? (
+        <Card className="px-4 py-8 text-center text-body text-ink-muted">Loading…</Card>
+      ) : usersQuery.isError ? (
+        <Card className="px-4 py-8 text-center text-body text-danger">
+          {usersQuery.error instanceof Error ? usersQuery.error.message : "Could not load users."}
+        </Card>
+      ) : (
+        <UsersBody users={usersQuery.data ?? []} tab={tab} q={q} page={page} />
+      )}
+    </div>
+  );
+}
+
+function UsersBody({
+  users,
+  tab,
+  q,
+  page,
+}: {
+  users: User[];
+  tab: Exclude<UserRole, "superadmin">;
+  q: string;
+  page: number;
+}) {
   const counts = {
     admin: users.filter((user) => user.role === "admin").length,
     cashier: users.filter((user) => user.role === "cashier").length,
@@ -46,10 +79,7 @@ export default async function UsersPage({
 
   const inTab = users.filter((user) => user.role === tab);
   const filtered = inTab.filter((user) => matchesQuery([user.name, user.email], q));
-  const { pageItems, page: safePage, pageCount, total, pageSize } = paginateItems(
-    filtered,
-    page,
-  );
+  const { pageItems, page: safePage, pageCount, total, pageSize } = paginateItems(filtered, page);
 
   const tabs = USER_TABS.map((entry) => ({
     key: entry.key,
@@ -60,13 +90,7 @@ export default async function UsersPage({
   }));
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        icon={Users}
-        title="Users"
-        description="Admins sign in here. Cashiers unlock with a PIN. Terminals enroll once per device."
-      />
-
+    <>
       <TabNav items={tabs} active={tab} ariaLabel="User roles" />
 
       <UsersPanel
@@ -78,6 +102,6 @@ export default async function UsersPage({
         total={total}
         pageSize={pageSize}
       />
-    </div>
+    </>
   );
 }

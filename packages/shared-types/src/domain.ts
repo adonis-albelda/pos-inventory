@@ -252,6 +252,37 @@ export interface CategoryNode extends Category {
   children: CategoryNode[];
 }
 
+/** Pure client-side tree assembly — no DB/API dependency, so it lives here rather than in a query layer. */
+export function buildCategoryTree(categories: Category[]): CategoryNode[] {
+  const byId = new Map<string, CategoryNode>();
+  for (const category of categories) {
+    byId.set(category.id, { ...category, path: category.name, depth: 0, children: [] });
+  }
+
+  const roots: CategoryNode[] = [];
+  for (const node of byId.values()) {
+    const parent = node.parentId ? byId.get(node.parentId) : undefined;
+    if (parent) parent.children.push(node);
+    else roots.push(node);
+  }
+
+  const settle = (nodes: CategoryNode[], depth: number, prefix: string) => {
+    nodes.sort((a, b) => a.name.localeCompare(b.name));
+    for (const node of nodes) {
+      node.depth = depth;
+      node.path = prefix ? `${prefix}${CATEGORY_PATH_SEPARATOR}${node.name}` : node.name;
+      settle(node.children, depth + 1, node.path);
+    }
+  };
+
+  settle(roots, 0, "");
+  return roots;
+}
+
+export function flattenCategoryTree(nodes: CategoryNode[]): CategoryNode[] {
+  return nodes.flatMap((node) => [node, ...flattenCategoryTree(node.children)]);
+}
+
 /**
  * What `public.category_path()` joins a tree with: "Plumbing / Pipes / PVC".
  * Products carry that flattened path for receipts and reports, so anything

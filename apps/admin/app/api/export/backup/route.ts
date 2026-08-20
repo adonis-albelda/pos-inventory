@@ -1,4 +1,3 @@
-import { currentAppUser } from "@double-a/supabase";
 import {
   BACKUP_DATASETS,
   buildBackupSheets,
@@ -11,7 +10,7 @@ import {
   sheetsToXlsx,
 } from "@/lib/backup-formats";
 import { storeToday } from "@/lib/date-range";
-import { getServerClient } from "@/lib/supabase/server";
+import { getAuthedClient, getCurrentUser } from "@/lib/api/session";
 import { isShopAdmin } from "@/lib/authz";
 
 export const runtime = "nodejs";
@@ -25,8 +24,7 @@ type Format = "csv" | "xlsx" | "pdf";
  *   datasets omitted → every known dataset.
  */
 export async function GET(request: Request): Promise<Response> {
-  const supabase = await getServerClient();
-  const user = await currentAppUser(supabase);
+  const user = await getCurrentUser();
 
   if (!user) {
     return new Response("Sign in to download this file.\n", { status: 401 });
@@ -60,7 +58,7 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
-    const sheets = await buildBackupSheets(supabase, ids);
+    const sheets = await buildBackupSheets(getAuthedClient(), ids);
     const stamp = storeToday();
 
     if (format === "csv") {

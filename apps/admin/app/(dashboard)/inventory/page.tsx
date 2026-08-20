@@ -1,3 +1,6 @@
+"use client";
+
+import { useSearchParams } from "next/navigation";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -9,22 +12,21 @@ import {
   Warehouse,
 } from "lucide-react";
 import { formatMoney, stockLevel } from "@double-a/shared-types";
-import {
-  findProductIdsMatching,
-  listCategories,
-  listMovementsPage,
-  listProducts,
-  listProductsByIds,
-  listUsers,
-  sumMovements,
-} from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
 import { matchesQuery, paginateItems, parseListQuery } from "@/lib/list-query";
 import { toCategoryOptions, descendantIds } from "@/lib/category-options";
 import { resolveDayWindow } from "@/lib/date-range";
-import { PageHeader, StatCard } from "@/components/ui";
+import { Card, PageHeader, StatCard } from "@/components/ui";
 import { TabNav } from "@/components/tab-nav";
 import { isReason } from "@/lib/inventory-reasons";
+import { useCategories } from "@/lib/query/categories";
+import { useUsers } from "@/lib/query/users";
+import {
+  useInventoryMovements,
+  useInventoryProductNames,
+  useInventoryProducts,
+  useMovementTotals,
+  useProductIdsMatching,
+} from "@/lib/query/inventory";
 import { MovementsPanel } from "./movements-panel";
 import { StockPanel } from "./stock-panel";
 import {
@@ -58,12 +60,21 @@ function buildHref(params: Record<string, string | undefined>): string {
   return query ? `/inventory?${query}` : "/inventory";
 }
 
-export default async function InventoryPage({
-  searchParams,
-}: {
-  searchParams: Promise<InventorySearchParams>;
-}) {
-  const params = await searchParams;
+export default function InventoryPage() {
+  const searchParams = useSearchParams();
+  const params: InventorySearchParams = {
+    tab: searchParams.get("tab") ?? undefined,
+    q: searchParams.get("q") ?? undefined,
+    page: searchParams.get("page") ?? undefined,
+    product: searchParams.get("product") ?? undefined,
+    state: searchParams.get("state") ?? undefined,
+    category: searchParams.get("category") ?? undefined,
+    sort: searchParams.get("sort") ?? undefined,
+    reason: searchParams.get("reason") ?? undefined,
+    from: searchParams.get("from") ?? undefined,
+    to: searchParams.get("to") ?? undefined,
+  };
+
   const tab = params.tab === "movements" ? "movements" : "stock";
   const { q, page } = parseListQuery(params);
   const focusedProduct = params.product;
@@ -71,13 +82,105 @@ export default async function InventoryPage({
   const sort: StockSort = isStockSort(params.sort) ? params.sort : "name";
   const reason = isReason(params.reason) ? params.reason : undefined;
   const dayWindow = resolveDayWindow(params);
+  const isMovementsTab = tab === "movements";
 
-  const supabase = await getServerClient();
-  const [products, categories] = await Promise.all([
-    listProducts(supabase, { includeInactive: true }),
-    listCategories(supabase, { includeInactive: true }),
-  ]);
+  // Whole catalogue, needed by both tabs (header stats; Stock on hand filters
+  // it client-side; Movement history resolves a name search through it).
+  const productsQuery = useInventoryProducts({ includeInactive: true });
+  const categoriesQuery = useCategories({ includeInactive: true });
 
+  // Movements tab only, but hooks stay unconditional — gated with `enabled`
+  // instead of a conditional call. A name search reaches inventory_movements
+  // through product ids: the table itself holds no product name.
+  const searchQ = isMovementsTab ? q : "";
+  const searchIdsQuery = useProductIdsMatching(searchQ, { includeInactive: true });
+  const searchIdsPending = isMovementsTab && Boolean(searchQ) && searchIdsQuery.isPending;
+  const searchIds = isMovementsTab ? searchIdsQuery.data : undefined;
+
+  // GAP: GET /inventory/movements only accepts `product_id` + `per_page`
+  // (packages/api-client/src/queries/inventory.ts MovementFilter) — the old
+  // PostgREST query's `productIds` (batch, for a name search matching more
+  // than one product), `reasons`, and `from`/`to` date-range filters have no
+  // equivalent on the Tally API and are dropped here rather than faked. A
+  // search that matches exactly one product still narrows the list (via
+  // `productId`); a search matching zero or several no longer filters
+  // server-side. The reason select and date range picker on this tab still
+  // render and update the URL (dayWindow/reason are kept below only for
+  // their display label and to keep MovementsPanel's existing props), but no
+  // longer narrow the results.
+  const singleMatch = searchIds?.length === 1 ? searchIds[0] : undefined;
+  const nothingMatches = isMovementsTab && searchIds?.length === 0;
+  const movementFilter = { productId: focusedProduct ?? singleMatch };
+  const movementsEnabled = isMovementsTab && !searchIdsPending && !nothingMatches;
+
+  const movementsQuery = useInventoryMovements(
+    { ...movementFilter, page, pageSize: MOVEMENTS_PAGE_SIZE },
+    { enabled: movementsEnabled },
+  );
+  const totalsQuery = useMovementTotals(movementFilter, { enabled: movementsEnabled });
+  const usersQuery = useUsers({ includeInactive: true });
+
+  const movementPage = nothingMatches
+    ? { movements: [], total: 0, lastPage: 1 }
+    : (movementsQuery.data ?? { movements: [], total: 0, lastPage: 1 });
+  const totals = nothingMatches
+    ? { stockIn: 0, stockOut: 0, net: 0, count: 0 }
+    : (totalsQuery.data ?? { stockIn: 0, stockOut: 0, net: 0, count: 0 });
+
+  const nameIds = isMovementsTab
+    ? [...movementPage.movements.map((movement) => movement.productId), ...(focusedProduct ? [focusedProduct] : [])]
+    : [];
+  const namesQuery = useInventoryProductNames(nameIds);
+
+  const movementsTabPending =
+    isMovementsTab &&
+    (searchIdsPending ||
+      (movementsEnabled && (movementsQuery.isPending || totalsQuery.isPending)) ||
+      usersQuery.isPending ||
+      (nameIds.length > 0 && namesQuery.isPending));
+  const movementsTabError =
+    isMovementsTab &&
+    (searchIdsQuery.isError ||
+      (movementsEnabled && (movementsQuery.isError || totalsQuery.isError)) ||
+      usersQuery.isError ||
+      (nameIds.length > 0 && namesQuery.isError));
+
+  const pending = productsQuery.isPending || categoriesQuery.isPending || movementsTabPending;
+  const isError = productsQuery.isError || categoriesQuery.isError || movementsTabError;
+  const firstError = [productsQuery, categoriesQuery, movementsQuery, totalsQuery, searchIdsQuery, usersQuery, namesQuery]
+    .map((q2) => q2.error)
+    .find((error) => error instanceof Error);
+
+  const header = (
+    <PageHeader
+      icon={Boxes}
+      title="Inventory"
+      description="Stock changes are recorded as movements, never edited directly. Sales from terminals appear here once they sync."
+    />
+  );
+
+  if (pending) {
+    return (
+      <div className="space-y-6">
+        {header}
+        <Card className="px-4 py-8 text-center text-body text-ink-muted">Loading…</Card>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-6">
+        {header}
+        <Card className="px-4 py-8 text-center text-body text-danger">
+          {firstError instanceof Error ? firstError.message : "Could not load inventory."}
+        </Card>
+      </div>
+    );
+  }
+
+  const products = productsQuery.data ?? [];
+  const categories = categoriesQuery.data ?? [];
   const categoryOptions = toCategoryOptions(categories);
 
   // Whole-shop figures: what is on the shelves right now, not what the current
@@ -123,52 +226,9 @@ export default async function InventoryPage({
     },
   ];
 
-  const header = (
-    <PageHeader
-      icon={Boxes}
-      title="Inventory"
-      description="Stock changes are recorded as movements, never edited directly. Sales from terminals appear here once they sync."
-    />
-  );
-
   if (tab === "movements") {
-    // A name search reaches inventory_movements through product ids: the table
-    // itself holds no product name.
-    const searchIds = q
-      ? await findProductIdsMatching(supabase, q, { includeInactive: true })
-      : undefined;
-
-    const filter = {
-      productId: focusedProduct,
-      productIds: searchIds,
-      reasons: reason ? [reason] : undefined,
-      from: dayWindow.from,
-      to: dayWindow.to,
-    };
-
-    const nothingMatches = searchIds?.length === 0;
-    const [movementPage, totals, users] = await Promise.all([
-      nothingMatches
-        ? Promise.resolve({ movements: [], total: 0 })
-        : listMovementsPage(supabase, {
-            ...filter,
-            limit: MOVEMENTS_PAGE_SIZE,
-            offset: (page - 1) * MOVEMENTS_PAGE_SIZE,
-          }),
-      nothingMatches
-        ? Promise.resolve({ stockIn: 0, stockOut: 0, net: 0, count: 0 })
-        : sumMovements(supabase, filter),
-      listUsers(supabase, { includeInactive: true }),
-    ]);
-
-    const named = await listProductsByIds(supabase, [
-      ...movementPage.movements.map((movement) => movement.productId),
-      ...(focusedProduct ? [focusedProduct] : []),
-    ]);
-    const userNames = Object.fromEntries(users.map((user) => [user.id, user.name]));
-    const productNames = Object.fromEntries(
-      named.map((product) => [product.id, product.name]),
-    );
+    const userNames = Object.fromEntries((usersQuery.data ?? []).map((user) => [user.id, user.name]));
+    const productNames = Object.fromEntries((namesQuery.data ?? []).map((product) => [product.id, product.name]));
 
     return (
       <div className="space-y-6">

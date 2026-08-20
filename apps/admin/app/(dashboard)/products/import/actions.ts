@@ -3,15 +3,43 @@
 import { revalidatePath } from "next/cache";
 import {
   createCategory,
+  createProduct,
   listCategories,
   listProducts,
-  upsertProductsBySku,
-  type DoubleAClient,
-} from "@double-a/supabase";
+  updateProduct,
+  type ProductInput,
+} from "@double-a/api-client/queries";
+import { ApiError, type ApiClient } from "@double-a/api-client";
 import { toCategoryOptions } from "@/lib/category-options";
 import { planProductImport, type ProductImportRow } from "@/lib/product-import";
-import { getServerClient } from "@/lib/supabase/server";
-import { EMPTY_IMPORT_STATE, type ImportState } from "./import-state";
+import { getAuthedClient } from "@/lib/api/session";
+import { EMPTY_IMPORT_STATE, type ImportRowFailure, type ImportState } from "./import-state";
+
+/** Snake_case CSV row shape to the api-client's camelCase write shape. */
+function toProductInput(row: ProductImportRow): ProductInput {
+  return {
+    name: row.name,
+    sku: row.sku,
+    price: row.price,
+    costPrice: row.cost_price,
+    categoryId: row.category_id,
+    unit: row.unit,
+    barcode: row.barcode,
+    reorderPoint: row.reorder_point,
+    bulkPrice: row.bulk_price,
+    bulkMinQuantity: row.bulk_min_quantity,
+    allowDecimal: row.allow_decimal,
+    isActive: row.is_active,
+  };
+}
+
+function describeRowError(error: unknown): string {
+  if (error instanceof ApiError && error.isValidation) {
+    const first = Object.values(error.errors ?? {})[0]?.[0];
+    if (first) return first;
+  }
+  return error instanceof Error ? error.message : "Unknown error";
+}
 
 async function readUpload(formData: FormData): Promise<string> {
   const file = formData.get("file");
@@ -24,7 +52,7 @@ async function readUpload(formData: FormData): Promise<string> {
  * missing, and hands back the id of the deepest one.
  */
 async function ensureCategoryPath(
-  client: DoubleAClient,
+  client: ApiClient,
   path: string,
   idByPath: Map<string, string>,
 ): Promise<string | null> {
@@ -40,7 +68,7 @@ async function ensureCategoryPath(
       continue;
     }
 
-    const created = await createCategory(client, { name: segment, parent_id: parentId });
+    const created = await createCategory(client, { name: segment, parentId });
     idByPath.set(walked.toLowerCase(), created.id);
     parentId = created.id;
   }
@@ -70,10 +98,10 @@ export async function importProducts(
     };
   }
 
-  const supabase = await getServerClient();
+  const client = getAuthedClient();
   const [products, categories] = await Promise.all([
-    listProducts(supabase, { includeInactive: true }),
-    listCategories(supabase, { includeInactive: true }),
+    listProducts(client, { includeInactive: true }),
+    listCategories(client, { includeInactive: true }),
   ]);
 
   // Planned from the file both times, never from anything the browser posted
@@ -98,43 +126,66 @@ export async function importProducts(
     idByPath.set(option.path.toLowerCase(), option.id);
   }
 
-  const rows: ProductImportRow[] = [];
+  const productIdBySku = new Map<string, string>();
+  for (const product of products) {
+    if (product.sku) productIdBySku.set(product.sku.toLowerCase(), product.id);
+  }
 
-  try {
-    for (const row of accepted) {
-      const values = { ...row.values! };
+  // GAP: the Tally API has no bulk upsert-by-SKU endpoint (the old flow was
+  // a single Postgres upsert). Each accepted row is now its own
+  // create/update call, so a failure on one row no longer aborts the whole
+  // file — partial success is expected and surfaced below instead of one
+  // all-or-nothing error.
+  const failures: ImportRowFailure[] = [];
+  let imported = 0;
+
+  for (const row of accepted) {
+    try {
+      const values: ProductImportRow = { ...row.values! };
       if (row.categoryPath) {
-        values.category_id = await ensureCategoryPath(
-          supabase,
-          row.categoryPath,
-          idByPath,
-        );
+        values.category_id = await ensureCategoryPath(client, row.categoryPath, idByPath);
       }
-      rows.push(values);
-    }
 
-    await upsertProductsBySku(supabase, rows);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+      const input = toProductInput(values);
+      if (row.action === "update") {
+        const id = productIdBySku.get(row.sku.toLowerCase());
+        if (!id) throw new Error("That product could not be found anymore.");
+        await updateProduct(client, id, input);
+      } else {
+        await createProduct(client, input);
+      }
+      imported += 1;
+    } catch (error) {
+      failures.push({ line: row.line, sku: row.sku, error: describeRowError(error) });
+    }
+  }
+
+  if (imported > 0) {
+    revalidatePath("/products");
+    revalidatePath("/categories");
+    revalidatePath("/inventory");
+    revalidatePath("/reports");
+  }
+
+  if (imported === 0) {
     return {
       ...EMPTY_IMPORT_STATE,
       csv,
       plan,
-      error: message.includes("products_barcode_idx")
-        ? "Two products cannot share a barcode. Check the barcode column and upload again."
-        : `Nothing was imported: ${message}`,
+      error: "Nothing was imported. Every accepted row failed to save — see below.",
+      failures,
     };
   }
-
-  revalidatePath("/products");
-  revalidatePath("/categories");
-  revalidatePath("/inventory");
-  revalidatePath("/reports");
 
   return {
     ...EMPTY_IMPORT_STATE,
     ok: true,
-    imported: rows.length,
+    error:
+      failures.length > 0
+        ? `${failures.length} row${failures.length === 1 ? "" : "s"} could not be saved — see below.`
+        : null,
+    imported,
     skipped: plan.rejectCount,
+    failures: failures.length > 0 ? failures : null,
   };
 }

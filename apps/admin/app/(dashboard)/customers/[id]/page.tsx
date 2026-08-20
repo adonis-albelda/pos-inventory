@@ -1,10 +1,15 @@
+"use client";
+
 import type { Route } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { useParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Receipt, UserRound } from "lucide-react";
 import { formatMoney } from "@double-a/shared-types";
-import { getCustomer, listSales } from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
+import { listSales } from "@double-a/api-client/queries";
+import { getBrowserApiClient } from "@/lib/api/browser-client";
+import { queryKeys } from "@/lib/query/keys";
+import { useCustomer } from "@/lib/query/customers";
 import {
   Badge,
   Card,
@@ -18,18 +23,47 @@ import {
 import { CustomerForm } from "../customer-form";
 import { DeleteCustomerButton } from "./delete-customer-button";
 
-export default async function CustomerDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const supabase = await getServerClient();
+export default function CustomerDetailPage() {
+  const { id } = useParams<{ id: string }>();
 
-  const customer = await getCustomer(supabase, id);
-  if (!customer) notFound();
+  const customerQuery = useCustomer(id);
 
-  const sales = await listSales(supabase, { customerId: id, limit: 500 });
+  // GAP: `IndexSalesController` caps `per_page` at 200 server-side and
+  // `listSales` only fetches page 1 (see queries/sales.ts) — a customer with
+  // more than 200 sales on record will only show the most recent 200 here,
+  // unlike the old `limit: 500` PostgREST query.
+  const salesQuery = useQuery({
+    queryKey: queryKeys.sales.list({ customerId: id, limit: 500 }),
+    queryFn: () => listSales(getBrowserApiClient(), { customerId: id, limit: 500 }),
+    enabled: Boolean(id),
+  });
+
+  if (customerQuery.isPending || salesQuery.isPending) {
+    return (
+      <Card className="px-4 py-8 text-center text-body text-ink-muted">Loading…</Card>
+    );
+  }
+
+  if (customerQuery.isError) {
+    return (
+      <Card className="px-4 py-8 text-center text-body text-danger">
+        {customerQuery.error instanceof Error
+          ? customerQuery.error.message
+          : "Could not load the customer."}
+      </Card>
+    );
+  }
+
+  const customer = customerQuery.data;
+  if (!customer) {
+    return (
+      <Card className="px-4 py-8 text-center text-body text-danger">
+        Customer not found.
+      </Card>
+    );
+  }
+
+  const sales = salesQuery.data ?? [];
   const revenue = sales
     .filter((sale) => sale.status === "completed")
     .reduce((sum, sale) => sum + sale.totalAmount, 0);

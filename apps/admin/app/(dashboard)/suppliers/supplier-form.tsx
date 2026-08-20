@@ -12,6 +12,7 @@ import {
 import type { Product, Supplier } from "@double-a/shared-types";
 import { Button, ErrorNote, Field, Input, SuccessNote } from "@/components/ui";
 import { EMPTY_FORM_STATE } from "@/lib/form-state";
+import { useInvalidateSuppliers } from "@/lib/query/suppliers";
 import { saveSupplier } from "./actions";
 
 export function SupplierForm({
@@ -31,9 +32,15 @@ export function SupplierForm({
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(linkedProductIds ?? []),
   );
+  const invalidate = useInvalidateSuppliers();
 
   useEffect(() => {
-    if (state.ok) onDone?.();
+    if (state.ok) {
+      invalidate();
+      onDone?.();
+    }
+    // invalidate is stable enough for this effect; only state.ok/onDone gate re-entry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.ok, onDone]);
 
   const visibleProducts = useMemo(() => {

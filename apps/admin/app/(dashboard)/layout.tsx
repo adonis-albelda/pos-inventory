@@ -1,5 +1,5 @@
-import { currentAppUser, fetchStoreSettings } from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
+import { getStoreSettings } from "@double-a/api-client/queries";
+import { getAuthedClient, getCurrentUser } from "@/lib/api/session";
 import { ClassicShell } from "@/components/classic-shell";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
@@ -10,10 +10,9 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await getServerClient();
   const [user, store, mode] = await Promise.all([
-    currentAppUser(supabase),
-    fetchStoreSettings(supabase),
+    getCurrentUser(),
+    getStoreSettings(getAuthedClient()),
     getUiMode(),
   ]);
 

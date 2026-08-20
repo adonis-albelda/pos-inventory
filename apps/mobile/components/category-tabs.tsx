@@ -207,15 +207,19 @@ function Chip({
  * strip on purpose: this is where a cashier goes to find the one shelf they
  * cannot see in a row of tabs.
  */
-function CategoryDialog({
+/** Exported so a screen can drop the strip and drive this dialog from its own trigger. */
+export function CategoryDialog({
   open,
   categories,
+  totalProducts,
   value,
   onClose,
   onPick,
 }: {
   open: boolean;
   categories: LocalCategory[];
+  /** Every sellable product, regardless of category — the count for "All products". */
+  totalProducts?: number;
   value: CategoryFilter;
   onClose: () => void;
   onPick: (next: CategoryFilter) => void;
@@ -280,6 +284,7 @@ function CategoryDialog({
           <ScrollView contentContainerStyle={{ gap: space.md, paddingBottom: space.sm }}>
             <DialogRow
               label="All products"
+              count={totalProducts}
               selected={value === null}
               onPress={() => onPick(null)}
             />

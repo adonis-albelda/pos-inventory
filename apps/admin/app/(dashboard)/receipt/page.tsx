@@ -1,17 +1,18 @@
 import { Printer, TriangleAlert } from "lucide-react";
-import {
-  currentAppUser,
-  fetchReceiptLayout,
-  fetchStoreSettings,
-} from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/api/session";
 import { isShopAdmin } from "@/lib/authz";
-import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui";
-import { ReceiptLayoutForm } from "./receipt-layout-form";
+import { Card, EmptyState, PageHeader } from "@/components/ui";
+import { ReceiptPageClient } from "./receipt-page-client";
 
+/**
+ * Stays a (thin) Server Component so the admin-only gate runs before any of
+ * the client bundle/data below it ever mounts — same split as
+ * suppliers/page.tsx and purchase-orders/page.tsx. Everything past the
+ * gate — the layout form and its data — is client-side TanStack Query, in
+ * ReceiptPageClient.
+ */
 export default async function ReceiptLayoutPage() {
-  const supabase = await getServerClient();
-  const user = await currentAppUser(supabase);
+  const user = await getCurrentUser();
 
   if (!isShopAdmin(user)) {
     return (
@@ -28,29 +29,5 @@ export default async function ReceiptLayoutPage() {
     );
   }
 
-  const [layout, store] = await Promise.all([
-    fetchReceiptLayout(supabase),
-    fetchStoreSettings(supabase),
-  ]);
-
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        icon={Printer}
-        title="Receipt layout"
-        description="What shows on the PT-210 (58mm). Terminals pull this on sync; each device pairs its own Bluetooth printer."
-      />
-
-      <Card>
-        <CardHeader
-          icon={Printer}
-          title="Blocks on the receipt"
-          description="Toggle sections. The preview on the right is the paper output."
-        />
-        <div className="px-4 py-5 sm:px-6">
-          <ReceiptLayoutForm layout={layout} store={store} />
-        </div>
-      </Card>
-    </div>
-  );
+  return <ReceiptPageClient />;
 }

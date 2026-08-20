@@ -1,5 +1,5 @@
 import { STORE_TIME_ZONE } from "@double-a/shared-types";
-import type { DateRange } from "@double-a/supabase";
+import type { DateRange } from "@double-a/api-client/queries";
 
 /**
  * Report days are shop days. The database buckets on STORE_TIME_ZONE

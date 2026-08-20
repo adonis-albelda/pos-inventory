@@ -1,5 +1,4 @@
-import type { Category } from "@double-a/shared-types";
-import { buildCategoryTree, flattenCategoryTree } from "@double-a/supabase";
+import { buildCategoryTree, flattenCategoryTree, type Category } from "@double-a/shared-types";
 
 /**
  * The category tree as a flat, render-ready list. A server component may not

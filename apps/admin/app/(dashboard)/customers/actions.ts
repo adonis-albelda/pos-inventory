@@ -5,13 +5,13 @@ import {
   createCustomer,
   deleteCustomer,
   updateCustomer,
-} from "@double-a/supabase";
+} from "@double-a/api-client/queries";
 import {
   CUSTOMER_FIELD_MAX_LENGTH,
   normaliseCustomerDetails,
 } from "@double-a/shared-types";
 import type { FormState } from "@/lib/form-state";
-import { getServerClient } from "@/lib/supabase/server";
+import { getAuthedClient } from "@/lib/api/session";
 
 function revalidateCustomerViews(id?: string) {
   revalidatePath("/customers");
@@ -34,7 +34,7 @@ export async function saveCustomer(
     return { error: "Give the customer a name.", ok: false };
   }
 
-  const supabase = await getServerClient();
+  const client = getAuthedClient();
   const row = {
     name: details.name.slice(0, CUSTOMER_FIELD_MAX_LENGTH),
     address: details.address,
@@ -43,10 +43,10 @@ export async function saveCustomer(
 
   try {
     if (id) {
-      await updateCustomer(supabase, id, row);
+      await updateCustomer(client, id, row);
       revalidateCustomerViews(id);
     } else {
-      const created = await createCustomer(supabase, row);
+      const created = await createCustomer(client, row);
       revalidateCustomerViews(created.id);
     }
   } catch (error) {
@@ -59,7 +59,7 @@ export async function saveCustomer(
 
 export async function removeCustomer(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
-  const supabase = await getServerClient();
-  await deleteCustomer(supabase, id);
+  const client = getAuthedClient();
+  await deleteCustomer(client, id);
   revalidateCustomerViews();
 }

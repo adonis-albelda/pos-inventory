@@ -18,13 +18,14 @@ export function useLayout() {
   const compact = width < COMPACT_BREAKPOINT;
   /** A large tablet, where the extra width buys air rather than more columns. */
   const expanded = width >= 1024;
+  const landscape = width > height;
 
   return {
     width,
     height,
     compact,
     expanded,
-    landscape: width > height,
+    landscape,
 
     /** 2 under 480dp, 3 under 900dp, 4 above. */
     columns: width < 480 ? 2 : width < 900 ? 3 : 4,
@@ -41,8 +42,14 @@ export function useLayout() {
     gridMaxWidth: 1120,
     cartWidth: Math.round(Math.min(Math.max(width * 0.34, 300), 420)),
 
-    /** Forms and receipts read badly full-bleed on a tablet. */
-    readableMaxWidth: 760,
+    /**
+     * Forms and receipts read badly full-bleed on a tablet — but a large
+     * tablet held sideways has real width to spare, so the cap widens there
+     * rather than leaving the same 760 marooned in the middle of the screen.
+     * Only this number moves; the wave backdrop, headers and page padding
+     * stay exactly as wide as the screen either way.
+     */
+    readableMaxWidth: landscape && expanded ? 960 : 760,
 
     tileMinHeight: compact ? 96 : expanded ? 128 : 112,
   };

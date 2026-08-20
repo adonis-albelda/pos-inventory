@@ -1,19 +1,18 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { updateSaleFlags, voidSale } from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
+import { patchSaleFlags, voidSale } from "@double-a/api-client/queries";
+import { getAuthedClient } from "@/lib/api/session";
 
 /**
- * Voiding is the only reversal — a sale is never deleted. A trigger puts the
- * stock back as a void_restore movement.
+ * Voiding is the only reversal — a sale is never deleted. Laravel's
+ * SaleObserver restores stock as the sale flips to voided.
  */
 export async function voidSaleAction(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
 
-  const supabase = await getServerClient();
-  await voidSale(supabase, id);
+  await voidSale(getAuthedClient(), id);
 
   revalidatePath(`/sales/${id}`);
   revalidatePath("/sales");
@@ -21,24 +20,15 @@ export async function voidSaleAction(formData: FormData): Promise<void> {
   revalidatePath("/");
 }
 
+/** Both flags are required together — see sale-flags.tsx. fulfillment can no longer be changed here. */
 export async function patchSaleFlagsAction(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
 
-  const isPaidRaw = formData.get("is_paid");
-  const deliveryRaw = formData.get("delivery_completed");
-  const fulfillmentRaw = formData.get("fulfillment");
+  const isPaid = formData.get("is_paid") === "true";
+  const deliveryCompleted = formData.get("delivery_completed") === "true";
 
-  const supabase = await getServerClient();
-  await updateSaleFlags(supabase, id, {
-    ...(isPaidRaw !== null ? { isPaid: isPaidRaw === "true" } : {}),
-    ...(deliveryRaw !== null
-      ? { deliveryCompleted: deliveryRaw === "true" }
-      : {}),
-    ...(typeof fulfillmentRaw === "string" && fulfillmentRaw
-      ? { fulfillment: fulfillmentRaw }
-      : {}),
-  });
+  await patchSaleFlags(getAuthedClient(), id, { isPaid, deliveryCompleted });
 
   revalidatePath(`/sales/${id}`);
   revalidatePath("/sales");

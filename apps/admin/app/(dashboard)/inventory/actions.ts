@@ -4,26 +4,25 @@ import { revalidatePath } from "next/cache";
 import { isValidQuantity, QUANTITY_DECIMALS } from "@double-a/shared-types";
 import {
   adjustStock,
-  currentAppUser,
   getProduct,
   listProductsPage,
-  type AdjustReason,
-} from "@double-a/supabase";
+  type AdjustStockReason,
+} from "@double-a/api-client/queries";
 import type { Product } from "@double-a/shared-types";
 
 function roundQuantity(value: number): number {
   return Number(value.toFixed(QUANTITY_DECIMALS));
 }
 import type { FormState } from "@/lib/form-state";
-import { getServerClient } from "@/lib/supabase/server";
+import { getAuthedClient } from "@/lib/api/session";
 
-const REASONS: AdjustReason[] = ["restock", "adjustment", "oversell_correction"];
+const REASONS: AdjustStockReason[] = ["restock", "adjustment", "oversell_correction"];
 const MODES = ["in", "out", "count"] as const;
 type Mode = (typeof MODES)[number];
 
 export async function searchProductsForPicker(q: string): Promise<Product[]> {
-  const supabase = await getServerClient();
-  const { products } = await listProductsPage(supabase, {
+  const client = getAuthedClient();
+  const { products } = await listProductsPage(client, {
     q,
     page: 1,
     pageSize: 8,
@@ -34,8 +33,8 @@ export async function searchProductsForPicker(q: string): Promise<Product[]> {
 
 export async function loadProductForPicker(id: string): Promise<Product | null> {
   if (!id) return null;
-  const supabase = await getServerClient();
-  return getProduct(supabase, id);
+  const client = getAuthedClient();
+  return getProduct(client, id);
 }
 
 /**
@@ -54,7 +53,7 @@ export async function moveStock(
   formData: FormData,
 ): Promise<FormState> {
   const productId = String(formData.get("product_id") ?? "");
-  const reason = String(formData.get("reason") ?? "") as AdjustReason;
+  const reason = String(formData.get("reason") ?? "") as AdjustStockReason;
   const rawMode = String(formData.get("mode") ?? "in");
   const mode: Mode = (MODES as readonly string[]).includes(rawMode)
     ? (rawMode as Mode)
@@ -65,12 +64,11 @@ export async function moveStock(
   if (!productId) return { error: "Pick a product.", ok: false };
   if (!REASONS.includes(reason)) return { error: "Pick a reason.", ok: false };
 
-  const supabase = await getServerClient();
-  const actor = await currentAppUser(supabase);
+  const client = getAuthedClient();
 
   // The product's decimal mode decides whether a fraction is allowed here, so
   // it is always fetched — count mode needs its stock anyway.
-  const product = await getProduct(supabase, productId);
+  const product = await getProduct(client, productId);
   if (!product) return { error: "That product no longer exists.", ok: false };
 
   const floor = mode === "count" ? 0 : product.allowDecimal ? 0.001 : 1;
@@ -103,12 +101,15 @@ export async function moveStock(
   }
 
   try {
-    await adjustStock(supabase, {
-      productId,
+    // GAP: POST /products/{id}/adjust-stock (adjustStock in
+    // packages/api-client/src/queries/products.ts) has no `created_by`
+    // parameter — the old RPC took an explicit actor id, the new endpoint
+    // presumably attributes the movement to the authenticated bearer token
+    // server-side. There is nothing left for this action to pass.
+    await adjustStock(client, productId, {
       changeQuantity,
       reason,
       note: movementNote || undefined,
-      createdBy: actor?.id,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

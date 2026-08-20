@@ -1,5 +1,3 @@
-import { currentAppUser } from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
 import { PlatformShell } from "@/components/platform-shell";
 import { requireSuperadmin } from "@/lib/platform";
 
@@ -8,9 +6,7 @@ export default async function PlatformLayout({
 }: {
   children: React.ReactNode;
 }) {
-  await requireSuperadmin();
-  const supabase = await getServerClient();
-  const user = await currentAppUser(supabase);
+  const { user } = await requireSuperadmin();
 
   const initials = (user?.name ?? "?")
     .split(" ")

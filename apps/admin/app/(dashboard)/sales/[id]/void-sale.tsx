@@ -4,18 +4,21 @@ import { useState, useTransition } from "react";
 import { Ban } from "lucide-react";
 import { Button } from "@/components/ui";
 import { ConfirmDialog } from "@/components/overlay";
+import { useInvalidateSales } from "@/lib/query/sales";
 import { voidSaleAction } from "./actions";
 
 /** Destructive and irreversible, so it asks first — deliberately. */
 export function VoidSale({ saleId }: { saleId: string }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const invalidate = useInvalidateSales();
 
   function confirm() {
     const form = new FormData();
     form.set("id", saleId);
     startTransition(async () => {
       await voidSaleAction(form);
+      invalidate();
       setOpen(false);
     });
   }

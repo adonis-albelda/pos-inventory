@@ -1,3 +1,5 @@
+"use client";
+
 import type { Route } from "next";
 import Link from "next/link";
 import {
@@ -18,20 +20,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { formatMoney, formatPercent, stockLevel } from "@double-a/shared-types";
-import {
-  countOpenPurchaseOrders,
-  listOversold,
-  listBelowReorder,
-  listSales,
-  listUpcomingSupplierPayments,
-  reportProfit,
-  sumExpenses,
-  sumSupplierBalance,
-  summariseProfit,
-  type ProfitRow,
-  type UpcomingSupplierPayment,
-} from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
+import { summariseProfit } from "@double-a/api-client/queries";
 import { resolveRange } from "@/lib/date-range";
 import {
   Badge,
@@ -45,36 +34,99 @@ import {
   Td,
   Th,
 } from "@/components/ui";
+import { useRecentSales } from "@/lib/query/sales";
+import { useBelowReorder } from "@/lib/query/products";
+import { useOversoldProducts } from "@/lib/query/inventory";
+import { useReportProfit } from "@/lib/query/reports";
+import { useExpensesTotal } from "@/lib/query/expenses";
+import {
+  useOpenPurchaseOrdersCount,
+  useSupplierBalanceTotal,
+  useUpcomingSupplierPayments,
+} from "@/lib/query/purchase-orders";
+import { useUsers } from "@/lib/query/users";
 
-export default async function DashboardPage() {
-  const supabase = await getServerClient();
+export default function DashboardPage() {
   const { range, fromDay, toDay } = resolveRange({ preset: "today" });
 
-  const [
-    todaysSales,
-    lowStockRows,
-    oversold,
-    profitRows,
-    expensesTotal,
-    openPurchaseOrders,
-    supplierBalanceTotal,
-    upcomingPayments,
-  ] = await Promise.all([
-    listSales(supabase, { from: range.from, limit: 500 }),
-    listBelowReorder(supabase),
-    listOversold(supabase),
-    // Profit is admin-only in the database. A manager signed in as a cashier
-    // still gets the rest of the dashboard rather than an error page.
-    reportProfit(supabase, range).catch((): ProfitRow[] | null => null),
-    sumExpenses(supabase, { fromDay, toDay }).catch((): number | null => null),
-    countOpenPurchaseOrders(supabase).catch((): number | null => null),
-    sumSupplierBalance(supabase).catch((): number | null => null),
-    listUpcomingSupplierPayments(supabase, 7).catch(
-      (): UpcomingSupplierPayment[] | null => null,
-    ),
-  ]);
+  // GAP: IndexSalesController has no date-range filter (see queries/sales.ts) —
+  // the old single query for "today's sales" is now "the 200 most recent
+  // sales of any status, filtered to today client-side" below. Fine unless
+  // a single shop day exceeds 200 sales.
+  const salesQuery = useRecentSales(200);
+  const lowStockQuery = useBelowReorder();
+  const oversoldQuery = useOversoldProducts();
+  // GAP: SaleResource carries no cashier name (see queries/sales.ts) — joined
+  // client-side against the user list below instead.
+  const usersQuery = useUsers({ includeInactive: true });
+
+  // Profit/expenses/purchasing are admin-only on the API. A manager signed in
+  // as a cashier still gets the rest of the dashboard rather than an error —
+  // each is treated as "—" on a query error, same as the original server
+  // component's `.catch(() => null)`.
+  const profitQuery = useReportProfit(range);
+  const expensesQuery = useExpensesTotal({ fromDay, toDay });
+  const openPurchaseOrdersQuery = useOpenPurchaseOrdersCount();
+  const supplierBalanceQuery = useSupplierBalanceTotal();
+  const upcomingPaymentsQuery = useUpcomingSupplierPayments(7);
+
+  const isPending = salesQuery.isPending || lowStockQuery.isPending || oversoldQuery.isPending;
+  const isError = salesQuery.isError || lowStockQuery.isError || oversoldQuery.isError;
+
+  if (isPending || isError) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          icon={Sun}
+          title="Today"
+          description="Sales pushed by every terminal that has synced today."
+        />
+        <Card
+          className={`px-4 py-8 text-center text-body ${isError ? "text-danger" : "text-ink-muted"}`}
+        >
+          {isPending
+            ? "Loading…"
+            : salesQuery.error instanceof Error
+              ? salesQuery.error.message
+              : lowStockQuery.error instanceof Error
+                ? lowStockQuery.error.message
+                : oversoldQuery.error instanceof Error
+                  ? oversoldQuery.error.message
+                  : "Could not load the dashboard."}
+        </Card>
+      </div>
+    );
+  }
+
+  const recentSales = salesQuery.data ?? [];
+  const lowStockRows = lowStockQuery.data ?? [];
+  const oversoldRows = oversoldQuery.data ?? [];
+  const users = usersQuery.isError ? [] : (usersQuery.data ?? []);
+
+  const profitRows = profitQuery.isError ? null : (profitQuery.data ?? null);
+  const expensesTotal = expensesQuery.isError ? null : (expensesQuery.data ?? null);
+  const openPurchaseOrders = openPurchaseOrdersQuery.isError
+    ? null
+    : (openPurchaseOrdersQuery.data ?? null);
+  const supplierBalanceTotal = supplierBalanceQuery.isError
+    ? null
+    : (supplierBalanceQuery.data ?? null);
+  const upcomingPayments = upcomingPaymentsQuery.isError
+    ? null
+    : (upcomingPaymentsQuery.data ?? null);
 
   const profit = profitRows ? summariseProfit(profitRows) : null;
+  const cashierNameById = new Map(users.map((user) => [user.id, user.name]));
+
+  const todaysSales = recentSales.filter((sale) => sale.createdAt >= range.from);
+  // GAP: listOversold/listBelowReorder now return plain Product rows (see
+  // queries/products.ts) — the old view's precomputed `oversold_by` delta is
+  // gone, so it's derived here from the (necessarily negative) stock figure
+  // an oversold product already carries.
+  const oversold = oversoldRows.map((product) => ({
+    ...product,
+    oversoldBy: product.stockQuantity < 0 ? Math.abs(product.stockQuantity) : 0,
+  }));
 
   const completed = todaysSales.filter((sale) => sale.status === "completed");
   const revenue = completed.reduce((sum, sale) => sum + sale.totalAmount, 0);
@@ -82,8 +134,7 @@ export default async function DashboardPage() {
     (sum, sale) => sum + sale.items.reduce((n, item) => n + item.quantity, 0),
     0,
   );
-  const net =
-    expensesTotal === null ? null : revenue - expensesTotal;
+  const net = expensesTotal === null ? null : revenue - expensesTotal;
   const lowStock = lowStockRows.slice(0, 8);
 
   return (
@@ -209,9 +260,9 @@ export default async function DashboardPage() {
                     </Link>
                   </Td>
                   <Td className="text-ink-muted">{product.sku ?? "—"}</Td>
-                  <Td numeric>{product.stock_quantity}</Td>
+                  <Td numeric>{product.stockQuantity}</Td>
                   <Td numeric className="font-semibold text-danger">
-                    {product.oversold_by}
+                    {product.oversoldBy}
                   </Td>
                 </tr>
               ))}
@@ -254,13 +305,13 @@ export default async function DashboardPage() {
               </thead>
               <tbody>
                 {lowStock.map((product) => {
-                  const level = stockLevel(product.stock_quantity, product.reorder_point);
+                  const level = stockLevel(product.stockQuantity, product.reorderPoint);
                   return (
                     <tr key={product.id}>
                       <Td>{product.name}</Td>
-                      <Td numeric>{product.stock_quantity}</Td>
+                      <Td numeric>{product.stockQuantity}</Td>
                       <Td numeric className="text-ink-muted">
-                        {product.reorder_point}
+                        {product.reorderPoint}
                       </Td>
                       <Td>
                         <Badge tone={level === "out" ? "danger" : "warning"}>
@@ -279,7 +330,7 @@ export default async function DashboardPage() {
           <CardHeader
             icon={Receipt}
             title="Latest sales"
-            description="Most recent sales to reach Supabase."
+            description="Most recent sales synced from a terminal."
             action={
               <Link
                 href="/sales"
@@ -319,7 +370,7 @@ export default async function DashboardPage() {
                         })}
                       </Link>
                     </Td>
-                    <Td>{sale.cashierName ?? "—"}</Td>
+                    <Td>{(sale.userId && cashierNameById.get(sale.userId)) ?? "—"}</Td>
                     <Td numeric>
                       <Money value={sale.totalAmount} />
                     </Td>
@@ -369,16 +420,21 @@ export default async function DashboardPage() {
               <tbody>
                 {upcomingPayments.map((payment) => (
                   <tr key={payment.id}>
+                    {/*
+                      GAP: the upcoming-payments endpoint carries no link back to
+                      its purchase order or supplier (see
+                      queries/purchase-orders.ts) — was a clickable supplier name
+                      before, now just the term number and its own note.
+                    */}
                     <Td>
-                      <Link
-                        href={`/purchase-orders/${payment.purchaseOrderId}` as Route}
-                        className="font-medium text-primary hover:underline"
-                      >
-                        {payment.supplierName}
-                      </Link>
-                      <span className="ml-1.5 text-caption text-ink-muted">
-                        #{payment.termNumber}
+                      <span className="font-medium text-ink">
+                        Term #{payment.termNumber}
                       </span>
+                      {payment.note ? (
+                        <span className="ml-1.5 text-caption text-ink-muted">
+                          {payment.note}
+                        </span>
+                      ) : null}
                     </Td>
                     <Td className="num text-ink-muted">{payment.dueDate ?? "—"}</Td>
                     <Td numeric>

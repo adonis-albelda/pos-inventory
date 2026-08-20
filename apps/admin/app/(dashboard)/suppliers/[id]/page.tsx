@@ -1,20 +1,14 @@
+"use client";
+
 import type { Route } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, useParams } from "next/navigation";
 import { ArrowLeft, ClipboardList, Package, Truck, Wallet } from "lucide-react";
 import {
   formatMoney,
   PURCHASE_ORDER_STATUS_LABELS,
   purchaseOrderBalance,
 } from "@double-a/shared-types";
-import {
-  getSupplier,
-  listProducts,
-  listPurchaseOrders,
-  listSupplierProducts,
-  supplierBalance,
-} from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
 import { PO_STATUS_TONE } from "@/lib/purchase-order-status";
 import {
   Badge,
@@ -27,26 +21,55 @@ import {
   Td,
   Th,
 } from "@/components/ui";
+import { usePurchaseOrders } from "@/lib/query/purchase-orders";
 import { SupplierForm } from "../supplier-form";
 import { DeleteSupplierButton } from "./delete-supplier-button";
+import {
+  useSupplier,
+  useSupplierBalance,
+  useSupplierProductOptions,
+} from "@/lib/query/suppliers";
 
-export default async function SupplierDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const supabase = await getServerClient();
+export default function SupplierDetailPage() {
+  const { id } = useParams<{ id: string }>();
 
-  const supplier = await getSupplier(supabase, id);
+  const supplierQuery = useSupplier(id);
+  const productsQuery = useSupplierProductOptions();
+  const ordersQuery = usePurchaseOrders({ supplierId: id });
+  const balanceQuery = useSupplierBalance(id);
+
+  const isPending =
+    supplierQuery.isPending ||
+    productsQuery.isPending ||
+    ordersQuery.isPending ||
+    balanceQuery.isPending;
+
+  if (isPending) {
+    return <Card className="px-4 py-8 text-center text-body text-ink-muted">Loading…</Card>;
+  }
+
+  const error =
+    supplierQuery.error ?? productsQuery.error ?? ordersQuery.error ?? balanceQuery.error;
+  if (error) {
+    return (
+      <Card className="px-4 py-8 text-center text-body text-danger">
+        {error instanceof Error ? error.message : "Could not load this supplier."}
+      </Card>
+    );
+  }
+
+  const supplier = supplierQuery.data;
   if (!supplier) notFound();
 
-  const [products, linkedProducts, orders, balance] = await Promise.all([
-    listProducts(supabase, { includeInactive: true }),
-    listSupplierProducts(supabase, id),
-    listPurchaseOrders(supabase, { supplierId: id }),
-    supplierBalance(supabase, id),
-  ]);
+  // GAP (see lib/query/suppliers.ts / packages/api-client/src/queries/
+  // suppliers.ts): SetSupplierProductsController is write-only — no GET
+  // reads a supplier's linked products back, so this page can't show or
+  // pre-check what this supplier actually carries. Preserved as-is from the
+  // pre-TanStack Query version: the "linked products" card below shows a
+  // "not available" state, and the edit form's picker opens fully unchecked.
+  const products = productsQuery.data ?? [];
+  const orders = ordersQuery.data ?? [];
+  const balance = balanceQuery.data ?? 0;
 
   const openOrders = orders.filter(
     (order) => order.status === "ordered" || order.status === "partially_received",
@@ -99,7 +122,7 @@ export default async function SupplierDetailPage({
           <SupplierForm
             supplier={supplier}
             products={products}
-            linkedProductIds={linkedProducts.map((product) => product.productId)}
+            linkedProductIds={[]}
           />
         </div>
       </Card>
@@ -107,24 +130,14 @@ export default async function SupplierDetailPage({
       <Card>
         <CardHeader
           icon={Package}
-          title={`${linkedProducts.length} linked products`}
+          title="Linked products"
           description="What this supplier is known to carry — a convenience list, not a restriction."
         />
-        {linkedProducts.length === 0 ? (
-          <EmptyState
-            icon={Package}
-            title="No products linked yet"
-            instruction="Edit the supplier above and check off what they carry."
-          />
-        ) : (
-          <div className="flex flex-wrap gap-2 px-4 py-4 sm:px-6">
-            {linkedProducts.map((product) => (
-              <Badge key={product.productId} tone="neutral">
-                {product.productName}
-              </Badge>
-            ))}
-          </div>
-        )}
+        <EmptyState
+          icon={Package}
+          title="Not available"
+          instruction="The API has no way to read back which products a supplier carries yet. Editing the supplier above still lets you set the list, but it can't be shown here or pre-checked until that endpoint exists."
+        />
       </Card>
 
       <Card>

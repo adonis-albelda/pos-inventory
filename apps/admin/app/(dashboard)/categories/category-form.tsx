@@ -9,6 +9,7 @@ import {
   type CategoryOption,
 } from "@/lib/category-options";
 import { EMPTY_FORM_STATE } from "@/lib/form-state";
+import { useInvalidateCategories } from "@/lib/query/categories";
 import { saveCategory } from "./actions";
 
 export function CategoryForm({
@@ -21,9 +22,15 @@ export function CategoryForm({
   onDone?: () => void;
 }) {
   const [state, action, pending] = useActionState(saveCategory, EMPTY_FORM_STATE);
+  const invalidate = useInvalidateCategories();
 
   useEffect(() => {
-    if (state.ok) onDone?.();
+    if (state.ok) {
+      invalidate();
+      onDone?.();
+    }
+    // invalidate is stable enough for this effect; only state.ok/onDone gate re-entry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.ok, onDone]);
 
   // Moving a category under one of its own children would orphan the branch.

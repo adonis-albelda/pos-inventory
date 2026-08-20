@@ -1,9 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { updateStoreSettings, uploadStoreLogo } from "@double-a/supabase";
+import { updateStoreSettings } from "@double-a/api-client/queries";
 import type { FormState } from "@/lib/form-state";
-import { getServerClient } from "@/lib/supabase/server";
+import { getAuthedClient } from "@/lib/api/session";
 
 /** Comfortably past any real shop logo, well under the server action body cap. */
 const MAX_LOGO_BYTES = 1_000_000;
@@ -41,25 +41,32 @@ export async function saveStoreSettings(
     if (file.size > MAX_LOGO_BYTES) {
       return { error: "The logo must be under 1 MB.", ok: false };
     }
+    // GAP (see packages/api-client/src/queries/settings.ts): the Tally API's
+    // `store_settings.logo_url` is a plain string column with no file-upload
+    // endpoint behind it, unlike Supabase Storage's `store-logos` bucket +
+    // `uploadStoreLogo()`. There is nothing to call with a File here, so a
+    // chosen file is refused with a clear message rather than silently
+    // ignored or faked. `StoreForm` (apps/admin/app/(dashboard)/settings/store-form.tsx,
+    // out of scope for this change) still renders a bare file picker with no
+    // URL-text fallback; it should be updated to disable/hide that control,
+    // or to accept a pasted URL instead, once this is picked up.
+    return {
+      error:
+        "Logo upload isn't available yet on the new backend — there is no file storage endpoint. Ask an engineer to add one before setting a new logo. Existing logos can still be removed below.",
+      ok: false,
+    };
   }
 
-  const supabase = await getServerClient();
+  const client = getAuthedClient();
 
   try {
-    // Uploaded first: if storage refuses the file, the row is left alone rather
-    // than pointing at a URL that was never written.
-    const logoUrl = file
-      ? await uploadStoreLogo(supabase, file, LOGO_EXTENSIONS[file.type]!)
-      : null;
-
-    await updateStoreSettings(supabase, {
+    await updateStoreSettings(client, {
       name,
       address: optional(formData, "address"),
       phone: optional(formData, "phone"),
-      receipt_footer: optional(formData, "receipt_footer"),
-      // Three cases, and only two of them touch the column: a new file replaces
-      // it, "remove" clears it, and neither leaves whatever is there.
-      ...(logoUrl ? { logo_url: logoUrl } : removeLogo ? { logo_url: null } : {}),
+      receiptFooter: optional(formData, "receipt_footer"),
+      // "remove" clears the column; otherwise leave whatever is there.
+      ...(removeLogo ? { logoUrl: null } : {}),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

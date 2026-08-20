@@ -18,6 +18,7 @@ import {
   Th,
 } from "@/components/ui";
 import { createPurchaseOrderAction } from "./actions";
+import { useInvalidatePurchaseOrders } from "@/lib/query/purchase-orders";
 
 interface ItemRow {
   key: string;
@@ -50,6 +51,7 @@ export function CreatePurchaseOrderForm({
   defaultOrderDate: string;
 }) {
   const router = useRouter();
+  const invalidatePurchaseOrders = useInvalidatePurchaseOrders();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -199,6 +201,7 @@ export function CreatePurchaseOrderForm({
         return;
       }
 
+      invalidatePurchaseOrders();
       router.push(`/purchase-orders/${result.id}` as Route);
     });
   }

@@ -1,6 +1,9 @@
+"use client";
+
 import type { Route } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { useParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Boxes, ListOrdered, Wallet } from "lucide-react";
 import {
   formatMoney,
@@ -9,12 +12,13 @@ import {
   poItemReceiveState,
   purchaseOrderBalance,
 } from "@double-a/shared-types";
-import { getPurchaseOrder, listMovements } from "@double-a/supabase";
-import { getServerClient } from "@/lib/supabase/server";
+import { getSupplier } from "@double-a/api-client/queries";
+import { getBrowserApiClient } from "@/lib/api/browser-client";
+import { queryKeys } from "@/lib/query/keys";
+import { usePurchaseOrder, usePurchaseOrderMovements } from "@/lib/query/purchase-orders";
 import { PO_STATUS_TONE } from "@/lib/purchase-order-status";
 import {
   Badge,
-  Button,
   Card,
   CardHeader,
   EmptyState,
@@ -24,11 +28,7 @@ import {
   Th,
 } from "@/components/ui";
 import { ReceiveLineForm } from "./receive-line-form";
-import {
-  markPaymentPaidAction,
-  markPaymentUnpaidAction,
-  updatePurchaseOrderStatusAction,
-} from "./actions";
+import { PaymentStatusButton, UpdateStatusButton } from "./status-actions";
 
 const RECEIVE_STATE_BADGE = {
   pending: { tone: "neutral" as const, label: "Not received" },
@@ -36,18 +36,51 @@ const RECEIVE_STATE_BADGE = {
   received: { tone: "success" as const, label: "Received" },
 };
 
-export default async function PurchaseOrderDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const supabase = await getServerClient();
+export default function PurchaseOrderDetailPage() {
+  const { id } = useParams<{ id: string }>();
 
-  const order = await getPurchaseOrder(supabase, id);
-  if (!order) notFound();
+  const orderQuery = usePurchaseOrder(id);
+  const order = orderQuery.data;
 
-  const movements = await listMovements(supabase, { referenceId: id, limit: 200 });
+  // GAP: PurchaseOrderResource carries no supplier name (see
+  // queries/purchase-orders.ts). No lib/query/suppliers.ts hook exists yet
+  // (being built in parallel) — inline against getSupplier directly rather
+  // than block on it. Only runs once the order (and its supplierId) is loaded.
+  const supplierQuery = useQuery({
+    queryKey: queryKeys.suppliers.detail(order?.supplierId ?? ""),
+    queryFn: () => getSupplier(getBrowserApiClient(), order!.supplierId),
+    enabled: Boolean(order?.supplierId),
+  });
+
+  // GAP: IndexInventoryMovementsController has no `reference_id` filter (see
+  // queries/inventory.ts) — usePurchaseOrderMovements walks recent shop-wide
+  // movements looking for this order's, capped rather than a full unbounded scan.
+  const movementsQuery = usePurchaseOrderMovements(id);
+
+  if (orderQuery.isPending || movementsQuery.isPending || (order && supplierQuery.isPending)) {
+    return <Card className="px-4 py-8 text-center text-body text-ink-muted">Loading…</Card>;
+  }
+
+  if (orderQuery.isError) {
+    return (
+      <Card className="px-4 py-8 text-center text-body text-danger">
+        {orderQuery.error instanceof Error
+          ? orderQuery.error.message
+          : "Could not load this purchase order."}
+      </Card>
+    );
+  }
+
+  if (!order) {
+    return (
+      <Card className="px-4 py-8 text-center text-body text-danger">
+        Purchase order not found.
+      </Card>
+    );
+  }
+
+  const supplier = supplierQuery.data;
+  const movements = movementsQuery.data ?? [];
   const balance = purchaseOrderBalance(order.payments);
   const canReceive = order.status === "ordered" || order.status === "partially_received";
 
@@ -67,7 +100,7 @@ export default async function PurchaseOrderDetailPage({
               href={`/suppliers/${order.supplierId}` as Route}
               className="text-primary hover:underline"
             >
-              {order.supplierName}
+              {supplier?.name ?? "Supplier"}
             </Link>
           </h1>
           <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-body text-ink-muted">
@@ -79,22 +112,15 @@ export default async function PurchaseOrderDetailPage({
 
         <div className="flex flex-wrap items-center gap-2">
           {order.status === "draft" ? (
-            <form action={updatePurchaseOrderStatusAction}>
-              <input type="hidden" name="id" value={order.id} />
-              <input type="hidden" name="status" value="ordered" />
-              <Button type="submit" size="sm">
-                Mark as ordered
-              </Button>
-            </form>
+            <UpdateStatusButton id={order.id} status="ordered" label="Mark as ordered" />
           ) : null}
           {order.status === "draft" || order.status === "ordered" ? (
-            <form action={updatePurchaseOrderStatusAction}>
-              <input type="hidden" name="id" value={order.id} />
-              <input type="hidden" name="status" value="cancelled" />
-              <Button type="submit" variant="secondary" size="sm">
-                Cancel order
-              </Button>
-            </form>
+            <UpdateStatusButton
+              id={order.id}
+              status="cancelled"
+              label="Cancel order"
+              variant="secondary"
+            />
           ) : null}
         </div>
       </header>
@@ -170,6 +196,7 @@ export default async function PurchaseOrderDetailPage({
                             itemId={item.id}
                             purchaseOrderId={order.id}
                             productId={item.productId}
+                            currentReceived={item.quantityReceived}
                             remaining={remaining}
                           />
                         ) : null}
@@ -234,15 +261,13 @@ export default async function PurchaseOrderDetailPage({
                       )}
                     </Td>
                     <Td>
-                      <form action={term.isPaid ? markPaymentUnpaidAction : markPaymentPaidAction}>
-                        <input type="hidden" name="payment_id" value={term.id} />
-                        <input type="hidden" name="purchase_order_id" value={order.id} />
-                        <div className="flex justify-end">
-                          <Button type="submit" variant="secondary" size="sm">
-                            {term.isPaid ? "Mark unpaid" : "Mark paid"}
-                          </Button>
-                        </div>
-                      </form>
+                      <div className="flex justify-end">
+                        <PaymentStatusButton
+                          paymentId={term.id}
+                          purchaseOrderId={order.id}
+                          isPaid={term.isPaid}
+                        />
+                      </div>
                     </Td>
                   </tr>
                 ))}

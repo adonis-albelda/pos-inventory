@@ -7,16 +7,16 @@ import {
   Text,
   View,
 } from "react-native";
-import {
-  COMPANY_INTRO_HOLD_MS,
-  COMPANY_LEAD,
-  COMPANY_POWERED_BY,
-  COMPANY_PRODUCT,
-} from "@double-a/ui";
-import { SageBackdrop } from "@/components/sage-backdrop";
+import { COMPANY_INTRO_HOLD_MS, COMPANY_PRODUCT } from "@double-a/ui";
+import { WaveBackdrop } from "@/components/wave-backdrop";
 import { color, fontSize, space } from "@/theme";
 
-const LOGO = require("../assets/logo.png");
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- same asset-require pattern as elsewhere; no *.gif module declaration in this project
+const SPLASH_LOGO = require("../assets/splash-loop.gif");
+// Source is 1146x379 — a wide lockup, not a square mark, so it's sized by
+// that ratio instead of forced into a square box like the old static logo.
+const SPLASH_LOGO_WIDTH = 240;
+const SPLASH_LOGO_HEIGHT = Math.round((SPLASH_LOGO_WIDTH * 379) / 1146);
 
 /**
  * Cold-start splash: mark, product line, powered-by credit. Tap skips.
@@ -73,42 +73,41 @@ export function CompanyIntro({ onDone }: { onDone: () => void }) {
       accessibilityLabel="Continue"
       style={{
         flex: 1,
-        backgroundColor: color.sage,
+        backgroundColor: "transparent",
         alignItems: "center",
         justifyContent: "center",
         paddingHorizontal: space.xl,
       }}
     >
-      <SageBackdrop />
+      <WaveBackdrop />
 
+      {/* Floating card — same treatment as setup/unlock: white, rounded, shadow over the wave. */}
       <Animated.View
         style={{
           alignItems: "center",
           maxWidth: 340,
+          width: "100%",
+          backgroundColor: color.surface,
+          borderRadius: 24,
+          borderWidth: 1,
+          borderColor: color.borderSoft,
+          paddingVertical: space["2xl"],
+          paddingHorizontal: space.xl,
+          shadowColor: "#000",
+          shadowOpacity: 0.14,
+          shadowRadius: 24,
+          shadowOffset: { width: 0, height: 10 },
+          elevation: 10,
           opacity,
           transform: [{ translateY }, { scale: logoScale }],
         }}
       >
         <Image
-          source={LOGO}
-          style={{ width: 112, height: 112 }}
+          source={SPLASH_LOGO}
+          style={{ width: SPLASH_LOGO_WIDTH, height: SPLASH_LOGO_HEIGHT }}
           resizeMode="contain"
           accessibilityIgnoresInvertColors
         />
-
-        <Text
-          style={{
-            marginTop: space.xl,
-            fontSize: fontSize.headingSm,
-            fontWeight: "800",
-            letterSpacing: 2.4,
-            color: color.ink,
-            textAlign: "center",
-          }}
-        >
-          {COMPANY_LEAD}
-        </Text>
-
         <View
           style={{
             marginTop: space.md,
@@ -132,30 +131,18 @@ export function CompanyIntro({ onDone }: { onDone: () => void }) {
         >
           {COMPANY_PRODUCT}
         </Text>
-
-        <Text
-          style={{
-            marginTop: space["2xl"],
-            fontSize: fontSize.bodyLg,
-            fontWeight: "500",
-            lineHeight: 26,
-            color: color.ink,
-            textAlign: "center",
-          }}
-        >
-          {COMPANY_POWERED_BY}
-        </Text>
       </Animated.View>
 
+      {/* Sits on the green wave, not the old light sage — needs light text, not primaryDark. */}
       <Text
         style={{
           position: "absolute",
           bottom: space["3xl"],
           fontSize: fontSize.caption,
           fontWeight: "600",
-          color: color.primaryDark,
+          color: color.sageLight,
           letterSpacing: 0.3,
-          opacity: 0.75,
+          opacity: 0.85,
         }}
       >
         Tap to continue

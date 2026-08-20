@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { ConfirmDialog } from "@/components/overlay";
 import { ErrorNote } from "@/components/ui";
+import { useInvalidateSuppliers } from "@/lib/query/suppliers";
 import { removeSupplier } from "../actions";
 
 export function DeleteSupplierButton({
@@ -15,6 +16,7 @@ export function DeleteSupplierButton({
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const invalidate = useInvalidateSuppliers();
 
   function confirm() {
     const form = new FormData();
@@ -23,6 +25,7 @@ export function DeleteSupplierButton({
       const result = await removeSupplier(form);
       setOpen(false);
       setError(result.error);
+      if (!result.error) invalidate();
     });
   }
 

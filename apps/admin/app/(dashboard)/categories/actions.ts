@@ -1,9 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createCategory, deleteCategory, updateCategory } from "@double-a/supabase";
+import { ApiError } from "@double-a/api-client";
+import { createCategory, deleteCategory, updateCategory } from "@double-a/api-client/queries";
 import type { FormState } from "@/lib/form-state";
-import { getServerClient } from "@/lib/supabase/server";
+import { getAuthedClient } from "@/lib/api/session";
 
 /**
  * Renaming or re-parenting rewrites the flattened path on every product
@@ -16,13 +17,24 @@ function revalidateCategoryViews() {
   revalidatePath("/reports");
 }
 
-function describeError(message: string): string {
-  if (message.includes("categories_sibling_name_idx")) {
-    return "A category with that name already sits under the same parent.";
+/**
+ * The Laravel API rejects a duplicate sibling name and a circular parent the
+ * same way: a 422 with a `parent_id`/`name` validation message attached
+ * (`StoreCategoryRequest`/`UpdateCategoryRequest`'s `uniqueSiblingName()`
+ * closure, and `CategoryPathService::assertNoCycle()` via
+ * `ValidationException::withMessages()`). Both already read as friendly
+ * sentences, so surface them directly instead of matching Postgres
+ * constraint names, which no longer appear now that Supabase is gone.
+ */
+function describeError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.isValidation && error.errors) {
+      const messages = Object.values(error.errors).flat();
+      if (messages.length > 0) return messages.join(" ");
+    }
+    return `Could not save the category: ${error.message}`;
   }
-  if (message.includes("nested inside itself")) {
-    return "A category cannot be moved inside itself.";
-  }
+  const message = error instanceof Error ? error.message : "Unknown error";
   return `Could not save the category: ${message}`;
 }
 
@@ -44,24 +56,23 @@ export async function saveCategory(
     return { error: "Markup percent must be zero or more.", ok: false };
   }
 
-  const supabase = await getServerClient();
+  const client = getAuthedClient();
 
   const patch = {
     name,
-    parent_id: parentId,
-    markup_percent: markupPercent,
-    markup_applied: markupApplied,
+    parentId,
+    markupPercent,
+    markupApplied,
   };
 
   try {
     if (id) {
-      await updateCategory(supabase, id, patch);
+      await updateCategory(client, id, patch);
     } else {
-      await createCategory(supabase, patch);
+      await createCategory(client, patch);
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return { error: describeError(message), ok: false };
+    return { error: describeError(error), ok: false };
   }
 
   revalidateCategoryViews();
@@ -72,8 +83,8 @@ export async function toggleCategoryActive(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   const isActive = String(formData.get("is_active") ?? "") === "true";
 
-  const supabase = await getServerClient();
-  await updateCategory(supabase, id, { is_active: isActive });
+  const client = getAuthedClient();
+  await updateCategory(client, id, { isActive });
 
   revalidateCategoryViews();
 }
@@ -85,8 +96,8 @@ export async function toggleCategoryActive(formData: FormData): Promise<void> {
 export async function removeCategory(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
 
-  const supabase = await getServerClient();
-  await deleteCategory(supabase, id);
+  const client = getAuthedClient();
+  await deleteCategory(client, id);
 
   revalidateCategoryViews();
 }

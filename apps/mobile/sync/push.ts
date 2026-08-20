@@ -3,12 +3,7 @@ import {
   type LocalSaleWithItems,
   type PushResult,
 } from "@double-a/shared-types";
-import {
-  patchSaleFlags,
-  pushCustomers,
-  pushSales,
-  type TablesInsert,
-} from "@double-a/supabase";
+import { patchSaleFlags, pushCustomers, pushSales } from "@double-a/api-client/queries";
 import {
   listPendingCustomers,
   markCustomersSynced,
@@ -20,68 +15,30 @@ import {
   markSalesSynced,
 } from "@/db/sales";
 import { getEnrolledCompanyId } from "@/lib/device";
-import { getSupabase } from "@/lib/supabase";
+import { getApiClient } from "@/lib/api/session";
 
 const BATCH_SIZE = 50;
 
-function toSaleInsert(sale: LocalSaleWithItems, companyId: string): TablesInsert<"sales"> {
-  return {
-    id: sale.id,
-    company_id: sale.companyId || companyId,
-    user_id: sale.userId,
-    total_amount: sale.totalAmount,
-    discount_amount: sale.discountAmount,
-    payment_method: sale.paymentMethod,
-    status: sale.status,
-    device_id: sale.deviceId,
-    created_at: sale.createdAt,
-    customer_id: sale.customerId,
-    customer_name: sale.customerName,
-    customer_address: sale.customerAddress,
-    customer_contact: sale.customerContact,
-    is_paid: sale.isPaid,
-    fulfillment: sale.fulfillment,
-    delivery_completed: sale.deliveryCompleted,
-  };
-}
-
 /**
- * The three prices go up together. Sending them explicitly is what keeps the
- * server's backfill trigger idle: it only reaches for the product's current
- * price when a device a version behind sends zeros, and a supplier price change
- * would then rewrite the margin on a sale made weeks earlier.
- */
-function toItemInserts(
-  sale: LocalSaleWithItems,
-  companyId: string,
-): TablesInsert<"sale_items">[] {
-  return sale.items.map((item) => ({
-    id: item.id,
-    company_id: sale.companyId || companyId,
-    sale_id: item.saleId,
-    product_id: item.productId,
-    product_name: item.productName,
-    quantity: item.quantity,
-    unit_price: item.unitPrice,
-    list_price: item.listPrice,
-    unit_cost: item.unitCost,
-    subtotal: item.subtotal,
-  }));
-}
-
-/**
- * Step one of sync: local customers and sales up to Supabase.
+ * Step one of sync: local customers and sales up to the Tally API.
  *
  * Customers first — sales.customer_id is a foreign key. Then new sales. Then
  * flag patches for sales that already landed but had paid/delivery flipped
- * later (ignoreDuplicates cannot update those columns).
+ * later (`patch_sale_flags` is the only write path for those columns).
  *
- * Rows are only marked synced after the upload for their batch succeeds. If the
- * connection drops halfway, whatever did not land stays pending and goes again
- * next time. Sync stops here on failure and never proceeds to the pull.
+ * Rows are only marked synced after the upload for their batch succeeds. If
+ * the connection drops halfway, whatever did not land stays pending and
+ * goes again next time. Sync stops here on failure and never proceeds to
+ * the pull.
+ *
+ * `company_id` is never sent — the server stamps it from the caller's own
+ * company context (CLAUDE.md §15: shop writes must never cross company_id).
+ * Sale/item rows go over the wire as-is (`pushSales` builds the payload
+ * straight off `Sale`/`SaleItem` fields) — no manual row-shaping needed
+ * here anymore, unlike the old Supabase insert-row builders.
  */
 export async function push(): Promise<PushResult> {
-  const supabase = getSupabase();
+  const client = getApiClient();
   const companyId = await getEnrolledCompanyId();
   if (!companyId) {
     throw new Error(
@@ -92,14 +49,12 @@ export async function push(): Promise<PushResult> {
   const pendingCustomers = await listPendingCustomers();
   if (pendingCustomers.length > 0) {
     await pushCustomers(
-      supabase,
+      client,
       pendingCustomers.map((customer) => ({
         id: customer.id,
-        company_id: companyId,
         name: customer.name,
         address: customer.address,
         contact: customer.contact,
-        updated_at: customer.updatedAt || undefined,
       })),
     );
     await markCustomersSynced(pendingCustomers.map((customer) => customer.id));
@@ -127,10 +82,8 @@ export async function push(): Promise<PushResult> {
 
   for (let index = 0; index < valid.length; index += BATCH_SIZE) {
     const batch = valid.slice(index, index + BATCH_SIZE);
-    const saleRows = batch.map((sale) => toSaleInsert(sale, companyId));
-    const itemRows = batch.flatMap((sale) => toItemInserts(sale, companyId));
 
-    await pushSales(supabase, saleRows, itemRows);
+    await pushSales(client, batch);
 
     const syncedAt = new Date().toISOString();
     await markSalesSynced(
@@ -139,12 +92,12 @@ export async function push(): Promise<PushResult> {
     );
 
     salesPushed += batch.length;
-    itemsPushed += itemRows.length;
+    itemsPushed += batch.reduce((count, sale) => count + sale.items.length, 0);
   }
 
   const flagPending = await listFlagPendingSales();
   for (const sale of flagPending) {
-    await patchSaleFlags(supabase, sale.id, {
+    await patchSaleFlags(client, sale.id, {
       isPaid: sale.isPaid,
       deliveryCompleted: sale.deliveryCompleted,
     });

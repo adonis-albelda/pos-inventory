@@ -3,11 +3,28 @@ import { ActivityIndicator, Text, View } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PaperBackdrop } from "@/components/paper-backdrop";
+import { PullProgressModal } from "@/components/pull-progress-modal";
 import { migrate } from "@/db";
 import { SessionProvider } from "@/lib/session";
 import { SyncProvider } from "@/sync/sync-provider";
 import { color, space, styles } from "@/theme";
+
+/**
+ * Backs admin-mode screens only (app/admin/**) — the POS screens stay on
+ * local SQLite + the manual sync button, untouched. One client for the app's
+ * lifetime is fine here (unlike apps/admin's per-request QueryClient): a
+ * device has exactly one signed-in identity at a time, no cross-user cache
+ * bleed to worry about.
+ */
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+    },
+  },
+});
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
@@ -43,24 +60,27 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <SessionProvider>
-        <SyncProvider>
-          <StatusBar style="dark" />
-          <View style={{ flex: 1, backgroundColor: color.paper }}>
-            <PaperBackdrop />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { flex: 1, backgroundColor: "transparent" },
-                // Boot/unlock/setup swap via router.replace(), same reasoning as
-                // the POS tab stack: fade instead of a directional slide.
-                animation: "fade",
-                animationDuration: 180,
-              }}
-            />
-          </View>
-        </SyncProvider>
-      </SessionProvider>
+      <QueryClientProvider client={queryClient}>
+        <SessionProvider>
+          <SyncProvider>
+            <StatusBar style="dark" />
+            <View style={{ flex: 1, backgroundColor: color.paper }}>
+              <PaperBackdrop />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { flex: 1, backgroundColor: "transparent" },
+                  // Boot/unlock/setup swap via router.replace(), same reasoning as
+                  // the POS tab stack: fade instead of a directional slide.
+                  animation: "fade",
+                  animationDuration: 180,
+                }}
+              />
+            </View>
+            <PullProgressModal />
+          </SyncProvider>
+        </SessionProvider>
+      </QueryClientProvider>
     </SafeAreaProvider>
   );
 }

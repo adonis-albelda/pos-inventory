@@ -11,6 +11,7 @@ import type { Expense } from "@double-a/shared-types";
 import { ConfirmDialog } from "@/components/overlay";
 import { Button, ErrorNote, Field, Input, SuccessNote } from "@/components/ui";
 import { EMPTY_FORM_STATE } from "@/lib/form-state";
+import { useInvalidateExpenses } from "@/lib/query/expenses";
 import { removeExpense, saveExpense } from "./actions";
 
 export function ExpenseForm({
@@ -26,9 +27,15 @@ export function ExpenseForm({
   const [state, action, pending] = useActionState(saveExpense, EMPTY_FORM_STATE);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, startDelete] = useTransition();
+  const invalidateExpenses = useInvalidateExpenses();
 
   useEffect(() => {
-    if (state.ok) onDone?.();
+    if (state.ok) {
+      invalidateExpenses();
+      onDone?.();
+    }
+    // invalidateExpenses is stable enough for this effect; only state.ok/onDone gate re-entry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.ok, onDone]);
 
   function confirmRemove() {
@@ -37,6 +44,7 @@ export function ExpenseForm({
     form.set("id", expense.id);
     startDelete(async () => {
       await removeExpense(form);
+      invalidateExpenses();
       setConfirmDelete(false);
       onDone?.();
     });
