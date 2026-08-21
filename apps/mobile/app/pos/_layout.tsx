@@ -12,7 +12,7 @@ export default function PosLayout() {
   if (!cashier) return <Redirect href="/unlock" />;
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}>
+    <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StoreHeader />
       <View style={{ flex: 1, minHeight: 0 }}>
         <Stack

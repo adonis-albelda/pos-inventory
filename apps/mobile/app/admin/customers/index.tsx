@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Text, TextInput, View } from "react-native";
+import { FlatList, Text, TextInput, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";
 import { Pencil, Trash2, UserPlus, UserRound } from "lucide-react-native";
 import type { Customer } from "@double-a/shared-types";
@@ -9,8 +9,9 @@ import { getAdminApiClient, getApiClient } from "@/lib/api/session";
 import { useCustomers, useInvalidateCustomers } from "@/lib/query/customers";
 import { Button, EmptyState, ErrorNote, IconButton } from "@/components/ui";
 import { BottomSheet } from "@/components/bottom-sheet";
+import { LoadingState } from "@/components/loading-state";
 import { WaveBackdrop } from "@/components/wave-backdrop";
-import { color, fontSize, radius, space, styles } from "@/theme";
+import { color, fontSize, radius, space } from "@/theme";
 
 export default function AdminCustomersScreen() {
   const customersQuery = useCustomers();
@@ -34,11 +35,7 @@ export default function AdminCustomersScreen() {
   });
 
   if (customersQuery.isPending) {
-    return (
-      <View style={[styles.screen, { alignItems: "center", justifyContent: "center" }]}>
-        <ActivityIndicator color={color.primary} />
-      </View>
-    );
+    return <LoadingState text="Loading customers…" />;
   }
 
   if (customersQuery.isError) {

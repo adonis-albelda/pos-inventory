@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   Ban,
@@ -28,6 +28,7 @@ import { useSession } from "@/lib/session";
 import { printReceipt } from "@/printing/receipt";
 import { useSync } from "@/sync/sync-provider";
 import { Badge, Button, Card, ErrorNote, LedgerLine, Money } from "@/components/ui";
+import { LoadingState } from "@/components/loading-state";
 import { color, fontSize, radius, space, styles } from "@/theme";
 
 export default function SaleScreen() {
@@ -70,14 +71,7 @@ export default function SaleScreen() {
   }
 
   if (!sale) {
-    return (
-      <View
-        style={{ padding: space.xl, flexDirection: "row", gap: space.sm }}
-      >
-        <ActivityIndicator size="small" color={color.primary} />
-        <Text style={styles.muted}>Loading the sale...</Text>
-      </View>
-    );
+    return <LoadingState text="Loading the sale…" />;
   }
 
   const customer = saleCustomer(sale);

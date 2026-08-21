@@ -85,6 +85,10 @@ function toLocalSaleItem(row: SaleItemRow): SaleItem {
     listPrice: row.list_price ? row.list_price : row.unit_price,
     unitCost: row.unit_cost ?? 0,
     subtotal: row.subtotal,
+    // Replacing a line item is admin-only (apps/admin), never happens on a
+    // POS terminal's own local copy of a sale.
+    replacedByProductId: null,
+    replacedByProductName: null,
   };
 }
 
@@ -121,6 +125,8 @@ export async function completeSale(
     listPrice: roundMoney(line.listPrice),
     unitCost: roundMoney(line.unitCost),
     subtotal: lineSubtotal(line.unitPrice, line.quantity),
+    replacedByProductId: null,
+    replacedByProductName: null,
   }));
 
   const companyId = await getEnrolledCompanyId();

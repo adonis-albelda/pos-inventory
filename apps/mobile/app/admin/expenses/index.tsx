@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Text, TextInput, View } from "react-native";
+import { FlatList, Text, TextInput, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";
 import { Pencil, Trash2, Wallet } from "lucide-react-native";
 import type { Expense } from "@double-a/shared-types";
@@ -9,8 +9,9 @@ import { getAdminApiClient } from "@/lib/api/session";
 import { useExpenses, useInvalidateExpenses } from "@/lib/query/expenses";
 import { Button, EmptyState, ErrorNote, IconButton, Money } from "@/components/ui";
 import { BottomSheet } from "@/components/bottom-sheet";
+import { LoadingState } from "@/components/loading-state";
 import { WaveBackdrop } from "@/components/wave-backdrop";
-import { color, fontSize, radius, space, styles } from "@/theme";
+import { color, fontSize, radius, space } from "@/theme";
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -35,11 +36,7 @@ export default function AdminExpensesScreen() {
   });
 
   if (expensesQuery.isPending) {
-    return (
-      <View style={[styles.screen, { alignItems: "center", justifyContent: "center" }]}>
-        <ActivityIndicator color={color.primary} />
-      </View>
-    );
+    return <LoadingState text="Loading expenses…" />;
   }
 
   if (expensesQuery.isError) {

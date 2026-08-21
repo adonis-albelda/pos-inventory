@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowLeft, Ban, PackageCheck, Send, Wallet } from "lucide-react-native";
@@ -21,6 +21,7 @@ import { getAdminApiClient } from "@/lib/api/session";
 import { useSuppliers } from "@/lib/query/suppliers";
 import { PO_STATUS_TONE, useInvalidatePurchaseOrders, usePurchaseOrder } from "@/lib/query/purchase-orders";
 import { Badge, Button, Card, EmptyState, ErrorNote, LedgerLine, Money } from "@/components/ui";
+import { LoadingState } from "@/components/loading-state";
 import { WaveBackdrop } from "@/components/wave-backdrop";
 import { color, fontSize, radius, space, styles } from "@/theme";
 
@@ -50,11 +51,7 @@ export default function AdminPurchaseOrderDetailScreen() {
   });
 
   if (orderQuery.isPending || suppliersQuery.isPending) {
-    return (
-      <View style={[styles.screen, { alignItems: "center", justifyContent: "center" }]}>
-        <ActivityIndicator color={color.primary} />
-      </View>
-    );
+    return <LoadingState text="Loading this order…" />;
   }
 
   if (orderQuery.isError) {

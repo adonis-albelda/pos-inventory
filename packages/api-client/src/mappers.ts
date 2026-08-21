@@ -234,6 +234,8 @@ export interface SaleItemJson {
   subtotal: number;
   list_price: number;
   unit_cost: number;
+  replaced_by_product_id?: string | null;
+  replaced_by_product_name?: string | null;
 }
 
 export function toSaleItem(json: SaleItemJson, saleId: string): SaleItem {
@@ -247,6 +249,8 @@ export function toSaleItem(json: SaleItemJson, saleId: string): SaleItem {
     listPrice: Number(json.list_price ?? json.unit_price),
     unitCost: Number(json.unit_cost ?? 0),
     subtotal: Number(json.subtotal),
+    replacedByProductId: json.replaced_by_product_id ?? null,
+    replacedByProductName: json.replaced_by_product_name ?? null,
   };
 }
 

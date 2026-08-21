@@ -3,11 +3,13 @@ import { ApiError, type ApiClient, type JsonApiPage, type JsonApiResource } from
 import { type SaleAttrs, toSaleWithItems } from "../mappers";
 
 /**
- * IMPORTANT — sales are never created from this client. The only writer is
- * the mobile POS sync push flow (`POST /pos/sync/sales`, see queries/pos.ts),
- * per CLAUDE.md rule 3 (client-generated UUIDs, offline-first). This file is
- * read/void/flag-patch only — admin reporting and the Delivery tab's flag
- * updates.
+ * The POS's own sales still only ever arrive through the mobile sync push
+ * flow (`POST /pos/sync/sales`, see queries/pos.ts) — client-generated
+ * UUIDs, offline-first, per CLAUDE.md rule 3. `createSale` below is a
+ * different thing: an admin-only "rung up directly in the office" sale
+ * (e.g. a phone order), server-generates its own id, and is admin-only —
+ * `StoreSaleRequest::authorize()` checks actsAsAdmin() directly rather than
+ * the shared create ability sync push relies on.
  */
 
 /**
@@ -66,6 +68,42 @@ export async function listSales(
   return result.sales;
 }
 
+export interface CreateSaleItemInput {
+  productId: string;
+  quantity: number;
+  /** Defaults to the product's shelf price — set to log a counter discount, same as the POS. */
+  unitPrice?: number;
+}
+
+export interface CreateSaleInput {
+  items: CreateSaleItemInput[];
+  paymentMethod: "cash" | "gcash" | "card";
+  customerId?: string;
+  /** Defaults to true for cash, false otherwise — same rule the POS follows (CLAUDE.md §12). */
+  isPaid?: boolean;
+  fulfillment?: "pickup" | "delivery";
+}
+
+/** Admin-only. See the file-level note above — this is not the POS's sale path. */
+export async function createSale(client: ApiClient, input: CreateSaleInput): Promise<SaleWithItems> {
+  const { data } = await client.post<{ data: JsonApiResource<SaleAttrs> }>(
+    "/sales",
+    {
+      items: input.items.map((item) => ({
+        product_id: item.productId,
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+      })),
+      payment_method: input.paymentMethod,
+      customer_id: input.customerId,
+      is_paid: input.isPaid,
+      fulfillment: input.fulfillment,
+    },
+    { idempotent: true },
+  );
+  return toSaleWithItems(data);
+}
+
 export async function getSale(client: ApiClient, id: string): Promise<SaleWithItems | null> {
   try {
     const { data } = await client.get<{ data: JsonApiResource<SaleAttrs> }>(`/sales/${id}`);
@@ -107,5 +145,25 @@ export async function patchSaleFlags(
     is_paid: flags.isPaid,
     delivery_completed: flags.deliveryCompleted,
   });
+  return toSaleWithItems(data);
+}
+
+/**
+ * Swaps a line item for a different product on an already-completed sale.
+ * Admin-only. The original line is never rewritten — it's flagged and a new
+ * line carries the replacement — so `total_amount` on the returned sale may
+ * differ from before the call; re-render from this response, not a diff.
+ */
+export async function replaceSaleItem(
+  client: ApiClient,
+  saleId: string,
+  saleItemId: string,
+  input: { productId: string; quantity?: number },
+): Promise<SaleWithItems> {
+  const { data } = await client.post<{ data: JsonApiResource<SaleAttrs> }>(
+    `/sales/${saleId}/items/${saleItemId}/replace`,
+    { product_id: input.productId, quantity: input.quantity },
+    { idempotent: true },
+  );
   return toSaleWithItems(data);
 }

@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { patchSaleFlags, voidSale } from "@double-a/api-client/queries";
+import { listProductsPage, patchSaleFlags, replaceSaleItem, voidSale } from "@double-a/api-client/queries";
+import type { Product } from "@double-a/shared-types";
 import { getAuthedClient } from "@/lib/api/session";
 
 /**
@@ -15,6 +16,32 @@ export async function voidSaleAction(formData: FormData): Promise<void> {
   await voidSale(getAuthedClient(), id);
 
   revalidatePath(`/sales/${id}`);
+  revalidatePath("/sales");
+  revalidatePath("/inventory");
+  revalidatePath("/");
+}
+
+export async function searchProductsForReplace(q: string): Promise<Product[]> {
+  const client = getAuthedClient();
+  const { products } = await listProductsPage(client, { q, page: 1, pageSize: 8 });
+  return products;
+}
+
+/**
+ * Swaps a line item for a different product. The original row is never
+ * rewritten — it stays exactly as it was charged and is only flagged; the
+ * replacement is a new line. See ReplaceSaleItemAction (Laravel) for the
+ * full mechanics — stock/total_amount are handled server-side.
+ */
+export async function replaceSaleItemAction(
+  saleId: string,
+  saleItemId: string,
+  productId: string,
+  quantity?: number,
+): Promise<void> {
+  await replaceSaleItem(getAuthedClient(), saleId, saleItemId, { productId, quantity });
+
+  revalidatePath(`/sales/${saleId}`);
   revalidatePath("/sales");
   revalidatePath("/inventory");
   revalidatePath("/");

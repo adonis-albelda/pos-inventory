@@ -267,7 +267,13 @@ export default function SetupScreen() {
             // card vs. tall sign-in card with three fields) — measured via
             // onLayout below since header height is fixed but unknown until
             // first paint.
-            marginTop: -headerHeight / 2,
+            //
+            // Capped at -space.xl: on a short screen or a tall header (a
+            // long shop name wrapping to two lines), the uncapped offset
+            // could push the logo up past the ScrollView's own top padding
+            // and under the status bar. Perfect optical centering loses to
+            // "never draws outside the safe area."
+            marginTop: Math.max(-headerHeight / 2, -space.xl),
           }}
         >
           <View

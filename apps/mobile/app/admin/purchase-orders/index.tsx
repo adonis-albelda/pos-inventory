@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from "react-native";
+import { FlatList, Pressable, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ChevronRight, ClipboardList, Plus } from "lucide-react-native";
 import type { PurchaseOrderStatus } from "@double-a/shared-types";
@@ -12,8 +12,9 @@ import {
 import { useSuppliers } from "@/lib/query/suppliers";
 import { PO_STATUS_TONE, usePurchaseOrders } from "@/lib/query/purchase-orders";
 import { Badge, Button, EmptyState, ErrorNote, Money } from "@/components/ui";
+import { LoadingState } from "@/components/loading-state";
 import { WaveBackdrop } from "@/components/wave-backdrop";
-import { color, fontSize, radius, space, styles } from "@/theme";
+import { color, fontSize, radius, space } from "@/theme";
 
 const STATUS_TABS: { value: PurchaseOrderStatus | undefined; label: string }[] = [
   { value: undefined, label: "All" },
@@ -51,11 +52,7 @@ export default function AdminPurchaseOrdersScreen() {
   }, [ordersQuery.data, query, supplierNameById]);
 
   if (ordersQuery.isPending || suppliersQuery.isPending) {
-    return (
-      <View style={[styles.screen, { alignItems: "center", justifyContent: "center" }]}>
-        <ActivityIndicator color={color.primary} />
-      </View>
-    );
+    return <LoadingState text="Loading purchase orders…" />;
   }
 
   if (ordersQuery.isError) {

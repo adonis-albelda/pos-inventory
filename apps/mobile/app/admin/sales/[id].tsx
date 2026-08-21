@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -17,6 +17,7 @@ import { getAdminApiClient, getApiClient } from "@/lib/api/session";
 import { useSale, useInvalidateSales } from "@/lib/query/sales";
 import { useUsers } from "@/lib/query/users";
 import { Badge, Button, Card, ErrorNote, LedgerLine, Money } from "@/components/ui";
+import { LoadingState } from "@/components/loading-state";
 import { WaveBackdrop } from "@/components/wave-backdrop";
 import { color, fontSize, radius, space, styles } from "@/theme";
 
@@ -51,11 +52,7 @@ export default function AdminSaleDetailScreen() {
   });
 
   if (saleQuery.isPending || usersQuery.isPending) {
-    return (
-      <View style={[styles.screen, { alignItems: "center", justifyContent: "center" }]}>
-        <ActivityIndicator color={color.primary} />
-      </View>
-    );
+    return <LoadingState text="Loading this sale…" />;
   }
 
   if (saleQuery.isError) {

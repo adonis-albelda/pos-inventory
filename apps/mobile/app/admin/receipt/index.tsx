@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, Switch, Text, View } from "react-native";
+import { ScrollView, Switch, Text, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";
 import { Check, Printer } from "lucide-react-native";
 import {
@@ -12,6 +12,7 @@ import { updateReceiptLayout } from "@double-a/api-client/queries";
 import { getAdminApiClient } from "@/lib/api/session";
 import { useInvalidateSettings, useReceiptLayout } from "@/lib/query/settings";
 import { Button, Card, ErrorNote, SectionTitle, SuccessNote } from "@/components/ui";
+import { LoadingState } from "@/components/loading-state";
 import { WaveBackdrop } from "@/components/wave-backdrop";
 import { color, fontSize, radius, space, styles } from "@/theme";
 
@@ -73,11 +74,7 @@ export default function AdminReceiptScreen() {
   });
 
   if (layoutQuery.isPending || !layout) {
-    return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator color={color.primary} />
-      </View>
-    );
+    return <LoadingState text="Loading receipt layout…" />;
   }
 
   if (layoutQuery.isError) {

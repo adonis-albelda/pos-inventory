@@ -31,6 +31,7 @@ import {
 import { useSale, useSaleMovements } from "@/lib/query/sales";
 import { VoidSale } from "./void-sale";
 import { SaleFlags } from "./sale-flags";
+import { ReplaceItem } from "./replace-item";
 
 export default function SaleDetailPage() {
   const params = useParams<{ id: string }>();
@@ -191,6 +192,7 @@ export default function SaleDetailPage() {
                 <Th numeric>Charged</Th>
                 <Th numeric>Discount</Th>
                 <Th numeric>Subtotal</Th>
+                {sale.status === "completed" ? <Th /> : null}
               </tr>
             </thead>
             <tbody>
@@ -199,15 +201,21 @@ export default function SaleDetailPage() {
                   Math.max(item.listPrice - item.unitPrice, 0) * item.quantity,
                 );
                 const belowCost = item.unitPrice < item.unitCost;
+                const replaced = item.replacedByProductId !== null;
 
                 return (
-                  <tr key={item.id}>
+                  <tr key={item.id} className={replaced ? "opacity-60" : undefined}>
                     <Td>
                       <span className="font-medium">{item.productName}</span>
                       {belowCost ? (
                         <span className="mt-0.5 block text-caption text-danger">
                           Below cost (
                           <Money value={item.unitCost} />)
+                        </span>
+                      ) : null}
+                      {replaced ? (
+                        <span className="mt-0.5 block text-caption text-warning-ink">
+                          Replaced by {item.replacedByProductName ?? "another product"}
                         </span>
                       ) : null}
                     </Td>
@@ -234,6 +242,9 @@ export default function SaleDetailPage() {
                         />
                       </span>
                     </Td>
+                    {sale.status === "completed" ? (
+                      <Td>{replaced ? null : <ReplaceItem saleId={id} item={item} />}</Td>
+                    ) : null}
                   </tr>
                 );
               })}

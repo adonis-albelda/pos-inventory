@@ -182,7 +182,7 @@ export default function UnlockScreen() {
         maxWidth: 520,
         alignSelf: "center",
         flexGrow: 1,
-        paddingBottom: space.xl,
+        paddingBottom: insets.bottom + space.xl,
       }}
     >
       {/* Store banner — floats over the wave, same treatment as the setup card. */}
@@ -235,12 +235,6 @@ export default function UnlockScreen() {
             </Text>
           )}
         </View>
-        <Text
-          numberOfLines={1}
-          style={{ flex: 1, fontSize: fontSize.headingSm, fontWeight: "700", color: color.ink }}
-        >
-          {store.name}
-        </Text>
       </View>
       {enrolled?.email ? (
         <Text style={{ fontSize: fontSize.body, color: color.inkMuted, marginTop: -space.sm }}>
@@ -261,9 +255,6 @@ export default function UnlockScreen() {
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: fontSize.headingMd, fontWeight: "700", color: color.ink }}>
             Who is on shift?
-          </Text>
-          <Text style={{ fontSize: fontSize.body, color: color.inkMuted, marginTop: space.xs }}>
-            Pick your name, then enter your PIN. Needs a connection.
           </Text>
           <Text
             style={{

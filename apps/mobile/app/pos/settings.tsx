@@ -240,6 +240,8 @@ export default function SettingsScreen() {
               listPrice: 123.45,
               unitCost: 0,
               subtotal: 123.45,
+              replacedByProductId: null,
+              replacedByProductName: null,
             },
           ],
         },

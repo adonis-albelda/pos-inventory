@@ -479,6 +479,14 @@ export interface SaleItem {
    */
   unitCost: number;
   subtotal: number;
+  /**
+   * Set once this line has been swapped for a different product (admin
+   * dashboard only). The row itself is never rewritten — it still shows
+   * exactly what was originally sold, at the price it sold for — this just
+   * points at what replaced it. Null means still the live line.
+   */
+  replacedByProductId: string | null;
+  replacedByProductName: string | null;
 }
 
 export interface LocalSale extends Sale {

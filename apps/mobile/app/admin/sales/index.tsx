@@ -1,13 +1,14 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from "react-native";
+import { FlatList, Pressable, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ChevronRight, Receipt, UserRound } from "lucide-react-native";
 import type { SaleStatus } from "@double-a/shared-types";
 import { useSalesList } from "@/lib/query/sales";
 import { useUsers } from "@/lib/query/users";
 import { Badge, EmptyState, ErrorNote, Money } from "@/components/ui";
+import { LoadingState } from "@/components/loading-state";
 import { WaveBackdrop } from "@/components/wave-backdrop";
-import { color, fontSize, radius, space, styles } from "@/theme";
+import { color, fontSize, radius, space } from "@/theme";
 
 const STATUS_TABS: { value: SaleStatus | undefined; label: string }[] = [
   { value: undefined, label: "All" },
@@ -57,11 +58,7 @@ export default function AdminSalesScreen() {
   }, [salesQuery.data, query, cashierNameById]);
 
   if (salesQuery.isPending || usersQuery.isPending) {
-    return (
-      <View style={[styles.screen, { alignItems: "center", justifyContent: "center" }]}>
-        <ActivityIndicator color={color.primary} />
-      </View>
-    );
+    return <LoadingState text="Loading sales…" />;
   }
 
   if (salesQuery.isError) {

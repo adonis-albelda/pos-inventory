@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
 import { Redirect, Stack, useRouter } from "expo-router";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Image, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft } from "lucide-react-native";
 import { useSession } from "@/lib/session";
 import { ensureFreshSession } from "@/lib/api/session";
 import { Button } from "@/components/ui";
+import { LoadingState } from "@/components/loading-state";
 import { color, fontSize, space, styles } from "@/theme";
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- same asset-require pattern as setup.tsx; no *.png module declaration in this project
+const LOGO = require("../../assets/logo.png");
 
 type SessionCheck = "checking" | "ready" | "error";
 
@@ -54,11 +58,7 @@ export default function AdminLayout() {
   if (cashier.role !== "admin") return <Redirect href="/pos" />;
 
   if (check === "checking") {
-    return (
-      <View style={[styles.screen, { flex: 1, alignItems: "center", justifyContent: "center" }]}>
-        <ActivityIndicator color={color.primary} />
-      </View>
-    );
+    return <LoadingState text="Opening admin dashboard…" />;
   }
 
   if (check === "error") {
@@ -77,7 +77,7 @@ export default function AdminLayout() {
   }
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}>
+    <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View
         style={{
           flexDirection: "row",
@@ -96,6 +96,19 @@ export default function AdminLayout() {
         >
           <ArrowLeft size={20} color={color.onPrimary} strokeWidth={2} />
         </Pressable>
+        <View
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 14,
+            backgroundColor: color.surface,
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "hidden",
+          }}
+        >
+          <Image source={LOGO} style={{ width: 20, height: 20 }} resizeMode="contain" />
+        </View>
         <Text style={{ fontSize: fontSize.bodyLg, fontWeight: "700", color: color.onPrimary }}>
           Admin dashboard
         </Text>

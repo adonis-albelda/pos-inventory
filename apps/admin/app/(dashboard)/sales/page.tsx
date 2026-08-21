@@ -7,6 +7,7 @@ import {
   Banknote,
   ChevronRight,
   CreditCard,
+  Plus,
   Receipt,
   SlidersHorizontal,
   UserRound,
@@ -16,6 +17,7 @@ import type { SaleWithItems, User } from "@double-a/shared-types";
 import { matchesQuery, paginateItems, parseListQuery } from "@/lib/list-query";
 import {
   Badge,
+  ButtonLink,
   Card,
   CardHeader,
   EmptyState,
@@ -51,6 +53,11 @@ export default function SalesPage() {
         icon={Receipt}
         title="Sales"
         description="Every sale synced from a terminal. A sale made offline appears here only after its terminal syncs."
+        action={
+          <ButtonLink href="/sales/new" icon={Plus}>
+            New sale
+          </ButtonLink>
+        }
       />
 
       {salesQuery.isPending || usersQuery.isPending ? (

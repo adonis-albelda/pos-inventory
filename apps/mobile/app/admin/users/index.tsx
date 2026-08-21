@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Pressable,
   Switch,
@@ -26,6 +25,7 @@ import { getAdminApiClient } from "@/lib/api/session";
 import { useInvalidateUsers, useUsers } from "@/lib/query/users";
 import { Badge, Button, EmptyState, ErrorNote, IconButton } from "@/components/ui";
 import { BottomSheet } from "@/components/bottom-sheet";
+import { LoadingState } from "@/components/loading-state";
 import { WaveBackdrop } from "@/components/wave-backdrop";
 import { color, fontSize, radius, space, styles } from "@/theme";
 
@@ -91,11 +91,7 @@ export default function AdminUsersScreen() {
   });
 
   if (usersQuery.isPending) {
-    return (
-      <View style={[styles.screen, { alignItems: "center", justifyContent: "center" }]}>
-        <ActivityIndicator color={color.primary} />
-      </View>
-    );
+    return <LoadingState text="Loading people…" />;
   }
 
   if (usersQuery.isError) {

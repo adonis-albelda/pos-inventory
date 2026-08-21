@@ -86,6 +86,7 @@ import { printReceipt } from "@/printing/receipt";
 import { useSync } from "@/sync/sync-provider";
 import { BottomSheet } from "@/components/bottom-sheet";
 import { CategoryDialog, type CategoryFilter } from "@/components/category-tabs";
+import { LoadingState } from "@/components/loading-state";
 import { ProductTile } from "@/components/product-tile";
 import { VoiceSearchModal } from "@/components/voice-search-modal";
 import {
@@ -762,9 +763,7 @@ export default function SellScreen() {
 
         <View style={{ flex: 1, minHeight: 0, gap: space.sm }}>
           {!ready || (loadingPage && products.length === 0) ? (
-            <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-              <ActivityIndicator color={color.primary} />
-            </View>
+            <LoadingState text="Loading products…" />
           ) : products.length === 0 && !query && category === null ? (
             <EmptyState
               icon={PackageSearch}
@@ -1273,9 +1272,25 @@ function CartRow({
       ? color.accentInk
       : color.inkMuted;
 
+  // Pressable's built-in onLongPress can misfire as a child of a FlatList row
+  // — the list's own scroll responder sometimes swallows it before the timer
+  // completes. A manual hold timer on press in/out sidesteps that.
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function clearHoldTimer() {
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+  }
+
   return (
     <Pressable
-      onLongPress={onRemove}
+      onPressIn={() => {
+        clearHoldTimer();
+        holdTimer.current = setTimeout(onRemove, 500);
+      }}
+      onPressOut={clearHoldTimer}
       accessibilityRole="button"
       accessibilityLabel={`${line.productName}, hold to remove from cart`}
       style={{
@@ -1404,6 +1419,16 @@ function CartRow({
       </View>
 
       <View style={{ alignItems: "flex-end", gap: space.xs, flexShrink: 0 }}>
+        {/* Holding the row does the same thing, but a gesture with no visible
+            target is easy to miss — this is the guaranteed-to-work version. */}
+        <IconButton
+          icon={Trash2}
+          label={`Remove ${line.productName} from the cart`}
+          tone="danger"
+          size={32}
+          style={{ borderWidth: 0, backgroundColor: "transparent" }}
+          onPress={onRemove}
+        />
         <Money
           value={lineSubtotal(line.unitPrice, line.quantity)}
           style={{

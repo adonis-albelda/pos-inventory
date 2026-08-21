@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Pressable,
   Switch,
@@ -23,8 +22,9 @@ import { getAdminApiClient } from "@/lib/api/session";
 import { useInvalidateSuppliers, useSupplierBalances, useSuppliers } from "@/lib/query/suppliers";
 import { Badge, Button, EmptyState, ErrorNote, IconButton } from "@/components/ui";
 import { BottomSheet } from "@/components/bottom-sheet";
+import { LoadingState } from "@/components/loading-state";
 import { WaveBackdrop } from "@/components/wave-backdrop";
-import { color, fontSize, radius, space, styles } from "@/theme";
+import { color, fontSize, radius, space } from "@/theme";
 
 export default function AdminSuppliersScreen() {
   const suppliersQuery = useSuppliers({ includeInactive: true });
@@ -58,11 +58,7 @@ export default function AdminSuppliersScreen() {
   });
 
   if (suppliersQuery.isPending) {
-    return (
-      <View style={[styles.screen, { alignItems: "center", justifyContent: "center" }]}>
-        <ActivityIndicator color={color.primary} />
-      </View>
-    );
+    return <LoadingState text="Loading suppliers…" />;
   }
 
   if (suppliersQuery.isError) {

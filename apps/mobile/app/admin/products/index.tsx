@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Pressable,
   ScrollView,
@@ -25,8 +24,9 @@ import { useProducts, useInvalidateProducts } from "@/lib/query/products";
 import { useCategories } from "@/lib/query/categories";
 import { Badge, Button, EmptyState, ErrorNote, IconButton, Money } from "@/components/ui";
 import { BottomSheet } from "@/components/bottom-sheet";
+import { LoadingState } from "@/components/loading-state";
 import { WaveBackdrop } from "@/components/wave-backdrop";
-import { color, fontSize, radius, space, styles } from "@/theme";
+import { color, fontSize, radius, space } from "@/theme";
 
 type ActiveFilter = "all" | "active" | "inactive";
 
@@ -77,11 +77,7 @@ export default function AdminProductsScreen() {
   });
 
   if (productsQuery.isPending) {
-    return (
-      <View style={[styles.screen, { alignItems: "center", justifyContent: "center" }]}>
-        <ActivityIndicator color={color.primary} />
-      </View>
-    );
+    return <LoadingState text="Loading products…" />;
   }
 
   if (productsQuery.isError) {

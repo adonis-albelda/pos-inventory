@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { View } from "react-native";
 import { Redirect } from "expo-router";
 import { CompanyIntro } from "@/components/company-intro";
+import { LoadingState } from "@/components/loading-state";
 import { WaveBackdrop } from "@/components/wave-backdrop";
 import { getSyncMeta } from "@/db/meta";
 import { useSession } from "@/lib/session";
 import { isEnrolled } from "@/lib/api/session";
-import { color } from "@/theme";
 
 type Boot =
   | { state: "intro" }
@@ -59,9 +59,7 @@ export default function Index() {
     return (
       <View style={{ flex: 1 }}>
         <WaveBackdrop />
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-          <ActivityIndicator color={color.primary} />
-        </View>
+        <LoadingState text="Getting things ready…" />
       </View>
     );
   }

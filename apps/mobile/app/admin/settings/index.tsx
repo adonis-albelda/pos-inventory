@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, Text, TextInput, View } from "react-native";
+import { ScrollView, Text, TextInput, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";
 import { Check, Store } from "lucide-react-native";
 import { updateStoreSettings } from "@double-a/api-client/queries";
@@ -7,6 +7,7 @@ import { getAdminApiClient } from "@/lib/api/session";
 import { useInvalidateSettings, useStoreSettings } from "@/lib/query/settings";
 import { useSync } from "@/sync/sync-provider";
 import { Button, Card, ErrorNote, SectionTitle, SuccessNote } from "@/components/ui";
+import { LoadingState } from "@/components/loading-state";
 import { WaveBackdrop } from "@/components/wave-backdrop";
 import { color, fontSize, radius, space, styles } from "@/theme";
 
@@ -70,11 +71,7 @@ export default function AdminSettingsScreen() {
   });
 
   if (settingsQuery.isPending) {
-    return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator color={color.primary} />
-      </View>
-    );
+    return <LoadingState text="Loading store settings…" />;
   }
 
   if (settingsQuery.isError) {

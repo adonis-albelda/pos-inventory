@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Pressable,
   Switch,
@@ -16,8 +15,9 @@ import { getAdminApiClient } from "@/lib/api/session";
 import { useCategories, useCategoryProductCounts, useInvalidateCategories } from "@/lib/query/categories";
 import { Button, EmptyState, ErrorNote, IconButton } from "@/components/ui";
 import { BottomSheet } from "@/components/bottom-sheet";
+import { LoadingState } from "@/components/loading-state";
 import { WaveBackdrop } from "@/components/wave-backdrop";
-import { color, fontSize, radius, space, styles } from "@/theme";
+import { color, fontSize, radius, space } from "@/theme";
 
 interface CategoryNode extends Category {
   path: string;
@@ -76,11 +76,7 @@ export default function AdminCategoriesScreen() {
   });
 
   if (categoriesQuery.isPending || countsQuery.isPending) {
-    return (
-      <View style={[styles.screen, { alignItems: "center", justifyContent: "center" }]}>
-        <ActivityIndicator color={color.primary} />
-      </View>
-    );
+    return <LoadingState text="Loading categories…" />;
   }
 
   if (categoriesQuery.isError) {
