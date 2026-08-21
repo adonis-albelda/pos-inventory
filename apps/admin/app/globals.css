@@ -56,6 +56,9 @@
 
   /** Login feature list — each row fades/lifts in, staggered via inline animation-delay per item. */
   --animate-feature-in: intro-tag-in 420ms ease-out both;
+
+  /** Login brand tagline — replays on every rotation, remounted via key={index}. */
+  --animate-tagline-in: tagline-in 500ms ease-out both;
 }
 
 @keyframes page-enter {
@@ -86,6 +89,44 @@
   from {
     opacity: 0;
     transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/**
+ * Login right-column particles. Each dot sets its own animation-duration/
+ * delay via inline style (not a Tailwind utility) so the timing can vary per
+ * particle without generating a dynamic class string Tailwind's JIT scanner
+ * can't see — one keyframe, many playback speeds.
+ */
+@keyframes particle-float {
+  0% {
+    transform: translateY(0) scale(0.8);
+    opacity: 0;
+  }
+
+  15% {
+    opacity: 1;
+  }
+
+  85% {
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(-180px) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes tagline-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
   }
 
   to {

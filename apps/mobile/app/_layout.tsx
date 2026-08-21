@@ -3,6 +3,7 @@ import { ActivityIndicator, Text, View } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PaperBackdrop } from "@/components/paper-backdrop";
 import { PullProgressModal } from "@/components/pull-progress-modal";
@@ -59,28 +60,30 @@ export default function RootLayout() {
   }
 
   return (
-    <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
-        <SessionProvider>
-          <SyncProvider>
-            <StatusBar style="dark" />
-            <View style={{ flex: 1, backgroundColor: color.paper }}>
-              <PaperBackdrop />
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { flex: 1, backgroundColor: "transparent" },
-                  // Boot/unlock/setup swap via router.replace(), same reasoning as
-                  // the POS tab stack: fade instead of a directional slide.
-                  animation: "fade",
-                  animationDuration: 180,
-                }}
-              />
-            </View>
-            <PullProgressModal />
-          </SyncProvider>
-        </SessionProvider>
-      </QueryClientProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <QueryClientProvider client={queryClient}>
+          <SessionProvider>
+            <SyncProvider>
+              <StatusBar style="dark" />
+              <View style={{ flex: 1, backgroundColor: color.paper }}>
+                <PaperBackdrop />
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    contentStyle: { flex: 1, backgroundColor: "transparent" },
+                    // Boot/unlock/setup swap via router.replace(), same reasoning as
+                    // the POS tab stack: fade instead of a directional slide.
+                    animation: "fade",
+                    animationDuration: 180,
+                  }}
+                />
+              </View>
+              <PullProgressModal />
+            </SyncProvider>
+          </SessionProvider>
+        </QueryClientProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

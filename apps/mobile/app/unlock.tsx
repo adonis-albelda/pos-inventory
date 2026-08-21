@@ -235,6 +235,12 @@ export default function UnlockScreen() {
             </Text>
           )}
         </View>
+        <Text
+          numberOfLines={1}
+          style={{ flex: 1, fontSize: fontSize.bodyLg, fontWeight: "700", color: color.ink }}
+        >
+          {store.name}
+        </Text>
       </View>
       {enrolled?.email ? (
         <Text style={{ fontSize: fontSize.body, color: color.inkMuted, marginTop: -space.sm }}>

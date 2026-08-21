@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Minus, Package, Tag, Trash2 } from "lucide-react-native";
 import { formatMoney, stockLevel, type ProductWithEstimatedStock } from "@double-a/shared-types";
@@ -13,6 +14,7 @@ export function ProductTile({
   padding = space.sm,
   onPress,
   onRemove,
+  onHoldRemove,
 }: {
   product: ProductWithEstimatedStock;
   inCart: number;
@@ -21,6 +23,8 @@ export function ProductTile({
   padding?: number;
   onPress: () => void;
   onRemove: () => void;
+  /** Holding a tile already in the cart drops the whole line, with confirmation. */
+  onHoldRemove: () => void;
 }) {
   // Per product, not one shop-wide number: a box of screws and a length of GI
   // pipe run out at very different counts.
@@ -31,9 +35,43 @@ export function ProductTile({
   // At one, taking one off drops the line entirely, so the control says so.
   const RemoveIcon = inCart === 1 ? Trash2 : Minus;
 
+  // Manual hold timer, same reason as the cart row: Pressable's built-in
+  // onLongPress can misfire as a child of a FlatList row. didHold suppresses
+  // the trailing onPress (add-to-cart) once the hold has already removed it.
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didHold = useRef(false);
+
+  function clearHoldTimer() {
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+  }
+
   return (
     <Pressable
-      onPress={onPress}
+      onPressIn={() => {
+        clearHoldTimer();
+        didHold.current = false;
+        if (inCartNow) {
+          holdTimer.current = setTimeout(() => {
+            didHold.current = true;
+            onHoldRemove();
+          }, 500);
+        }
+      }}
+      onPressOut={clearHoldTimer}
+      onPress={() => {
+        if (didHold.current) {
+          didHold.current = false;
+          return;
+        }
+        onPress();
+      }}
+      accessibilityRole="button"
+      accessibilityLabel={
+        inCartNow ? `${product.name}, hold to remove from cart` : product.name
+      }
       style={({ pressed }) => [
         styles.card,
         {

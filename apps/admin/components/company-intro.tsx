@@ -1,19 +1,17 @@
 "use client";
 
 import Image from "next/image";
+import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import {
-  COMPANY_INTRO_HOLD_MS,
-  COMPANY_LEAD,
-  COMPANY_POWERED_BY,
-  COMPANY_PRODUCT,
-} from "@double-a/ui";
+import { COMPANY_INTRO_HOLD_MS, COMPANY_LEAD, COMPANY_PRODUCT } from "@double-a/ui";
 
 const SESSION_KEY = "da-company-intro-seen";
 
 /**
- * Full-screen company intro for admin. Once per browser session: logo, product,
- * one powered-by line — then fades so the real page sits underneath.
+ * Full-screen company intro for admin. Once per browser session: logo,
+ * product tagline, a "Preparing…" beat — then fades so the real page sits
+ * underneath. bg-paper, same as the rest of the app; no separate branded
+ * background, no "powered by" line, nothing to read past the loader.
  */
 export function CompanyIntro() {
   const [visible, setVisible] = useState(false);
@@ -55,45 +53,35 @@ export function CompanyIntro() {
       type="button"
       onClick={dismiss}
       aria-label="Continue"
-      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center px-8 transition-opacity duration-500 ${
+      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center gap-4 bg-paper px-8 transition-opacity duration-500 ${
         leaving ? "pointer-events-none opacity-0" : "opacity-100"
       }`}
-      style={{
-        background:
-          "linear-gradient(165deg, #e9f1ec 0%, #c6dacf 48%, #9dbcac 100%)",
-      }}
     >
-      <div className="flex max-w-sm flex-col items-center [animation:intro-pop_600ms_ease-out]">
-        <Image
-          src="/logo.png"
-          alt=""
-          width={96}
-          height={96}
-          priority
-          className="size-24 object-contain"
-        />
+      <div className="flex flex-col items-center [animation:intro-pop_600ms_ease-out]">
+        <div className="flex size-14 items-center justify-center rounded-xl bg-primary-soft">
+          <Image
+            src="/logo.png"
+            alt=""
+            width={32}
+            height={32}
+            priority
+            className="size-8 object-contain"
+          />
+        </div>
 
-        <p className="mt-8 font-display text-heading-sm font-extrabold tracking-[0.18em] text-ink">
+        <p className="mt-4 font-display text-heading-sm font-bold text-ink">
           {COMPANY_LEAD}
         </p>
 
-        <span
-          aria-hidden
-          className="mt-4 block h-0.5 w-10 rounded-full bg-primary"
-        />
-
-        <p className="mt-4 text-caption font-medium tracking-[0.08em] text-ink-muted uppercase">
+        <p className="mt-1 text-center text-body text-ink-muted [animation:intro-tag-in_500ms_ease-out_180ms_both]">
           {COMPANY_PRODUCT}
-        </p>
-
-        <p className="mt-14 text-center font-sans text-body-lg font-medium leading-relaxed text-ink [animation:intro-tag-in_500ms_ease-out_180ms_both]">
-          {COMPANY_POWERED_BY}
         </p>
       </div>
 
-      <p className="absolute bottom-10 text-caption font-medium tracking-wide text-primary-dark/70">
-        Click to continue
-      </p>
+      <div className="flex items-center gap-2 text-caption text-ink-muted">
+        <Loader2 size={14} strokeWidth={2} className="animate-spin" />
+        Preparing…
+      </div>
     </button>
   );
 }

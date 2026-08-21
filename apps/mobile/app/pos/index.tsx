@@ -10,6 +10,9 @@ import {
   TextInput,
   View,
 } from "react-native";
+import Swipeable, {
+  type SwipeableMethods,
+} from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useFocusEffect, useRouter } from "expo-router";
 import * as Crypto from "expo-crypto";
 import {
@@ -88,6 +91,7 @@ import { BottomSheet } from "@/components/bottom-sheet";
 import { CategoryDialog, type CategoryFilter } from "@/components/category-tabs";
 import { LoadingState } from "@/components/loading-state";
 import { ProductTile } from "@/components/product-tile";
+import { SelectField } from "@/components/select-field";
 import { VoiceSearchModal } from "@/components/voice-search-modal";
 import {
   Badge,
@@ -112,6 +116,11 @@ const PAYMENT_METHODS: { value: PaymentMethod; label: string; icon: LucideIcon }
   { value: "cash", label: "Cash", icon: Banknote },
   { value: "gcash", label: "GCash", icon: Smartphone },
   { value: "card", label: "Card", icon: CreditCard },
+];
+
+const FULFILLMENT_OPTIONS: { value: Fulfillment; label: string; icon?: LucideIcon }[] = [
+  { value: "pickup", label: "Pickup" },
+  { value: "delivery", label: "Delivery", icon: Truck },
 ];
 
 /**
@@ -161,7 +170,18 @@ export default function SellScreen() {
   // Lines whose price the attendant typed in. A manual price is a decision, so
   // it outranks the bulk tier and survives every quantity change after it.
   const [overridden, setOverridden] = useState<string[]>([]);
+  // Which of those overrides came from the global discount split rather than
+  // a cashier typing a price on that one line — kept separate so CartRow can
+  // stay quiet about it and let the cart-level Subtotal/Discount/Total say it
+  // once, instead of every row repeating "discounted".
+  const [globalDiscountIds, setGlobalDiscountIds] = useState<string[]>([]);
+  // The per-line price as it stood right before the global split touched it —
+  // CartRow shows this instead of the real (reduced) unit_price for those
+  // lines, so the cashier reads the same per-item price throughout; only the
+  // Subtotal/Discount/Total band at the bottom moves.
+  const [preDiscountPrices, setPreDiscountPrices] = useState<Record<string, number>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [discountSheetOpen, setDiscountSheetOpen] = useState(false);
   const [qtyEditingId, setQtyEditingId] = useState<string | null>(null);
   const [payment, setPayment] = useState<PaymentMethod>("cash");
   // Optional, and empty for most sales. Held on the cart rather than asked for
@@ -169,6 +189,7 @@ export default function SellScreen() {
   // built and never has a dialog between them and completing the sale.
   const [customer, setCustomer] = useState<CustomerDetails>(NO_CUSTOMER);
   const [fulfillment, setFulfillment] = useState<Fulfillment>("pickup");
+  const [openField, setOpenField] = useState<"payment" | "fulfillment" | null>(null);
   const [editingCustomer, setEditingCustomer] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -467,6 +488,8 @@ export default function SellScreen() {
 
   function forgetOverride(productId: string) {
     setOverridden((current) => current.filter((id) => id !== productId));
+    setGlobalDiscountIds((current) => current.filter((id) => id !== productId));
+    setPreDiscountPrices(({ [productId]: _drop, ...rest }) => rest);
   }
 
   function applyPrice(productId: string, price: number) {
@@ -478,12 +501,18 @@ export default function SellScreen() {
     setOverridden((current) =>
       current.includes(productId) ? current : [...current, productId],
     );
+    // A cashier typing a price on this line by hand makes it a real per-line
+    // discount from here on, even if the global split had touched it first.
+    setGlobalDiscountIds((current) => current.filter((id) => id !== productId));
+    setPreDiscountPrices(({ [productId]: _drop, ...rest }) => rest);
     setEditingId(null);
   }
 
   /** Back to whatever the product is priced at for this quantity, bulk included. */
   function resetPrice(productId: string) {
     setOverridden((current) => current.filter((id) => id !== productId));
+    setGlobalDiscountIds((current) => current.filter((id) => id !== productId));
+    setPreDiscountPrices(({ [productId]: _drop, ...rest }) => rest);
     setLines((current) =>
       current.map((line) => {
         const product = byId.get(line.productId);
@@ -492,6 +521,59 @@ export default function SellScreen() {
       }),
     );
     setEditingId(null);
+  }
+
+  /**
+   * A flat peso amount off the whole cart, not a separate field anywhere —
+   * split across every line's unit_price by its share of the total, same
+   * mechanism as a per-line counter discount (CLAUDE.md §7), so it lands on
+   * the receipt and the discount report exactly the same way.
+   */
+  function applyGlobalDiscount(amount: number) {
+    if (!Number.isFinite(amount) || amount <= 0 || lines.length === 0) return;
+    const capped = Math.min(amount, total);
+
+    // Snapshot each line's price before this split touches it — only the
+    // first time a line is caught by a global discount, so stacking a second
+    // one still shows the original per-item price, not the halfway point.
+    setPreDiscountPrices((current) => {
+      const next = { ...current };
+      for (const line of lines) {
+        if (!(line.productId in next)) next[line.productId] = line.unitPrice;
+      }
+      return next;
+    });
+
+    setLines((current) =>
+      current.map((line) => {
+        const lineTotal = lineSubtotal(line.unitPrice, line.quantity);
+        const share = roundMoney((lineTotal / total) * capped);
+        return { ...line, unitPrice: Math.max(0, roundMoney(line.unitPrice - share / line.quantity)) };
+      }),
+    );
+    setOverridden((current) => [
+      ...current,
+      ...lines.map((line) => line.productId).filter((id) => !current.includes(id)),
+    ]);
+    setGlobalDiscountIds((current) => [
+      ...current,
+      ...lines.map((line) => line.productId).filter((id) => !current.includes(id)),
+    ]);
+    setDiscountSheetOpen(false);
+  }
+
+  /** Drops every price override at once, discount included — back to shelf price across the board. */
+  function clearAllDiscounts() {
+    setLines((current) =>
+      current.map((line) => {
+        const product = byId.get(line.productId);
+        return product ? { ...line, unitPrice: priceForQuantity(product, line.quantity) } : line;
+      }),
+    );
+    setOverridden([]);
+    setGlobalDiscountIds([]);
+    setPreDiscountPrices({});
+    setDiscountSheetOpen(false);
   }
 
   /**
@@ -815,6 +897,7 @@ export default function SellScreen() {
                   padding={space.md}
                   onPress={() => addToCart(item)}
                   onRemove={() => changeQuantity(item.id, -1)}
+                  onHoldRemove={() => confirmRemoveLine(item.id, item.name)}
                 />
               )}
             />
@@ -935,13 +1018,27 @@ export default function SellScreen() {
                 keyExtractor={(line) => line.productId}
                 keyboardShouldPersistTaps="handled"
                 ItemSeparatorComponent={() => (
-                  <View style={{ height: 1, backgroundColor: color.border }} />
+                  <View
+                    style={{
+                      borderBottomWidth: 1,
+                      borderStyle: "dashed",
+                      borderColor: color.border,
+                    }}
+                  />
                 )}
                 renderItem={({ item }) => (
                   <CartRow
                     line={item}
                     product={byId.get(item.productId)}
-                    overridden={overridden.includes(item.productId)}
+                    overridden={
+                      overridden.includes(item.productId) &&
+                      !globalDiscountIds.includes(item.productId)
+                    }
+                    displayUnitPrice={
+                      globalDiscountIds.includes(item.productId)
+                        ? (preDiscountPrices[item.productId] ?? item.unitPrice)
+                        : item.unitPrice
+                    }
                     onChange={(delta) => changeQuantity(item.productId, delta)}
                     onEditQuantity={() => setQtyEditingId(item.productId)}
                     onEditPrice={() => setEditingId(item.productId)}
@@ -956,7 +1053,25 @@ export default function SellScreen() {
           <View style={{ flexShrink: 0, paddingTop: space.sm }}>
             <LedgerLine />
 
+            {/* Only surfaces once there's a discount to explain — otherwise
+                subtotal and total are the same number twice. */}
             {discount > 0 ? (
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: space.xs,
+                }}
+              >
+                <Text style={{ fontSize: fontSize.body, color: color.inkMuted }}>Subtotal</Text>
+                <Text style={[styles.numeric, { fontSize: fontSize.body, color: color.inkMuted }]}>
+                  {formatMoney(shelfTotal)}
+                </Text>
+              </View>
+            ) : null}
+
+            {lines.length > 0 ? (
               <View
                 style={{
                   flexDirection: "row",
@@ -966,20 +1081,39 @@ export default function SellScreen() {
                   marginBottom: space.sm,
                 }}
               >
-                <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
-                  <Tag size={14} color={color.accentInk} strokeWidth={2.5} />
-                  <Text style={{ fontSize: fontSize.body, color: color.accentInk }}>
-                    Discount given
-                  </Text>
-                </View>
-                <Text
-                  style={[
-                    styles.numeric,
-                    { fontSize: fontSize.bodyLg, fontWeight: "700", color: color.accentInk },
-                  ]}
+                <Pressable
+                  onPress={() => setDiscountSheetOpen(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    discount > 0
+                      ? `Discount given, ${formatMoney(discount)}. Edit.`
+                      : "Add a discount for the whole cart"
+                  }
+                  style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}
                 >
-                  -{formatMoney(discount)}
-                </Text>
+                  <Tag size={14} color={color.accentInk} strokeWidth={2.5} />
+                  <Text
+                    style={{
+                      fontSize: fontSize.body,
+                      color: color.accentInk,
+                      textDecorationLine: "underline",
+                      textDecorationStyle: "dotted",
+                    }}
+                  >
+                    {discount > 0 ? "Discount given" : "Add discount"}
+                  </Text>
+                  <Pencil size={11} color={color.accentInk} strokeWidth={2} />
+                </Pressable>
+                {discount > 0 ? (
+                  <Text
+                    style={[
+                      styles.numeric,
+                      { fontSize: fontSize.bodyLg, fontWeight: "700", color: color.accentInk },
+                    ]}
+                  >
+                    -{formatMoney(discount)}
+                  </Text>
+                ) : null}
               </View>
             ) : null}
 
@@ -1028,94 +1162,24 @@ export default function SellScreen() {
             </View>
 
             <View style={{ flexDirection: "row", gap: space.sm, marginTop: space.md }}>
-              {PAYMENT_METHODS.map((method) => {
-                const selected = payment === method.value;
-                const MethodIcon = method.icon;
-
-                return (
-                  <Pressable
-                    key={method.value}
-                    onPress={() => setPayment(method.value)}
-                    accessibilityState={{ selected }}
-                    style={{
-                      flex: 1,
-                      minHeight: compact ? 48 : 52,
-                      flexDirection: "row",
-                      gap: space.xs,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      paddingHorizontal: space.xs,
-                      borderRadius: radius.sm,
-                      borderWidth: 1,
-                      // The chosen method is filled, not outlined — one glance has to
-                      // settle what the customer is paying with.
-                      borderColor: selected ? color.primary : color.border,
-                      backgroundColor: selected ? color.primary : color.surface,
-                    }}
-                  >
-                    <MethodIcon
-                      size={16}
-                      color={selected ? color.onPrimary : color.inkMuted}
-                      strokeWidth={2}
-                    />
-                    <Text
-                      numberOfLines={1}
-                      style={{
-                        fontSize: fontSize.body,
-                        fontWeight: "600",
-                        color: selected ? color.onPrimary : color.ink,
-                      }}
-                    >
-                      {method.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <View style={{ flexDirection: "row", gap: space.sm, marginTop: space.sm }}>
-              {([
-                { value: "pickup" as const, label: "Pickup" },
-                { value: "delivery" as const, label: "Delivery", icon: Truck },
-              ]).map((option) => {
-                const selected = fulfillment === option.value;
-                return (
-                  <Pressable
-                    key={option.value}
-                    onPress={() => setFulfillment(option.value)}
-                    accessibilityState={{ selected }}
-                    style={{
-                      flex: 1,
-                      minHeight: 44,
-                      flexDirection: "row",
-                      gap: space.xs,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderRadius: radius.sm,
-                      borderWidth: 1,
-                      borderColor: selected ? color.primary : color.border,
-                      backgroundColor: selected ? color.primarySoft : color.surface,
-                    }}
-                  >
-                    {option.icon ? (
-                      <Truck
-                        size={15}
-                        color={selected ? color.primary : color.inkMuted}
-                        strokeWidth={2}
-                      />
-                    ) : null}
-                    <Text
-                      style={{
-                        fontSize: fontSize.body,
-                        fontWeight: "600",
-                        color: selected ? color.primaryDark : color.ink,
-                      }}
-                    >
-                      {option.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+              <SelectField
+                label="Payment method"
+                value={payment}
+                options={PAYMENT_METHODS}
+                open={openField === "payment"}
+                onOpen={() => setOpenField("payment")}
+                onClose={() => setOpenField(null)}
+                onChange={setPayment}
+              />
+              <SelectField
+                label="Fulfillment"
+                value={fulfillment}
+                options={FULFILLMENT_OPTIONS}
+                open={openField === "fulfillment"}
+                onOpen={() => setOpenField("fulfillment")}
+                onClose={() => setOpenField(null)}
+                onChange={setFulfillment}
+              />
             </View>
 
             {/* Optional, and it looks optional: one quiet row, never a required
@@ -1163,6 +1227,15 @@ export default function SellScreen() {
           onClose={() => setEditingId(null)}
           onApply={applyPrice}
           onReset={resetPrice}
+        />
+
+        <DiscountSheet
+          open={discountSheetOpen}
+          total={total}
+          hasDiscount={discount > 0}
+          onClose={() => setDiscountSheetOpen(false)}
+          onApply={applyGlobalDiscount}
+          onClear={clearAllDiscounts}
         />
 
         <QuantitySheet
@@ -1242,6 +1315,7 @@ function CartRow({
   line,
   product,
   overridden,
+  displayUnitPrice,
   onChange,
   onEditQuantity,
   onEditPrice,
@@ -1250,6 +1324,10 @@ function CartRow({
   line: CartLine;
   product: ProductWithEstimatedStock | undefined;
   overridden: boolean;
+  /** What the row shows for price/subtotal — frozen at the pre-split price
+   * for a line the global discount touched, so the per-item number never
+   * moves; the real (reduced) line.unitPrice still drives the cart totals. */
+  displayUnitPrice: number;
   onChange: (delta: number) => void;
   onEditQuantity: () => void;
   onEditPrice: () => void;
@@ -1260,7 +1338,11 @@ function CartRow({
   const atMax = line.quantity >= stockCap;
   const oversell = line.quantity > stockCap;
   const discounted = line.unitPrice < line.listPrice;
-  const belowCost = line.unitPrice < line.unitCost;
+  // Only a real per-line override earns the "below cost" warning — a line
+  // touched only by the global discount split stays plain, same as every
+  // other visual sign of a per-item discount (overridden is already false
+  // for those lines at the call site).
+  const belowCost = overridden && line.unitPrice < line.unitCost;
   const bulkMin = product?.bulkMinQuantity ?? null;
   const bulkApplied = !overridden && bulkMin !== null && line.quantity >= bulkMin;
   // At one, decrementing drops the line entirely, so the control says so.
@@ -1272,71 +1354,81 @@ function CartRow({
       ? color.accentInk
       : color.inkMuted;
 
-  // Pressable's built-in onLongPress can misfire as a child of a FlatList row
-  // — the list's own scroll responder sometimes swallows it before the timer
-  // completes. A manual hold timer on press in/out sidesteps that.
-  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  function clearHoldTimer() {
-    if (holdTimer.current) {
-      clearTimeout(holdTimer.current);
-      holdTimer.current = null;
-    }
-  }
+  const swipeRef = useRef<SwipeableMethods>(null);
 
   return (
-    <Pressable
-      onPressIn={() => {
-        clearHoldTimer();
-        holdTimer.current = setTimeout(onRemove, 500);
-      }}
-      onPressOut={clearHoldTimer}
-      accessibilityRole="button"
-      accessibilityLabel={`${line.productName}, hold to remove from cart`}
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        gap: space.sm,
-        paddingVertical: space.sm,
-      }}
-    >
-      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <View
-          style={{
-            flexDirection: "row",
+    <Swipeable
+      ref={swipeRef}
+      friction={2}
+      rightThreshold={40}
+      overshootRight={false}
+      renderRightActions={() => (
+        <Pressable
+          onPress={() => {
+            swipeRef.current?.close();
+            onRemove();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={`Remove ${line.productName} from the cart`}
+          style={({ pressed }) => ({
+            width: 76,
+            marginVertical: 2,
+            marginLeft: space.sm,
+            borderRadius: radius.sm,
             alignItems: "center",
-            gap: space.sm,
-            minWidth: 0,
+            justifyContent: "center",
+            backgroundColor: pressed ? color.dangerInk : color.danger,
+          })}
+        >
+          <Trash2 size={18} color={color.onPrimary} strokeWidth={2.25} />
+          <Text
+            style={{
+              marginTop: 2,
+              color: color.onPrimary,
+              fontSize: fontSize.caption,
+              fontWeight: "700",
+            }}
+          >
+            Remove
+          </Text>
+        </Pressable>
+      )}
+    >
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: space.sm,
+          paddingVertical: space.sm,
+          backgroundColor: color.surface,
+        }}
+      >
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        {/* Full name, wrapped rather than cut short with an ellipsis — a long
+            SKU description staying readable outranks the row staying compact. */}
+        <Text
+          style={{
+            fontSize: fontSize.body,
+            fontWeight: "700",
+            color: color.ink,
           }}
         >
-          <Text
-            numberOfLines={1}
-            style={{
-              flexShrink: 1,
-              minWidth: 0,
-              fontSize: fontSize.body,
-              fontWeight: "700",
-              color: color.ink,
-            }}
-          >
-            {line.productName}
-          </Text>
-          <Text
-            numberOfLines={1}
-            style={{
-              flexShrink: 0,
-              fontSize: fontSize.caption,
-              fontWeight: "600",
-              color: oversell || remaining === 0 ? color.warningInk : color.inkMuted,
-            }}
-          >
-            {oversell
-              ? `${stockCap} in stock`
-              : remaining === 0
-                ? "At limit"
-                : `${remaining} left`}
-          </Text>
-        </View>
+          {line.productName}
+        </Text>
+        <Text
+          style={{
+            alignSelf: "flex-start",
+            fontSize: fontSize.caption,
+            fontWeight: "600",
+            color: oversell || remaining === 0 ? color.warningInk : color.inkMuted,
+          }}
+        >
+          {oversell
+            ? `${stockCap} in stock`
+            : remaining === 0
+              ? "At limit"
+              : `${remaining} left`}
+        </Text>
 
         <Pressable
           onPress={onEditPrice}
@@ -1389,7 +1481,7 @@ function CartRow({
               },
             ]}
           >
-            {formatMoney(line.unitPrice)}
+            {formatMoney(displayUnitPrice)}
           </Text>
           {overridden ? (
             <Pencil size={11} color={priceTone} strokeWidth={2.5} />
@@ -1419,18 +1511,8 @@ function CartRow({
       </View>
 
       <View style={{ alignItems: "flex-end", gap: space.xs, flexShrink: 0 }}>
-        {/* Holding the row does the same thing, but a gesture with no visible
-            target is easy to miss — this is the guaranteed-to-work version. */}
-        <IconButton
-          icon={Trash2}
-          label={`Remove ${line.productName} from the cart`}
-          tone="danger"
-          size={32}
-          style={{ borderWidth: 0, backgroundColor: "transparent" }}
-          onPress={onRemove}
-        />
         <Money
-          value={lineSubtotal(line.unitPrice, line.quantity)}
+          value={lineSubtotal(displayUnitPrice, line.quantity)}
           style={{
             fontSize: fontSize.body,
             fontWeight: "700",
@@ -1446,7 +1528,7 @@ function CartRow({
             borderColor: color.border,
             borderRadius: radius.sm,
             overflow: "hidden",
-            backgroundColor: color.paper,
+            backgroundColor: color.surface,
           }}
         >
           <StepperButton
@@ -1501,7 +1583,8 @@ function CartRow({
           />
         </View>
       </View>
-    </Pressable>
+      </View>
+    </Swipeable>
   );
 }
 
@@ -1780,6 +1863,91 @@ function PriceSheet({
             variant="secondary"
             onPress={() => onReset(line.productId)}
           />
+    </BottomSheet>
+  );
+}
+
+/** A flat amount off the whole cart, split across every line on apply. */
+function DiscountSheet({
+  open,
+  total,
+  hasDiscount,
+  onClose,
+  onApply,
+  onClear,
+}: {
+  open: boolean;
+  total: number;
+  hasDiscount: boolean;
+  onClose: () => void;
+  onApply: (amount: number) => void;
+  onClear: () => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const typed = Number(draft);
+  const valid = draft.trim() !== "" && Number.isFinite(typed) && typed > 0;
+
+  // Not keyed like PriceSheet (there's no per-line id to key on) — clear the
+  // typed amount by hand each time the sheet opens, so a re-open never shows
+  // the last discount typed.
+  useEffect(() => {
+    if (open) setDraft("");
+  }, [open]);
+
+  return (
+    <BottomSheet open={open} onClose={onClose} scroll={false}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+        <View style={[styles.iconWell, { width: 34, height: 34 }]}>
+          <Tag size={18} color={color.primary} strokeWidth={2} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.subheading}>Discount the whole cart</Text>
+          <Text style={{ fontSize: fontSize.caption, color: color.inkMuted }}>
+            Split across every line, so it still shows per item on the receipt.
+          </Text>
+        </View>
+        <IconButton icon={X} label="Close" onPress={onClose} />
+      </View>
+
+      <TextInput
+        value={draft}
+        onChangeText={(next) => setDraft(next.replace(/[^0-9.]/g, ""))}
+        keyboardType="decimal-pad"
+        autoFocus
+        placeholder="0.00"
+        accessibilityLabel="Discount amount in pesos"
+        style={[
+          styles.numeric,
+          {
+            minHeight: 64,
+            borderWidth: 2,
+            borderColor: color.primary,
+            borderRadius: radius.sm,
+            backgroundColor: color.primaryTint,
+            color: color.primaryDark,
+            paddingHorizontal: space.md,
+            fontSize: fontSize.headingMd,
+            fontWeight: "700",
+          },
+        ]}
+      />
+
+      {typed > total ? (
+        <Text style={{ fontSize: fontSize.body, color: color.inkMuted }}>
+          Capped at {formatMoney(total)} — the cart's current total.
+        </Text>
+      ) : null}
+
+      <Button
+        label="Apply discount"
+        large
+        icon={CheckCircle2}
+        disabled={!valid}
+        onPress={() => onApply(typed)}
+      />
+      {hasDiscount ? (
+        <Button label="Clear all discounts" variant="secondary" onPress={onClear} />
+      ) : null}
     </BottomSheet>
   );
 }
