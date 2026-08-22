@@ -1,70 +1,24 @@
 "use server";
 
-import { createRequire } from "node:module";
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { validateProductInput } from "@double-a/shared-types";
-import { createProduct, listCategories } from "@double-a/api-client/queries";
+import { isProductUnit, validateProductInput } from "@double-a/shared-types";
+import {
+  createProduct,
+  extractProductsFromPhoto,
+  listCategories,
+  type ExtractedProductLine,
+} from "@double-a/api-client/queries";
 import { ApiError } from "@double-a/api-client";
 import { toCategoryOptions } from "@/lib/category-options";
 import { getAuthedClient } from "@/lib/api/session";
-import { parseOcrProductLines } from "./parse-ocr-lines";
+import { matchCategoryId } from "./match-category";
 import type {
   ExtractProductsResult,
   SaveAllScannedResult,
   SaveScannedResult,
   ScannedProductDraft,
 } from "./types";
-
-const require = createRequire(import.meta.url);
-
-type TextractConfig = {
-  preserveLineBreaks?: boolean;
-  tesseract?: { lang?: string; cmd?: string };
-};
-
-type TextractModule = {
-  fromBufferWithMime: (
-    type: string,
-    buffer: Buffer,
-    config: TextractConfig,
-    callback: (error: Error | null, text?: string) => void,
-  ) => void;
-};
-
-const textract = require("textract") as TextractModule;
-
-const OCR_TIMEOUT_MS = 45_000;
-
-function extractTextFromImage(mime: string, buffer: Buffer): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-
-    // textract spawns tesseract; if that never calls back, don't hang the
-    // request (and the button) forever.
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      reject(new Error("OCR timed out. Try a smaller, clearer photo."));
-    }, OCR_TIMEOUT_MS);
-
-    textract.fromBufferWithMime(
-      mime,
-      buffer,
-      {
-        preserveLineBreaks: true,
-        // Sparse notebook lines — one product per row.
-        tesseract: { cmd: "-l eng --psm 6" },
-      },
-      (error, text) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        if (error) reject(error);
-        else resolve(text ?? "");
-      },
-    );
-  });
-}
 
 // Old Postgres constraint names never reach the client through the Laravel
 // API — validation now comes back as per-field messages on ApiError.errors.
@@ -82,17 +36,30 @@ function describeSaveError(error: unknown): string {
   return `Could not save the product: ${message}`;
 }
 
-function describeOcrError(message: string): string {
-  const lower = message.toLowerCase();
-  if (
-    lower.includes("tesseract") ||
-    lower.includes("enoent") ||
-    lower.includes("not found") ||
-    lower.includes("spawn")
-  ) {
-    return "Tesseract OCR is not installed. Install it (e.g. `brew install tesseract`), then restart admin.";
-  }
-  return `Could not read the photo: ${message}`;
+function describeExtractError(error: unknown): string {
+  if (error instanceof ApiError) return error.message;
+  return error instanceof Error
+    ? `Could not read the photo: ${error.message}`
+    : "Could not read the photo. Try again.";
+}
+
+function lineToDraft(
+  line: ExtractedProductLine,
+  categories: { id: string; name: string; path: string }[],
+): ScannedProductDraft {
+  return {
+    clientId: randomUUID(),
+    name: line.name,
+    sku: line.sku ?? "",
+    barcode: line.barcode ?? "",
+    price: line.price !== null ? String(line.price) : "",
+    costPrice: line.costPrice !== null ? String(line.costPrice) : "",
+    categoryId: matchCategoryId(`${line.name} ${line.sku ?? ""}`, categories),
+    unit: isProductUnit(line.unit) ? line.unit : "pc",
+    reorderPoint: "5",
+    bulkPrice: "",
+    bulkMinQuantity: "",
+  };
 }
 
 function draftToInput(draft: ScannedProductDraft) {
@@ -140,8 +107,11 @@ async function insertDraft(draft: ScannedProductDraft): Promise<string | null> {
 }
 
 /**
- * Reads product lines from a notebook photo via textract (Tesseract OCR).
- * Stock is never extracted — opening stock belongs on Inventory.
+ * Reads product lines from a notebook photo. OCR and line-parsing both run
+ * on the Laravel API (ExtractProductsFromPhotoAction) — this just turns what
+ * comes back into editable drafts, matching each line to a category from the
+ * tenant's own tree. Stock is never extracted — opening stock belongs on
+ * Inventory.
  */
 export async function extractProductsFromImage(
   formData: FormData,
@@ -155,7 +125,7 @@ export async function extractProductsFromImage(
     return { error: "That file is not an image.", drafts: [] };
   }
 
-  // Phone JPEGs can be several MB; refuse anything that will blow the body limit.
+  // Phone JPEGs can be several MB; refuse anything the API will reject anyway.
   if (file.size > 5.5 * 1024 * 1024) {
     return {
       error: "Photo is too large (over 5.5 MB). Try a clearer, smaller shot.",
@@ -163,38 +133,26 @@ export async function extractProductsFromImage(
     };
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const mime = file.type || "image/jpeg";
-
-  let text: string;
-  try {
-    text = await extractTextFromImage(mime, buffer);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return { error: describeOcrError(message), drafts: [] };
-  }
-
-  if (!text.trim()) {
-    return {
-      error:
-        "No text found in the photo. Use a clearer shot with one product per line.",
-      drafts: [],
-    };
-  }
-
   const client = getAuthedClient();
-  const categories = await listCategories(client, { includeInactive: true });
-  const options = toCategoryOptions(categories);
 
-  const drafts = parseOcrProductLines(text, options);
+  let lines: ExtractedProductLine[];
+  try {
+    lines = await extractProductsFromPhoto(client, file);
+  } catch (error) {
+    return { error: describeExtractError(error), drafts: [] };
+  }
 
-  if (drafts.length === 0) {
+  if (lines.length === 0) {
     return {
       error:
         "No product lines found. Use a clearer photo with one product per row (name and price).",
       drafts: [],
     };
   }
+
+  const categories = await listCategories(client, { includeInactive: true });
+  const options = toCategoryOptions(categories);
+  const drafts = lines.map((line) => lineToDraft(line, options));
 
   return { error: null, drafts };
 }

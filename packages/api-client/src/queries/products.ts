@@ -92,6 +92,48 @@ export async function countProducts(
   return result.total;
 }
 
+/** One line read off a notebook photo — see ExtractProductsFromPhotoAction (Laravel). No category: that match happens client-side against the tenant's own category tree. */
+export interface ExtractedProductLine {
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+  price: number | null;
+  costPrice: number | null;
+  unit: string;
+}
+
+interface ExtractedProductLineAttrs {
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+  price: number | null;
+  cost_price: number | null;
+  unit: string;
+}
+
+/** OCR runs server-side (Tesseract on the API host) — see CLAUDE.md notes on apps/admin's from-photo feature. */
+export async function extractProductsFromPhoto(
+  client: ApiClient,
+  image: File,
+): Promise<ExtractedProductLine[]> {
+  const formData = new FormData();
+  formData.set("image", image);
+
+  const result = await client.postMultipart<{ data: ExtractedProductLineAttrs[] }>(
+    "/products/extract-from-photo",
+    formData,
+  );
+
+  return result.data.map((line) => ({
+    name: line.name,
+    sku: line.sku,
+    barcode: line.barcode,
+    price: line.price,
+    costPrice: line.cost_price,
+    unit: line.unit,
+  }));
+}
+
 /**
  * No batch-by-id endpoint on the Tally API. Falls back to N parallel
  * `GET /products/{id}` calls — fine for a cart-sized list, not for a large

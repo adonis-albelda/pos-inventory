@@ -155,6 +155,40 @@ export class ApiClient {
     return this.request<T>(path, { ...options, method: "POST", body });
   }
 
+  /**
+   * A file upload — the only caller so far is products/extract-from-photo.
+   * Separate from request()/post() because those always JSON.stringify the
+   * body and set Content-Type: application/json; a multipart body needs
+   * fetch to set its own Content-Type (with the boundary) instead.
+   */
+  async postMultipart<T>(path: string, formData: FormData): Promise<T> {
+    const token = await this.getToken();
+
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+
+    if (response.status === 401) {
+      await this.onUnauthorized?.();
+    }
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new ApiError(
+        response.status,
+        (payload?.message as string | undefined) ?? response.statusText,
+        (payload?.errors as Record<string, string[]> | undefined) ?? null,
+      );
+    }
+
+    return (await response.json()) as T;
+  }
+
   patch<T>(path: string, body?: unknown): Promise<T> {
     return this.request<T>(path, { method: "PATCH", body });
   }
