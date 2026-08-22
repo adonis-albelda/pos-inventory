@@ -14,13 +14,11 @@ export interface CreateUserInput {
   name: string;
   email: string;
   /**
-   * GAP: StoreUserRequest only allows "cashier" | "admin" — "device" and
-   * "superadmin" accounts cannot be created through this endpoint. Terminal
-   * enrollment (device users) and platform superadmin creation live on their
-   * own flows, not here.
+   * "superadmin" cannot be created through this endpoint — platform
+   * superadmin creation lives on its own flow, not here.
    */
-  role: Extract<UserRole, "cashier" | "admin">;
-  /** Required for role "admin" server-side; ignored/optional for "cashier" (random password generated if omitted). */
+  role: Extract<UserRole, "cashier" | "admin" | "device">;
+  /** Required for role "admin"/"device" server-side; ignored/optional for "cashier" (random password generated if omitted). */
   password?: string | null;
   canSell?: boolean;
   isActive?: boolean;

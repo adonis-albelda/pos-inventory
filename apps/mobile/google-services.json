@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "818354796268",
+    "project_id": "pos-pro-9ccd2",
+    "storage_bucket": "pos-pro-9ccd2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:818354796268:android:e5b30ddd919de29cf217c9",
+        "android_client_info": {
+          "package_name": "com.pospro.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA6rzOhQcPIQEVdN6kUAB04_H8HAcYemH0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

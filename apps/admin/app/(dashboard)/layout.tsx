@@ -3,6 +3,7 @@ import { getAuthedClient, getCurrentUser } from "@/lib/api/session";
 import { ClassicShell } from "@/components/classic-shell";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
+import { PushNotificationRegistrar } from "@/components/push-notification-registrar";
 import { getUiMode } from "@/lib/ui-mode";
 
 export default async function DashboardLayout({
@@ -32,6 +33,13 @@ export default async function DashboardLayout({
       children
     );
 
+  const contentWithPush = (
+    <>
+      <PushNotificationRegistrar />
+      {content}
+    </>
+  );
+
   if (mode === "classic") {
     return (
       <ClassicShell
@@ -41,7 +49,7 @@ export default async function DashboardLayout({
         userEmail={user?.email ?? null}
         mode={mode}
       >
-        {content}
+        {contentWithPush}
       </ClassicShell>
     );
   }
@@ -55,7 +63,7 @@ export default async function DashboardLayout({
       initials={initials}
       mode={mode}
     >
-      {content}
+      {contentWithPush}
     </DashboardShell>
   );
 }

@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
-import { ArrowLeft, Ban, PackageCheck, Send, Wallet } from "lucide-react-native";
+import { ArrowLeft, Ban, Copy, PackageCheck, Send, Wallet } from "lucide-react-native";
 import type { PurchaseOrderItem } from "@double-a/shared-types";
 import {
   PURCHASE_ORDER_STATUS_LABELS,
@@ -137,9 +138,24 @@ export default function AdminPurchaseOrderDetailScreen() {
       ) : null}
 
       <Card style={[styles.floatShadow, { borderRadius: radius.sm }]}>
-        <Text style={{ fontSize: fontSize.body, fontWeight: "700", color: color.ink, marginBottom: space.sm }}>
-          Line items
-        </Text>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: space.sm,
+          }}
+        >
+          <Text style={{ fontSize: fontSize.body, fontWeight: "700", color: color.ink }}>
+            Line items
+          </Text>
+          {order.items.length > 0 ? (
+            <CopyItemsButton
+              supplierName={supplierNameById.get(order.supplierId) ?? "Unknown supplier"}
+              items={order.items}
+            />
+          ) : null}
+        </View>
         {order.items.length === 0 ? (
           <EmptyState title="No line items" instruction="This order has no products on it." />
         ) : (
@@ -187,6 +203,43 @@ export default function AdminPurchaseOrderDetailScreen() {
       </Card>
       </ScrollView>
     </View>
+  );
+}
+
+/**
+ * Plain text, not a formatted table — this is meant to be pasted straight
+ * into a chat with the supplier, not read on-device. Ordered quantity, not
+ * received: what the supplier still needs to know is what was asked for.
+ */
+function buildItemsText(supplierName: string, items: PurchaseOrderItem[]): string {
+  const lines = items.map(
+    (item, index) => `${index + 1}. ${item.productName} x ${formatQuantity(item.quantityOrdered)}`,
+  );
+  return [`Order for ${supplierName}:`, ...lines].join("\n");
+}
+
+function CopyItemsButton({
+  supplierName,
+  items,
+}: {
+  supplierName: string;
+  items: PurchaseOrderItem[];
+}) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    await Clipboard.setStringAsync(buildItemsText(supplierName, items));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <Button
+      label={copied ? "Copied!" : "Copy items"}
+      variant="secondary"
+      icon={Copy}
+      onPress={() => void copy()}
+    />
   );
 }
 

@@ -22,13 +22,6 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * GAP: `POST /users` only accepts role "cashier" | "admin" — terminal
- * (device) accounts have no creation path here anymore. A device now enrolls
- * itself from the POS app (`/pos/devices/enroll`, authenticated as an admin
- * already signed into that terminal) — see CLAUDE.md §1's "terminal
- * enrollment" and queries/pos.ts's `enrollDevice`. This form still lists
- * existing terminals (read-only) but can no longer create or edit them.
- *
  * GAP: `PATCH /users/{id}` (UpdateUserRequest) accepts neither `role` nor
  * `password` — an existing person's role or dashboard/terminal password
  * cannot be changed from here. A password reset now requires a superadmin,
@@ -60,13 +53,6 @@ export async function saveCashier(
   if (!id && role === "superadmin") {
     return { error: "A shop cannot create a platform superadmin.", ok: false };
   }
-  if (!id && role === "device") {
-    return {
-      error:
-        "Terminals enroll themselves from the POS app now, using an admin's dashboard login — they can no longer be created here.",
-      ok: false,
-    };
-  }
 
   if (pin && !isValidPin(pin)) {
     return { error: "The PIN must be 4 to 6 digits.", ok: false };
@@ -78,8 +64,11 @@ export async function saveCashier(
   if (!id && role === "admin" && !password) {
     return { error: "Set a password so this admin can sign in to the dashboard.", ok: false };
   }
+  if (!id && role === "device" && !password) {
+    return { error: "Set a password so this terminal can sign in on the POS app.", ok: false };
+  }
   if (!id && password && password.length < 8) {
-    return { error: "Admin password must be at least 8 characters.", ok: false };
+    return { error: "Password must be at least 8 characters.", ok: false };
   }
 
   const client = getAuthedClient();
@@ -102,8 +91,8 @@ export async function saveCashier(
       const created = await createUser(client, {
         name,
         email,
-        role: role === "admin" ? "admin" : "cashier",
-        password: role === "admin" ? password : undefined,
+        role: role === "admin" || role === "device" ? role : "cashier",
+        password: role === "admin" || role === "device" ? password : undefined,
         canSell,
       });
       if (canUnlockWithPin(role) && pin) {

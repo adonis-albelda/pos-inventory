@@ -12,6 +12,7 @@ import { resetLocalData } from "@/db";
 import { useLayout } from "@/lib/layout";
 import { createBareClient, createScopedClient } from "@/lib/api/client";
 import { isEnrolled, setSessionToken, unenrollTerminal } from "@/lib/api/session";
+import { registerDevicePushToken } from "@/lib/push";
 import { runFirstPull } from "@/sync";
 import {
   Eye,
@@ -149,6 +150,7 @@ export default function SetupScreen() {
       }
       await setEnrolledCompanyId(profile.companyId);
       await setSessionToken(sessionToken);
+      void registerDevicePushToken();
 
       setAccount(profile);
       await setDeviceLabel(deviceName);

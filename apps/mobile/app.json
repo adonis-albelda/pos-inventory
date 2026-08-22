@@ -1,11 +1,11 @@
 {
   "expo": {
     "name": "POSPro",
-    "slug": "double-a-pos",
+    "slug": "pospro",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
-    "scheme": "doubleapos",
+    "scheme": "pospro",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "backgroundColor": "#F5F5F3",
@@ -16,14 +16,16 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.doublea.pos"
+      "bundleIdentifier": "com.pospro.app",
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
-      "package": "com.doublea.pos",
+      "package": "com.pospro.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#00000000"
       },
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
@@ -36,6 +38,7 @@
       "expo-router",
       "expo-sqlite",
       "expo-secure-store",
+      "expo-notifications",
       [
         "expo-speech-recognition",
         {

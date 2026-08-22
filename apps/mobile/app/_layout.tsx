@@ -8,6 +8,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PaperBackdrop } from "@/components/paper-backdrop";
 import { PullProgressModal } from "@/components/pull-progress-modal";
 import { migrate } from "@/db";
+import { isEnrolled } from "@/lib/api/session";
+import { registerDevicePushToken, watchForPushTokenChanges } from "@/lib/push";
 import { SessionProvider } from "@/lib/session";
 import { SyncProvider } from "@/sync/sync-provider";
 import { color, space, styles } from "@/theme";
@@ -39,6 +41,22 @@ export default function RootLayout() {
         setError(cause instanceof Error ? cause.message : "Could not open the database"),
       );
   }, []);
+
+  // Once per boot, and only actually calls the API if the token changed —
+  // see lib/push.ts. Skipped entirely until setup.tsx has this terminal
+  // signed in; registering before that has no session to attach the token to.
+  useEffect(() => {
+    if (!ready) return;
+    let unsubscribe: (() => void) | undefined;
+
+    void isEnrolled().then((enrolled) => {
+      if (!enrolled) return;
+      void registerDevicePushToken();
+      unsubscribe = watchForPushTokenChanges();
+    });
+
+    return () => unsubscribe?.();
+  }, [ready]);
 
   if (error) {
     return (

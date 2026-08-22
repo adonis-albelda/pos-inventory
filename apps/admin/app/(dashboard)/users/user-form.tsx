@@ -101,7 +101,7 @@ export function UserForm({
           hint={
             user
               ? "Role can't be changed after creation."
-              : "Controls dashboard access and PIN unlock. Terminals enroll themselves from the POS app, not here."
+              : "Controls dashboard access, PIN unlock, or terminal sign-in."
           }
         >
           {user ? <input type="hidden" name="role" value={role} /> : null}
@@ -113,7 +113,7 @@ export function UserForm({
           >
             <option value="cashier">Cashier</option>
             <option value="admin">Admin</option>
-            {user?.role === "device" ? <option value="device">Terminal</option> : null}
+            <option value="device">Terminal</option>
           </Select>
         </Field>
 
@@ -139,8 +139,15 @@ export function UserForm({
           </Field>
         ) : null}
 
-        {!user && role === "admin" ? (
-          <Field label="Password" hint="Dashboard login — not a cashier PIN.">
+        {!user && (role === "admin" || role === "device") ? (
+          <Field
+            label="Password"
+            hint={
+              role === "admin"
+                ? "Dashboard login — not a cashier PIN."
+                : "Enter this on the POS app's setup screen to connect the terminal."
+            }
+          >
             <Input
               icon={Lock}
               name="password"

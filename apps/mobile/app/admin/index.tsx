@@ -19,7 +19,7 @@ import {
   Warehouse,
   type LucideIcon,
 } from "lucide-react-native";
-import { useFeatureFlags } from "@/lib/features";
+import { useLiveFeatureFlags } from "@/lib/features";
 import { useStoreSettings } from "@/lib/store";
 import { useSync } from "@/sync/sync-provider";
 import { color, fontSize, radius, space } from "@/theme";
@@ -143,7 +143,7 @@ function DashboardHeader() {
 /** Launcher grid — same idea as apps/admin's classic-shell /menu launcher. */
 export default function AdminHome() {
   const router = useRouter();
-  const { isEnabled } = useFeatureFlags();
+  const { isEnabled } = useLiveFeatureFlags();
   const tiles = TILES.filter((tile) => !tile.featureKey || isEnabled(tile.featureKey));
 
   return (

@@ -1,0 +1,8 @@
+{
+  "android": {
+    "package": "com.pospro.app"
+  },
+  "ios": {
+    "bundleIdentifier": "com.pospro.app"
+  }
+}
