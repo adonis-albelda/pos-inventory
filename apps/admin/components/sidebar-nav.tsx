@@ -3,14 +3,17 @@
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { LoaderCircle } from "lucide-react";
-import { NAV_GROUPS } from "@/lib/nav";
+import { filterNavGroupsByFeatures, NAV_GROUPS } from "@/lib/nav";
+import { useFeatureFlags } from "@/lib/query/features";
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const { isEnabled } = useFeatureFlags();
+  const groups = filterNavGroupsByFeatures(NAV_GROUPS, isEnabled);
 
   return (
     <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-3 lg:py-1">
-      {NAV_GROUPS.map((group) => (
+      {groups.map((group) => (
         <div key={group.label ?? "top"} className="space-y-1">
           {group.label ? (
             <p className="px-3 pb-0.5 text-[0.6875rem] font-medium tracking-wide text-ink-muted/80 uppercase">

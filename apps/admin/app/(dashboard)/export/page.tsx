@@ -1,5 +1,6 @@
 import { Download, TriangleAlert } from "lucide-react";
-import { getCurrentUser } from "@/lib/api/session";
+import { getFeatureFlags } from "@double-a/api-client/queries";
+import { getAuthedClient, getCurrentUser } from "@/lib/api/session";
 import { isShopAdmin } from "@/lib/authz";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { ExportPanel } from "./export-panel";
@@ -16,6 +17,22 @@ export default async function ExportPage() {
             icon={TriangleAlert}
             title="Exports are for the owner's account"
             instruction="Only an admin can download catalogue, sales and stock files."
+          />
+        </Card>
+      </div>
+    );
+  }
+
+  const flags = await getFeatureFlags(getAuthedClient());
+  if (flags.export === false) {
+    return (
+      <div className="space-y-6">
+        <PageHeader icon={Download} title="Export data" />
+        <Card>
+          <EmptyState
+            icon={TriangleAlert}
+            title="Export has been turned off for this shop"
+            instruction="Ask your platform administrator to turn it back on."
           />
         </Card>
       </div>

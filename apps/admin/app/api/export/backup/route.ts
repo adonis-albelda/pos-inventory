@@ -4,6 +4,7 @@ import {
   isBackupDatasetId,
   type BackupDatasetId,
 } from "@/lib/backup-export";
+import { getFeatureFlags } from "@double-a/api-client/queries";
 import {
   sheetsToCsvZip,
   sheetsToPdf,
@@ -31,6 +32,11 @@ export async function GET(request: Request): Promise<Response> {
   }
   if (!isShopAdmin(user)) {
     return new Response("Downloads are for the owner's account.\n", { status: 403 });
+  }
+
+  const flags = await getFeatureFlags(getAuthedClient());
+  if (flags.export === false) {
+    return new Response("Export has been turned off for this shop.\n", { status: 403 });
   }
 
   const params = new URL(request.url).searchParams;

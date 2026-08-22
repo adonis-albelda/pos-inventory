@@ -83,6 +83,7 @@ import {
   type CartDraft,
 } from "@/lib/cart-draft";
 import { getDeviceId } from "@/lib/device";
+import { useFeatureFlags } from "@/lib/features";
 import { useLayout } from "@/lib/layout";
 import { useSession } from "@/lib/session";
 import { printReceipt } from "@/printing/receipt";
@@ -148,6 +149,7 @@ export default function SellScreen() {
   const router = useRouter();
   const { cashier } = useSession();
   const { refresh, dataVersion } = useSync();
+  const { isEnabled } = useFeatureFlags();
 
   // A phone cannot hold a grid and a cart side by side, so below the compact
   // breakpoint the cart moves behind a summary bar the cashier taps to pay.
@@ -802,15 +804,17 @@ export default function SellScreen() {
               <X size={20} color={color.onPrimary} strokeWidth={2} />
             </Pressable>
           ) : null}
-          <Pressable
-            onPress={openVoiceSearch}
-            accessibilityRole="button"
-            accessibilityLabel="Search by voice"
-            hitSlop={4}
-            style={{ width: 36, height: 36, alignItems: "center", justifyContent: "center" }}
-          >
-            <Mic size={20} color={color.onPrimary} strokeWidth={2} />
-          </Pressable>
+          {isEnabled("voice_search") ? (
+            <Pressable
+              onPress={openVoiceSearch}
+              accessibilityRole="button"
+              accessibilityLabel="Search by voice"
+              hitSlop={4}
+              style={{ width: 36, height: 36, alignItems: "center", justifyContent: "center" }}
+            >
+              <Mic size={20} color={color.onPrimary} strokeWidth={2} />
+            </Pressable>
+          ) : null}
         </View>
 
         {/* Hidden while searching: the results already ignore the filter, so a

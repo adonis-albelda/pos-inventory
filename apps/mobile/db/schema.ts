@@ -234,6 +234,19 @@ ALTER TABLE customers ADD COLUMN company_id TEXT;
 `;
 
 /**
+ * v11: what a superadmin has turned on/off for this shop — replaced whole on
+ * every pull, same as categories/store_settings. Absent key = enabled: a
+ * terminal that has never synced (or a key added to the catalog after this
+ * device's last pull) must not silently hide something on its own.
+ */
+const V11_FEATURE_FLAGS = `
+CREATE TABLE IF NOT EXISTS feature_flags (
+  key TEXT PRIMARY KEY NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1
+);
+`;
+
+/**
  * v8: receipt layout from admin. One row, pulled whole every sync. Bluetooth
  * pairing stays in AsyncStorage on this device — never this table.
  */
@@ -271,6 +284,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 8, sql: V8_RECEIPT_LAYOUT },
   { version: 9, sql: V9_ALLOW_DECIMAL },
   { version: 10, sql: V10_COMPANY_ID },
+  { version: 11, sql: V11_FEATURE_FLAGS },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.reduce(

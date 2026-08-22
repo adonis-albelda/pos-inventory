@@ -7,7 +7,8 @@ import { ChevronDown, LayoutGrid, LogOut, Menu, X } from "lucide-react";
 import { storeInitial } from "@double-a/shared-types";
 import { signOut } from "@/app/login/actions";
 import { UiModeToggle } from "@/components/ui-mode-toggle";
-import { NAV_GROUPS } from "@/lib/nav";
+import { filterNavGroupsByFeatures, NAV_GROUPS } from "@/lib/nav";
+import { useFeatureFlags } from "@/lib/query/features";
 import type { UiMode } from "@/lib/ui-mode";
 
 /**
@@ -33,6 +34,8 @@ export function ClassicShell({
   const pathname = usePathname();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const { isEnabled } = useFeatureFlags();
+  const navGroups = filterNavGroupsByFeatures(NAV_GROUPS, isEnabled);
 
   useEffect(() => {
     setOpenGroup(null);
@@ -110,7 +113,7 @@ export function ClassicShell({
           Main menu
         </Link>
 
-        {NAV_GROUPS.filter((group) => group.label).map((group) => {
+        {navGroups.filter((group) => group.label).map((group) => {
           const label = group.label as string;
           const open = openGroup === label;
           const active = group.items.some((item) => isActive(item.href));
@@ -199,7 +202,7 @@ export function ClassicShell({
             </div>
 
             <div className="space-y-3 px-3 py-3">
-              {NAV_GROUPS.map((group) => (
+              {navGroups.map((group) => (
                 <div key={group.label ?? "top"} className="space-y-1">
                   {group.label ? (
                     <p className="px-1 text-[0.6875rem] font-medium tracking-wide text-ink-muted/80 uppercase">

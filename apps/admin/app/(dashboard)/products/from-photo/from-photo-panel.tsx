@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import {
   Camera,
   Check,
+  Crop,
   ImagePlus,
   Save,
   Trash2,
@@ -32,6 +33,7 @@ import {
   saveAllScannedProducts,
   saveScannedProduct,
 } from "./actions";
+import { CropPhoto } from "./crop-photo";
 import type { ScannedProductDraft } from "./types";
 
 /** Shrink a phone photo so the server action stays under the body limit. */
@@ -248,6 +250,11 @@ function DraftRow({
 export function FromPhotoPanel({ categories }: { categories: CategoryOption[] }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // What actually gets read — the original pick, or the cropped result.
+  // Kept separate from the file input's own value so cropping doesn't need
+  // to fight the browser over what a <input type="file"> is allowed to hold.
+  const [activeFile, setActiveFile] = useState<File | null>(null);
+  const [showCropper, setShowCropper] = useState(false);
   const [drafts, setDrafts] = useState<ScannedProductDraft[]>([]);
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -267,12 +274,21 @@ export function FromPhotoPanel({ categories }: { categories: CategoryOption[] })
     setSuccess(null);
     setRowErrors({});
     setDrafts([]);
+    setActiveFile(file);
+    setShowCropper(file !== null);
     if (!file) return;
     setPreviewUrl(URL.createObjectURL(file));
   }
 
+  function onCropped(cropped: File) {
+    clearPreview();
+    setActiveFile(cropped);
+    setPreviewUrl(URL.createObjectURL(cropped));
+    setShowCropper(false);
+  }
+
   function runExtract() {
-    const file = inputRef.current?.files?.[0];
+    const file = activeFile;
     if (!file) {
       setError("Choose a photo, or take one with the camera.");
       return;
@@ -382,13 +398,31 @@ export function FromPhotoPanel({ categories }: { categories: CategoryOption[] })
             />
           </Field>
 
-          {previewUrl ? (
-            <div className="overflow-hidden rounded-sm border border-border bg-paper">
-              <img
-                src={previewUrl}
-                alt="Selected notebook photo"
-                className="max-h-72 w-full object-contain"
-              />
+          {previewUrl && showCropper ? (
+            <CropPhoto
+              src={previewUrl}
+              onCropped={onCropped}
+              onCancel={() => setShowCropper(false)}
+            />
+          ) : previewUrl ? (
+            <div className="space-y-2">
+              <div className="overflow-hidden rounded-sm border border-border bg-paper">
+                <img
+                  src={previewUrl}
+                  alt="Selected notebook photo"
+                  className="max-h-72 w-full object-contain"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                icon={Crop}
+                disabled={reading}
+                onClick={() => setShowCropper(true)}
+              >
+                Crop this photo
+              </Button>
             </div>
           ) : null}
 
@@ -397,6 +431,7 @@ export function FromPhotoPanel({ categories }: { categories: CategoryOption[] })
               type="button"
               icon={ImagePlus}
               loading={reading}
+              disabled={showCropper}
               onClick={runExtract}
             >
               {reading ? "Reading…" : "Read products from photo"}
@@ -409,6 +444,8 @@ export function FromPhotoPanel({ categories }: { categories: CategoryOption[] })
                 disabled={reading || savingAll}
                 onClick={() => {
                   clearPreview();
+                  setActiveFile(null);
+                  setShowCropper(false);
                   setDrafts([]);
                   setRowErrors({});
                   setError(null);

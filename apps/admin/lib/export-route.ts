@@ -1,14 +1,23 @@
 import type { ApiClient } from "@double-a/api-client";
+import { getFeatureFlags } from "@double-a/api-client/queries";
 import { toCsv, type CsvValue } from "@/lib/csv";
 import { storeToday } from "@/lib/date-range";
 import { getAuthedClient, getCurrentUser } from "@/lib/api/session";
 import { isShopAdmin } from "@/lib/authz";
 
 /**
- * Every export carries supplier prices and margin, so each route checks the
- * role itself rather than trusting that the button was only ever shown to the
- * owner. The API refuses a non-admin read too; this just turns that into a
- * clear 403 instead of a stack trace.
+ * Every export route (sales, products, customers, ...) calls this — one
+ * choke point, so the "export" feature flag only needs checking here rather
+ * than in each of the ~10 route.ts files. This is the "block it on the API
+ * side too" half for a feature that has no dedicated Laravel endpoint of its
+ * own (export is Next.js route handlers calling existing read endpoints);
+ * getFeatureFlags() still reads its answer from the Laravel API, same
+ * source of truth a superadmin's toggle actually writes to.
+ *
+ * Every export also carries supplier prices and margin, so each route checks
+ * the role itself rather than trusting that the button was only ever shown
+ * to the owner. The API refuses a non-admin read too; this just turns that
+ * into a clear 403 instead of a stack trace.
  */
 export async function csvExport(
   name: string,
@@ -21,6 +30,11 @@ export async function csvExport(
   }
   if (!isShopAdmin(user)) {
     return new Response("Downloads are for the owner's account.\n", { status: 403 });
+  }
+
+  const flags = await getFeatureFlags(getAuthedClient());
+  if (flags.export === false) {
+    return new Response("Export has been turned off for this shop.\n", { status: 403 });
   }
 
   let csv: string;

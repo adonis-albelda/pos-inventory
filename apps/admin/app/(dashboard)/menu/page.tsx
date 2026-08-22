@@ -6,6 +6,7 @@ import { Card } from "@/components/ui";
 import { useStoreSettings } from "@/lib/query/settings";
 import { useProductCount } from "@/lib/query/products";
 import { useUsers } from "@/lib/query/users";
+import { useFeatureFlags } from "@/lib/query/features";
 
 const TILE_STYLES: Record<string, string> = {
   primary: "bg-primary/10 text-primary",
@@ -24,6 +25,8 @@ export default function MenuPage() {
   const storeQuery = useStoreSettings();
   const productCountQuery = useProductCount({ includeInactive: true });
   const usersQuery = useUsers({ includeInactive: true });
+  const { isEnabled } = useFeatureFlags();
+  const tiles = NAV_ITEMS.filter((item) => !item.featureKey || isEnabled(item.featureKey));
 
   const isPending = storeQuery.isPending || productCountQuery.isPending || usersQuery.isPending;
   const error = storeQuery.error ?? productCountQuery.error ?? usersQuery.error;
@@ -34,7 +37,7 @@ export default function MenuPage() {
     <div className="space-y-3">
       <Card className="px-2 py-4 sm:px-6 sm:py-6">
         <div className="grid grid-cols-3 gap-x-2 gap-y-4 sm:grid-cols-4 sm:gap-x-4 sm:gap-y-6 lg:grid-cols-5">
-          {NAV_ITEMS.map(({ href, label, icon: Icon, blurb, tone }) => (
+          {tiles.map(({ href, label, icon: Icon, blurb, tone }) => (
             <Link
               key={href}
               href={href}

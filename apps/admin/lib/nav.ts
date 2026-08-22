@@ -27,6 +27,8 @@ export interface NavItem {
   blurb: string;
   /** Tile colour on the classic launcher — legacy screens are colour-coded. */
   tone: "primary" | "accent" | "success" | "warning" | "danger" | "neutral";
+  /** Matches a key in FeatureCatalog (Laravel) — hidden when useFeatureFlags().isEnabled(key) is false. Absent = always shown. */
+  featureKey?: string;
 }
 
 export interface NavGroup {
@@ -86,6 +88,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Truck,
         blurb: "Who you buy stock from",
         tone: "accent",
+        featureKey: "suppliers",
       },
       {
         href: "/purchase-orders" as Route,
@@ -93,6 +96,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: ClipboardList,
         blurb: "Terms, balances, receiving",
         tone: "warning",
+        featureKey: "purchase_orders",
       },
     ],
   },
@@ -119,6 +123,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Wallet,
         blurb: "Rent, wages, utilities",
         tone: "danger",
+        featureKey: "expenses",
       },
       {
         href: "/reports",
@@ -178,9 +183,23 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Download,
         blurb: "CSV, Excel or PDF backup",
         tone: "primary",
+        featureKey: "export",
       },
     ],
   },
 ];
 
 export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
+
+/** Drops items a superadmin has turned off for this company; a group left with nothing is dropped too. */
+export function filterNavGroupsByFeatures(
+  groups: NavGroup[],
+  isEnabled: (key: string) => boolean,
+): NavGroup[] {
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.featureKey || isEnabled(item.featureKey)),
+    }))
+    .filter((group) => group.items.length > 0);
+}

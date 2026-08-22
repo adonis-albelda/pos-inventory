@@ -2,6 +2,7 @@ import type { PullResult } from "@double-a/shared-types";
 import { countProducts, pullSync } from "@double-a/api-client/queries";
 import { replaceCategories } from "@/db/categories";
 import { replaceSyncedCustomers } from "@/db/customers";
+import { replaceFeatureFlags } from "@/db/feature-flags";
 import { getSyncMeta, recordSyncSuccess } from "@/db/meta";
 import { countLocalProducts, replaceProducts, upsertProducts } from "@/db/products";
 import { saveLocalReceiptLayout } from "@/db/receipt-layout";
@@ -73,6 +74,7 @@ export async function pull(
   await writeUsers(result.users);
   await replaceCategories(result.categories);
   await replaceSyncedCustomers(result.customers);
+  await replaceFeatureFlags(result.featureFlags);
   if (result.storeSettings) await saveLocalStoreSettings(result.storeSettings);
   if (result.receiptLayout) await saveLocalReceiptLayout(result.receiptLayout);
 

@@ -19,6 +19,7 @@ import {
   Warehouse,
   type LucideIcon,
 } from "lucide-react-native";
+import { useFeatureFlags } from "@/lib/features";
 import { useStoreSettings } from "@/lib/store";
 import { useSync } from "@/sync/sync-provider";
 import { color, fontSize, radius, space } from "@/theme";
@@ -27,17 +28,24 @@ interface Tile {
   href: string;
   label: string;
   icon: LucideIcon;
+  /** Matches a key in FeatureCatalog (Laravel) — hidden when off for this shop. Absent = always shown. */
+  featureKey?: string;
 }
 
 const TILES: Tile[] = [
   { href: "/admin/products", label: "Products", icon: Package },
   { href: "/admin/categories", label: "Categories", icon: FolderTree },
   { href: "/admin/customers", label: "Customers", icon: UserRound },
-  { href: "/admin/suppliers", label: "Suppliers", icon: Truck },
-  { href: "/admin/purchase-orders", label: "Purchase orders", icon: ClipboardList },
+  { href: "/admin/suppliers", label: "Suppliers", icon: Truck, featureKey: "suppliers" },
+  {
+    href: "/admin/purchase-orders",
+    label: "Purchase orders",
+    icon: ClipboardList,
+    featureKey: "purchase_orders",
+  },
   { href: "/admin/inventory", label: "Inventory", icon: Warehouse },
   { href: "/admin/sales", label: "Sales", icon: Receipt },
-  { href: "/admin/expenses", label: "Expenses", icon: Wallet },
+  { href: "/admin/expenses", label: "Expenses", icon: Wallet, featureKey: "expenses" },
   { href: "/admin/reports", label: "Reports", icon: ShoppingBag },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/settings", label: "Settings", icon: Settings },
@@ -135,13 +143,15 @@ function DashboardHeader() {
 /** Launcher grid — same idea as apps/admin's classic-shell /menu launcher. */
 export default function AdminHome() {
   const router = useRouter();
+  const { isEnabled } = useFeatureFlags();
+  const tiles = TILES.filter((tile) => !tile.featureKey || isEnabled(tile.featureKey));
 
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: space.xl }}>
       <DashboardHeader />
 
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm, padding: space.md }}>
-        {TILES.map(({ href, label, icon: Icon }) => (
+        {tiles.map(({ href, label, icon: Icon }) => (
           <Pressable
             key={href}
             onPress={() => router.push(href)}

@@ -12,3 +12,4 @@ export * from "./pos";
 export * from "./auth";
 export * from "./sales";
 export * from "./purchase-orders";
+export * from "./features";

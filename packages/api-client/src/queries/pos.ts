@@ -243,6 +243,8 @@ export interface PullSyncResult {
   customers: Customer[];
   storeSettings: StoreSettings | null;
   receiptLayout: ReceiptLayout | null;
+  /** {key: enabled} — whole-replace, same as categories (CLAUDE.md §1). */
+  featureFlags: Record<string, boolean>;
 }
 
 interface PullSyncResponse {
@@ -253,6 +255,7 @@ interface PullSyncResponse {
   customers: { type: string; id: string; attributes: CustomerAttrs }[];
   store_settings: { type: string; id: string; attributes: StoreSettingAttrs } | null;
   receipt_layout: { type: string; id: string; attributes: ReceiptLayoutAttrs } | null;
+  feature_flags: Record<string, boolean>;
 }
 
 type WireResource<A> = { type: string; id: string; attributes: A };
@@ -328,5 +331,6 @@ export async function pullSync(client: ApiClient, options: { since?: string | nu
     customers: mapResourceList(data.customers, "customers", toCustomer),
     storeSettings: mapSingleResource(data.store_settings, "store_settings", toStoreSettings),
     receiptLayout: mapSingleResource(data.receipt_layout, "receipt_layout", toReceiptLayout),
+    featureFlags: data.feature_flags ?? {},
   };
 }
